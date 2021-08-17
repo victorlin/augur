@@ -9,6 +9,9 @@ from scipy.stats import norm
 import sys
 import time
 
+from .utils import numeric_date_to_iso, to_numeric_date
+
+
 debug = False
 log_thres = 10.0
 
@@ -61,11 +64,11 @@ def get_pivots(observations, pivot_interval, start_date=None, end_date=None, piv
         raise ValueError(f"The given interval unit '{pivot_interval_units}' is not supported.")
 
     datetime_pivots = pd.date_range(
-        float_to_datestring(pivot_start),
-        float_to_datestring(pivot_end),
+        numeric_date_to_iso(pivot_start),
+        numeric_date_to_iso(pivot_end),
         freq = offset
     )
-    pivots = np.array([timestamp_to_float(pivot) for pivot in datetime_pivots])
+    pivots = np.array([to_numeric_date(pivot) for pivot in datetime_pivots])
 
     return np.around(pivots, 4)
 
@@ -807,48 +810,6 @@ def test_nested_estimator():
             plt.plot(fe.pivots,fe.frequencies[k], 'o')
 
     return nested_freq
-
-def float_to_datestring(numdate):
-    """convert a numeric decimal date to a python datetime object
-    Note that this only works for AD dates since the range of datetime objects
-    is restricted to year>1.
-    Copied from treetime.utils
-    Parameters
-    ----------
-    numdate : float
-        numeric date as in 2018.23
-    Returns
-    -------
-    datetime.datetime
-        datetime object
-    """
-    from calendar import isleap
-    days_in_year = 366 if isleap(int(numdate)) else 365
-    # add a small number of the time elapsed in a year to avoid
-    # unexpected behavior for values 1/365, 2/365, etc
-    days_elapsed = int(((numdate%1)+1e-10)*days_in_year)
-    date = datetime.datetime(int(numdate),1,1) + datetime.timedelta(days=days_elapsed)
-
-    return "%s-%02d-%02d" % (date.year, date.month, date.day)
-
-def timestamp_to_float(time):
-    """Convert a pandas timestamp to a floating point date.
-    This is not entirely accurate as it doesn't account for months with different
-    numbers of days, but should be close enough to be accurate for weekly pivots.
-
-    >>> import datetime
-    >>> time = datetime.date(2010, 10, 1)
-    >>> timestamp_to_float(time)
-    2010.75
-    >>> time = datetime.date(2011, 4, 1)
-    >>> timestamp_to_float(time)
-    2011.25
-    >>> timestamp_to_float(datetime.date(2011, 1, 1))
-    2011.0
-    >>> timestamp_to_float(datetime.date(2011, 12, 1)) == (2011.0 + 11.0 / 12)
-    True
-    """
-    return time.year + ((time.month - 1) / 12.0) + ((time.day - 1) / 365.25)
 
 
 class KdeFrequencies(object):

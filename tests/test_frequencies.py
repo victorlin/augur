@@ -133,7 +133,7 @@ class TestTreeKdeFrequencies(object):
         )
         frequencies = kde_frequencies.estimate(tree)
         assert hasattr(kde_frequencies, "pivots")
-        assert kde_frequencies.pivots[0] == 2015.5833
+        assert kde_frequencies.pivots[0] == 2015.5822
         assert hasattr(kde_frequencies, "frequencies")
         assert list(frequencies.values())[0].shape == kde_frequencies.pivots.shape
 

@@ -157,9 +157,8 @@ import numpy as np
 import pandas as pd
 import sys
 
-from .frequency_estimators import timestamp_to_float
 from .reconstruct_sequences import load_alignments
-from .utils import annotate_parents_for_tree, read_node_data, write_json
+from .utils import annotate_parents_for_tree, read_node_data, write_json, to_numeric_date
 
 
 def read_distance_map(map_file):
@@ -527,7 +526,7 @@ def get_distances_to_last_ancestor(tree, sequences_by_node_and_gene, distance_ma
 
     """
     if latest_date is not None:
-        latest_date = timestamp_to_float(latest_date)
+        latest_date = to_numeric_date(latest_date)
 
     distances_by_node = {}
 
@@ -590,10 +589,10 @@ def get_distances_to_all_pairs(tree, sequences_by_node_and_gene, distance_map, e
 
     """
     if earliest_date is not None:
-        earliest_date = timestamp_to_float(earliest_date)
+        earliest_date = to_numeric_date(earliest_date)
 
     if latest_date is not None:
-        latest_date = timestamp_to_float(latest_date)
+        latest_date = to_numeric_date(latest_date)
 
     distances_by_node = {}
 

@@ -194,8 +194,6 @@ def to_numeric_date(date, ambiguity_resolver="min"):
     -------
     float
     """
-    if type(date) is datetime.date:
-        return numeric_date(date)
     if type(date) is str and "." in date:
         return float(date)
     if type(date) is str:
@@ -210,7 +208,10 @@ def to_numeric_date(date, ambiguity_resolver="min"):
                 return ambiguous_date_resolved[0]
             if ambiguity_resolver == "max":
                 return ambiguous_date_resolved[1]
-    raise ValueError(f"Unparsable date value: {date!r}")
+    try:
+        return numeric_date(date)
+    except:
+        raise ValueError(f"Unparsable date value: {date!r}")
 
 
 def numeric_date_to_iso(numeric_date):

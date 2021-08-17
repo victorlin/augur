@@ -2,16 +2,14 @@
 infer frequencies of mutations or clades
 """
 import json, os, sys
-import datetime
 import numpy as np
 from collections import defaultdict
 from Bio import Phylo, AlignIO
 from Bio.Align import MultipleSeqAlignment
-import treetime.utils
 
 from .frequency_estimators import get_pivots, alignment_frequencies, tree_frequencies
 from .frequency_estimators import AlignmentKdeFrequencies, TreeKdeFrequencies, TreeKdeFrequenciesError
-from .utils import read_metadata, read_node_data, write_json, get_numerical_dates
+from .utils import read_metadata, read_node_data, write_json, get_numerical_dates, to_numeric_date_min, to_numeric_date_max
 
 
 def register_arguments(parser):
@@ -26,9 +24,9 @@ def register_arguments(parser):
                         help="number of units between pivots")
     parser.add_argument("--pivot-interval-units", type=str, default="months", choices=['months', 'weeks'],
                         help="space pivots by months (default) or by weeks")
-    parser.add_argument('--min-date', type=numeric_date,
+    parser.add_argument('--min-date', type=to_numeric_date_min,
                         help="date to begin frequencies calculations; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
-    parser.add_argument('--max-date', type=numeric_date,
+    parser.add_argument('--max-date', type=to_numeric_date_max,
                         help="date to end frequencies calculations; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
 
     # Tree-specific arguments
@@ -230,19 +228,3 @@ def run(args):
 
         write_json(frequencies, args.output)
         print("mutation frequencies written to", args.output, file=sys.stdout)
-
-
-def numeric_date(date):
-    """
-    Converts the given *date* string to a :py:class:`float`.
-    *date* may be given as a number (a float) with year as the integer part, or
-    in the YYYY-MM-DD (ISO 8601) syntax.
-    >>> numeric_date("2020.42")
-    2020.42
-    >>> numeric_date("2020-06-04")
-    2020.42486...
-    """
-    try:
-        return float(date)
-    except ValueError:
-        return treetime.utils.numeric_date(datetime.date(*map(int, date.split("-", 2))))
