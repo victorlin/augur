@@ -113,10 +113,10 @@ Filter using only metadata without sequence input or output and save results as 
   >  --min-length 10500 \
   >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
 
-Output should include the 7 sequences matching the filters and a header line.
+Output should include the 8 sequences matching the filters and a header line.
 
   $ wc -l "$TMP/filtered_metadata.tsv"
-  \s*8 .* (re)
+  \s*9 .* (re)
   $ rm -f "$TMP/filtered_metadata.tsv"
 
 Filter using only metadata and save results as a list of filtered strains.
@@ -128,11 +128,26 @@ Filter using only metadata and save results as a list of filtered strains.
   >  --min-length 10500 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
 
-Output should include only the 7 sequences matching the filters (without a header line).
+Output should include only the 8 sequences matching the filters (without a header line).
 
   $ wc -l "$TMP/filtered_strains.txt"
-  \s*7 .* (re)
+  \s*8 .* (re)
   $ rm -f "$TMP/filtered_strains.txt"
+
+Filter using min/max date and save filtered sequences in output file.
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --min-date 2015 \
+  >  --max-date 2017-01-01 \
+  >  --output-strains "$TMP/filtered_strains.txt" \
+  >  --output-log "$TMP/filtered_log.tsv" > /dev/null
+
+Output should include the 1 sequences that does not have a date and a header line.
+
+  $ wc -l "$TMP/filtered_log.tsv"
+  \s*2 .* (re)
+  $ rm -f "$TMP/filtered_metadata.tsv"
 
 Filter using only metadata without a sequence index.
 This should work because the requested filters don't rely on sequence information.

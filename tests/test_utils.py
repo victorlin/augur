@@ -133,9 +133,11 @@ class TestUtils:
 
     def test_to_numeric_date(self):
         assert utils.to_numeric_date("2019.1") == 2019.1
-        assert round(utils.to_numeric_date("2019"), 8) == 2019.00136986
-        assert round(utils.to_numeric_date("2019-04"), 8) == 2019.24794521
+        assert round(utils.to_numeric_date("2019", ambiguity_resolver="min"), 8) == 2019.00136986
+        assert round(utils.to_numeric_date("2019-04", ambiguity_resolver="min"), 8) == 2019.24794521
         assert round(utils.to_numeric_date(datetime.date(2019, 4, 11)), 8) == 2019.27534247
+        dates = utils.to_numeric_date("2019")
+        assert [round(dates[0], 8), round(dates[1], 8)] == [2019.00136986, 2019.99863014]
         with pytest.raises(ValueError):
             utils.to_numeric_date(False)
         with pytest.raises(ValueError):

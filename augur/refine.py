@@ -109,7 +109,6 @@ def register_arguments(parser):
     parser.add_argument('--no-covariance', dest='covariance', action='store_false')  #If you set help here, it displays 'default: True' - which is confusing!
     parser.add_argument('--keep-polytomies', action='store_true', help='Do not attempt to resolve polytomies')
     parser.add_argument('--precision', type=int, choices=[0,1,2,3], help="precision used by TreeTime to determine the number of grid points that are used for the evaluation of the branch length interpolation objects. Values range from 0 (rough) to 3 (ultra fine) and default to 'auto'.")
-    parser.add_argument('--date-format', default="%Y-%m-%d", help="date format")
     parser.add_argument('--date-confidence', action="store_true", help="calculate confidence intervals for node dates")
     parser.add_argument('--date-inference', default='joint', choices=["joint", "marginal"],
                                 help="assign internal nodes to their marginally most likely dates, not jointly most likely")
@@ -195,8 +194,7 @@ def run(args):
         metadata, columns = read_metadata(args.metadata)
         if args.year_bounds:
             args.year_bounds.sort()
-        dates = get_numerical_dates(metadata, fmt=args.date_format,
-                                    min_max_year=args.year_bounds)
+        dates = get_numerical_dates(metadata, min_max_year=args.year_bounds)
 
         # save input state string for later export
         for n in T.get_terminals():

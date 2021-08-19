@@ -111,11 +111,7 @@ def is_date_ambiguous(date, ambiguous_by="any"):
         "X" in day and ambiguous_by in ("any", "day")
     ))
 
-def get_numerical_date_from_value(value, fmt=None, min_max_year=None, raise_error=True):
-    if type(value)!=str:
-        if raise_error:
-            raise ValueError(value)
-        return None
+def get_numerical_date_from_value(value, fmt=None, min_max_year=None):
     if 'XX' in value:
         ambig_date = ambiguous_date_to_date_range(value, fmt, min_max_year)
         if ambig_date is None or None in ambig_date:
@@ -127,45 +123,13 @@ def get_numerical_date_from_value(value, fmt=None, min_max_year=None, raise_erro
     except:
         return None
 
-def get_numerical_dates(meta_dict, name_col = None, date_col='date', fmt=None, min_max_year=None):
-    if fmt:
-        numerical_dates = {}
-
-        if isinstance(meta_dict, dict):
-            for k,m in meta_dict.items():
-                v = m[date_col]
-                try:
-                    numerical_dates[k] = get_numerical_date_from_value(
-                        v,
-                        fmt,
-                        min_max_year
-                    )
-                except ValueError:
-                    print(
-                        "WARNING: %s has an invalid data string: %s"% (k, v),
-                        file=sys.stderr
-                    )
-                    continue
-        elif isinstance(meta_dict, pd.DataFrame):
-            strains = meta_dict.index.values
-            dates = meta_dict[date_col].apply(
-                lambda date: get_numerical_date_from_value(
-                    date,
-                    fmt,
-                    min_max_year,
-                    raise_error=False
-                )
-            ).values
-            numerical_dates = dict(zip(strains, dates))
-    else:
-        if isinstance(meta_dict, dict):
-            numerical_dates = {k:float(v) for k,v in meta_dict.items()}
-        elif isinstance(meta_dict, pd.DataFrame):
-            strains = meta_dict.index.values
-            dates = meta_dict[date_col].astype(float)
-            numerical_dates = dict(zip(strains, dates))
-
-    return numerical_dates
+def get_numerical_dates(meta_dict, date_col='date', min_max_year=None):
+    if isinstance(meta_dict, dict):
+        return {k:to_numeric_date(m[date_col], min_max_year=min_max_year) for k,m in meta_dict.items()}
+    if isinstance(meta_dict, pd.DataFrame):
+        strains = meta_dict.index.values
+        dates = meta_dict[date_col].apply(lambda date: to_numeric_date(date, min_max_year=min_max_year)).values
+        return dict(zip(strains, dates))
 
 
 def to_numeric_date_min(date):
@@ -176,7 +140,7 @@ def to_numeric_date_max(date):
     return to_numeric_date(date, ambiguity_resolver="max")
 
 
-def to_numeric_date(date, ambiguity_resolver="min"):
+def to_numeric_date(date, ambiguity_resolver=None, min_max_year=None):
     """Return numeric date from string, [incomplete] ISO date string, or datetime.date object.
 
     Parameters
@@ -192,17 +156,19 @@ def to_numeric_date(date, ambiguity_resolver="min"):
 
     Returns
     -------
-    float
+    float | [float, float] | None
     """
     if type(date) is datetime.date:
         return numeric_date(date)
     if type(date) is str and "." in date:
         return float(date)
     if type(date) is str:
-        if ambiguity_resolver not in {"min", "max"}:
+        if date == '':
+            return None
+        if ambiguity_resolver not in {"min", "max", None}:
             raise ValueError("Ambiguous date range must be resolved by taking either min or max date.")
         ambiguous_date_str = generate_ambiguous_date_str(date)
-        ambiguous_date_resolved = get_numerical_date_from_value(ambiguous_date_str, "%Y-%m-%d")
+        ambiguous_date_resolved = get_numerical_date_from_value(ambiguous_date_str, "%Y-%m-%d", min_max_year)
         if type(ambiguous_date_resolved) is float:
             return ambiguous_date_resolved
         if type(ambiguous_date_resolved) is list:
@@ -210,6 +176,7 @@ def to_numeric_date(date, ambiguity_resolver="min"):
                 return ambiguous_date_resolved[0]
             if ambiguity_resolver == "max":
                 return ambiguous_date_resolved[1]
+            return ambiguous_date_resolved
     raise ValueError(f"Unparsable date value: {date!r}")
 
 

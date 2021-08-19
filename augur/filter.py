@@ -321,7 +321,7 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
     if (not min_date and not max_date) or date_column not in metadata.columns:
         return strains
 
-    dates = get_numerical_dates(metadata, date_col=date_column, fmt="%Y-%m-%d")
+    dates = get_numerical_dates(metadata, date_col=date_column)
     filtered = {strain for strain in strains if dates[strain] is not None}
 
     if min_date:

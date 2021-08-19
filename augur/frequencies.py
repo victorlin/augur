@@ -79,7 +79,7 @@ def format_frequencies(freq):
 
 def run(args):
     metadata, columns = read_metadata(args.metadata)
-    dates = get_numerical_dates(metadata, fmt='%Y-%m-%d')
+    dates = get_numerical_dates(metadata)
     stiffness = args.stiffness
     inertia = args.inertia
 
