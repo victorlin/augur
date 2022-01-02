@@ -18,6 +18,7 @@ import sys
 from tempfile import NamedTemporaryFile
 import treetime.utils
 from typing import Collection
+from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
@@ -602,116 +603,44 @@ def filter_kwargs_to_str(kwargs):
     return json.dumps(kwarg_list)
 
 
-def apply_filters(metadata, exclude_by, include_by):
+def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
     """Apply a list of filters to exclude or force-include records from the given
     metadata and return the strains to keep, to exclude, and to force include.
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata to filter
-    exclude_by : list[tuple]
-        A list of 2-element tuples with a callable to filter by in the first
-        index and a dictionary of kwargs to pass to the function in the second
-        index.
-    include_by : list[tuple]
-        A list of 2-element tuples in the same format as the ``exclude_by``
-        argument.
-
+    connection : DuckDBPyConnection
+        DuckDB connection with metadata table.
+    exclude_by : list[str]
+        A list of filter expressions for duckdb.filter.
+    include_by : list[str]
+        A list of filter expressions for duckdb.filter.
     Returns
     -------
-    set :
-        Strains to keep (those that passed all filters)
-    list[dict] :
-        Strains to exclude along with the function that filtered them and the arguments used to run the function.
-    list[dict] :
-        Strains to force-include along with the function that filtered them and the arguments used to run the function.
-
-    For example, filter data by minimum date, but force the include of strains
-    from Africa.
-
-    >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-01"}, {"region": "Europe", "date": "2020-10-02"}, {"region": "North America", "date": "2020-01-01"}], index=["strain1", "strain2", "strain3"])
-    >>> exclude_by = [(filter_by_date, {"min_date": numeric_date("2020-04-01")})]
-    >>> include_by = [(include_by_include_where, {"include_where": "region=Africa"})]
-    >>> strains_to_keep, strains_to_exclude, strains_to_include = apply_filters(metadata, exclude_by, include_by)
-    >>> strains_to_keep
-    {'strain2'}
-    >>> sorted(strains_to_exclude, key=lambda record: record["strain"])
-    [{'strain': 'strain1', 'filter': 'filter_by_date', 'kwargs': '[["min_date", 2020.25]]'}, {'strain': 'strain3', 'filter': 'filter_by_date', 'kwargs': '[["min_date", 2020.25]]'}]
-    >>> strains_to_include
-    [{'strain': 'strain1', 'filter': 'include_by_include_where', 'kwargs': '[["include_where", "region=Africa"]]'}]
-
-    We also want to filter by characteristics of the sequence data that we've
-    annotated in a sequence index.
-
-    >>> sequence_index = pd.DataFrame([{"strain": "strain1", "A": 7000, "C": 7000, "G": 7000, "T": 7000}, {"strain": "strain2", "A": 6500, "C": 6500, "G": 6500, "T": 6500}, {"strain": "strain3", "A": 1250, "C": 1250, "G": 1250, "T": 1250}]).set_index("strain")
-    >>> exclude_by = [(filter_by_sequence_length, {"sequence_index": sequence_index, "min_length": 27000})]
-    >>> include_by = [(include_by_include_where, {"include_where": "region=Europe"})]
-    >>> strains_to_keep, strains_to_exclude, strains_to_include = apply_filters(metadata, exclude_by, include_by)
-    >>> strains_to_keep
-    {'strain1'}
-    >>> sorted(strains_to_exclude, key=lambda record: record["strain"])
-    [{'strain': 'strain2', 'filter': 'filter_by_sequence_length', 'kwargs': '[["min_length", 27000]]'}, {'strain': 'strain3', 'filter': 'filter_by_sequence_length', 'kwargs': '[["min_length", 27000]]'}]
-    >>> strains_to_include
-    [{'strain': 'strain2', 'filter': 'include_by_include_where', 'kwargs': '[["include_where", "region=Europe"]]'}]
-
+    DuckDBPyRelation
+        relation for filtered metadata
     """
-    strains_to_keep = set(metadata.index.values)
-    strains_to_filter = []
-    strains_to_force_include = []
-    distinct_strains_to_force_include = set()
+    metadata = connection.table(TABLE_NAME)
+    rel_include = None
+    for include in include_by:
+        if not rel_include:
+            rel_include = metadata.filter(include)
+        else:
+            rel_include = rel_include.union(metadata.filter(include))
+    # rel_include.create_view("metadata_force_include")
 
-    # Track strains that should be included regardless of filters.
-    for include_function, include_kwargs in include_by:
-        passed = metadata.pipe(
-            include_function,
-            **include_kwargs,
-        )
-        distinct_strains_to_force_include = distinct_strains_to_force_include | passed
+    metadata = connection.table(TABLE_NAME)
+    rel_exclude = None
+    for exclude in exclude_by:
+        if not rel_exclude:
+            rel_exclude = metadata.filter(exclude)
+        else:
+            rel_exclude = rel_exclude.filter(exclude)
+    # rel_exclude.create_view("metadata_exclude_applied")
 
-        # Track the reason why strains were included.
-        if len(passed) > 0:
-            include_name = include_function.__name__
-            include_kwargs_str = filter_kwargs_to_str(include_kwargs)
-            for strain in passed:
-                strains_to_force_include.append({
-                    "strain": strain,
-                    "filter": include_name,
-                    "kwargs": include_kwargs_str,
-                })
+    # TODO: figure out parity for strains_to_force_include
 
-    for filter_function, filter_kwargs in exclude_by:
-        # Apply the current function with its given arguments. Each function
-        # returns a set of strains that passed the corresponding filter.
-        passed = metadata.pipe(
-            filter_function,
-            **filter_kwargs,
-        )
-
-        # Track the strains that failed this filter, so we can explain why later
-        # on and update the list of strains to keep to intersect with the
-        # strains that passed.
-        failed = strains_to_keep - passed
-        strains_to_keep = (strains_to_keep & passed)
-
-        # Track the reason each strain was filtered for downstream reporting.
-        if len(failed) > 0:
-            # Use a human-readable name for each filter when reporting why a strain
-            # was excluded.
-            filter_name = filter_function.__name__
-            filter_kwargs_str = filter_kwargs_to_str(filter_kwargs)
-            for strain in failed:
-                strains_to_filter.append({
-                    "strain": strain,
-                    "filter": filter_name,
-                    "kwargs": filter_kwargs_str,
-                })
-
-        # Stop applying filters if no strains remain.
-        if len(strains_to_keep) == 0:
-            break
-
-    return strains_to_keep, strains_to_filter, strains_to_force_include
+    return rel_include.union(rel_exclude).create_view("metadata_filtered")
 
 
 def get_groups_for_subsampling(strains, metadata, group_by=None):
@@ -1263,29 +1192,8 @@ def run(args):
     filter_counts = defaultdict(int)
 
     load_metadata(args.metadata)
-
     connection = duckdb.connect(DEFAULT_DB_FILE)
-
-    metadata = connection.table(TABLE_NAME)
-    rel_include = None
-    for include in include_by:
-        if not rel_include:
-            rel_include = metadata.filter(include)
-        else:
-            rel_include = rel_include.union(metadata.filter(include))
-    # rel_include.create_view("metadata_force_include")
-
-    metadata = connection.table(TABLE_NAME)
-    rel_exclude = None
-    for exclude in exclude_by:
-        if not rel_exclude:
-            rel_exclude = metadata.filter(exclude)
-        else:
-            rel_exclude = rel_exclude.filter(exclude)
-    # rel_exclude.create_view("metadata_exclude_applied")
-
-    rel_include.union(rel_exclude).create_view("metadata_filtered")
-
+    rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     return
 
     metadata_reader = read_metadata(
