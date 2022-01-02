@@ -163,32 +163,6 @@ def exclude_where_duckdb_filter(exclude_where):
     return f"{column} {op} '{value}'"
 
 
-def filter_by_query(metadata, query):
-    """Filter metadata in the given pandas DataFrame with a query string and return
-    the strain names that pass the filter.
-
-    Parameters
-    ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
-    query : str
-        Query string for the dataframe.
-
-    Returns
-    -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa"}, {"region": "Europe"}], index=["strain1", "strain2"])
-    >>> filter_by_query(metadata, "region == 'Africa'")
-    {'strain1'}
-    >>> filter_by_query(metadata, "region == 'North America'")
-    set()
-
-    """
-    return set(metadata.query(query).index.values)
-
-
 def filter_by_ambiguous_date(metadata, date_column="date", ambiguity="any"):
     """Filter metadata in the given pandas DataFrame where values in the given date
     column have a given level of ambiguity.
@@ -482,13 +456,9 @@ def construct_filters(args, sequence_index):
         for exclude_where in args.exclude_where:
             exclude_by.append(exclude_where_duckdb_filter(exclude_where))
 
-    # Exclude strains by metadata, using pandas querying.
-    # TODO: SQL querying
+    # Exclude strains by metadata, using SQL querying.
     if args.query:
-        exclude_by.append((
-            filter_by_query,
-            {"query": args.query}
-        ))
+        exclude_by.append(args.query)
 
     # Filter by ambiguous dates.
     # TODO: SQL date filtering
