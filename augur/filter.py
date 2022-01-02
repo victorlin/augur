@@ -76,27 +76,18 @@ def read_priority_scores(fname):
 
 # Define metadata filters.
 
-def filter_by_exclude_all(metadata):
+def filter_by_exclude_all():
     """Exclude all strains regardless of the given metadata content.
 
     This is a placeholder function that can be called as part of a generalized
     loop through all possible functions.
 
-    Parameters
-    ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
-
     Returns
     -------
-    set[str]:
-        Empty set of strains
-
-    >>> metadata = pd.DataFrame([{"region": "Africa"}, {"region": "Europe"}], index=["strain1", "strain2"])
-    >>> filter_by_exclude_all(metadata)
-    set()
+    str:
+        expression for duckdb.filter
     """
-    return set()
+    return 'False'
 
 
 def exclude_strains_duckdb_filter(exclude_file):
@@ -468,9 +459,8 @@ def construct_filters(args, sequence_index):
             include_by.append(include_where_duckdb_filter(include_where))
 
     # Exclude all strains by default.
-    # TODO: SQL-ify
     if args.exclude_all:
-        exclude_by.append((filter_by_exclude_all, {}))
+        exclude_by.append(filter_by_exclude_all())
 
     # Filter by sequence index.
     # TODO: SQL-ify
