@@ -581,6 +581,11 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
         relation for filtered metadata
     """
     metadata = connection.table(TABLE_NAME)
+
+    # no exclusions
+    if not exclude_by:
+        return metadata
+
     rel_include = None
     for include in include_by:
         if not rel_include:
@@ -600,6 +605,8 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
 
     # TODO: figure out parity for strains_to_force_include
 
+    if not include_by:
+        return rel_exclude
     return rel_include.union(rel_exclude).create_view("metadata_filtered")
 
 
