@@ -1163,10 +1163,6 @@ def run(args):
     metadata_header = True
     metadata_mode = "w"
 
-    # Setup strain output.
-    if args.output_strains:
-        output_strains = open(args.output_strains, "w")
-
     # Setup logging.
     output_log_writer = None
     if args.output_log:
@@ -1194,6 +1190,8 @@ def run(args):
     load_metadata(args.metadata)
     connection = duckdb.connect(DEFAULT_DB_FILE)
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
+    if args.output_strains:
+        rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
     return
 
     metadata_reader = read_metadata(
