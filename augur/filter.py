@@ -1157,12 +1157,6 @@ def run(args):
             random_generator = np.random.default_rng(args.subsample_seed)
             priorities = defaultdict(random_generator.random)
 
-    # Setup metadata output. We track whether any records have been written to
-    # disk yet through the following variables, to control whether we write the
-    # metadata's header and open a new file for writing.
-    metadata_header = True
-    metadata_mode = "w"
-
     # Setup logging.
     output_log_writer = None
     if args.output_log:
@@ -1192,6 +1186,8 @@ def run(args):
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     if args.output_strains:
         rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
+    if args.output_metadata:
+        rel_metadata_filtered.df().to_csv(args.output_metadata, sep='\t', index=None)
     return
 
     metadata_reader = read_metadata(
