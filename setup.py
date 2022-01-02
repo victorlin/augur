@@ -49,6 +49,7 @@ setuptools.setup(
     install_requires = [
         "bcbio-gff >=0.6.0",
         "biopython >=1.67, !=1.77, !=1.78",
+        "duckdb",
         "jsonschema >=3.0.0",
         "packaging >=19.2",
         "pandas >=1.0.0",

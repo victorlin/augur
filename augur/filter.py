@@ -5,11 +5,11 @@ from Bio import SeqIO
 from collections import defaultdict
 import csv
 import datetime
+import duckdb
 import heapq
 import itertools
 import json
 import numpy as np
-import operator
 import os
 import pandas as pd
 import random
@@ -21,6 +21,7 @@ from typing import Collection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
+from .io_duckdb import load_metadata, DEFAULT_DB_FILE, TABLE_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
@@ -97,30 +98,22 @@ def filter_by_exclude_all(metadata):
     return set()
 
 
-def filter_by_exclude(metadata, exclude_file):
+def exclude_strains_duckdb_filter(exclude_file):
     """Exclude the given set of strains from the given metadata.
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
     exclude_file : str
         Filename with strain names to exclude from the given metadata
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa"}, {"region": "Europe"}], index=["strain1", "strain2"])
-    >>> with NamedTemporaryFile(delete=False) as exclude_file:
-    ...     characters_written = exclude_file.write(b'strain1')
-    >>> filter_by_exclude(metadata, exclude_file.name)
-    {'strain2'}
-    >>> os.unlink(exclude_file.name)
+    str:
+        expression for duckdb.filter
     """
     excluded_strains = read_strains(exclude_file)
-    return set(metadata.index.values) - excluded_strains
+    excluded_strains = [f"'{strain}'" for strain in excluded_strains]
+    return f"strain NOT IN ({','.join(excluded_strains)})"
 
 
 def parse_filter_query(query):
@@ -142,20 +135,20 @@ def parse_filter_query(query):
         Value of column to query
 
     >>> parse_filter_query("property=value")
-    ('property', <built-in function eq>, 'value')
+    ('property', '=', 'value')
     >>> parse_filter_query("property!=value")
-    ('property', <built-in function ne>, 'value')
+    ('property', '!=', 'value')
 
     """
     column, value = re.split(r'!?=', query)
-    op = operator.eq
+    op = '='
     if "!=" in query:
-        op = operator.ne
+        op = '!='
 
     return column, op, value
 
 
-def filter_by_exclude_where(metadata, exclude_where):
+def exclude_where_duckdb_filter(exclude_where):
     """Exclude all strains from the given metadata that match the given exclusion query.
 
     Unlike pandas query syntax, exclusion queries should follow the pattern of
@@ -165,49 +158,17 @@ def filter_by_exclude_where(metadata, exclude_where):
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
     exclude_where : str
         Filter query used to exclude strains
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa"}, {"region": "Europe"}], index=["strain1", "strain2"])
-    >>> filter_by_exclude_where(metadata, "region!=Europe")
-    {'strain2'}
-    >>> filter_by_exclude_where(metadata, "region=Europe")
-    {'strain1'}
-    >>> filter_by_exclude_where(metadata, "region=europe")
-    {'strain1'}
-
-    If the column referenced in the given query does not exist, skip the filter.
-
-    >>> sorted(filter_by_exclude_where(metadata, "missing_column=value"))
-    ['strain1', 'strain2']
-
+    str:
+        expression for duckdb.filter
     """
     column, op, value = parse_filter_query(exclude_where)
-    if column in metadata.columns:
-        # Apply a test operator (equality or inequality) to values from the
-        # column in the given query. This produces an array of boolean values we
-        # can index with.
-        excluded = op(
-            metadata[column].astype(str).str.lower(),
-            value.lower()
-        )
-
-        # Negate the boolean index of excluded strains to get the index of
-        # strains that passed the filter.
-        included = ~excluded
-        filtered = set(metadata[included].index.values)
-    else:
-        # Skip the filter, if the requested column does not exist.
-        filtered = set(metadata.index.values)
-
-    return filtered
+    op = '=' if op == '!=' else '!=' # negate for exclude
+    return f"{column} {op} '{value}'"
 
 
 def filter_by_query(metadata, query):
@@ -430,34 +391,25 @@ def filter_by_non_nucleotide(metadata, sequence_index):
     return set(filtered_sequence_index[no_invalid_nucleotides].index.values)
 
 
-def include(metadata, include_file):
+def include_strains_duckdb_filter(include_file):
     """Include strains in the given text file from the given metadata.
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
     include_file : str
         Filename with strain names to include from the given metadata
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa"}, {"region": "Europe"}], index=["strain1", "strain2"])
-    >>> with NamedTemporaryFile(delete=False) as include_file:
-    ...     characters_written = include_file.write(b'strain1')
-    >>> include(metadata, include_file.name)
-    {'strain1'}
-    >>> os.unlink(include_file.name)
-
+    str:
+        expression for duckdb.filter
     """
     included_strains = read_strains(include_file)
-    return set(metadata.index.values) & included_strains
+    included_strains = [f"'{strain}'" for strain in included_strains]
+    return f"strain IN ({','.join(included_strains)})"
 
 
-def include_by_include_where(metadata, include_where):
+def include_where_duckdb_filter(include_where):
     """Include all strains from the given metadata that match the given query.
 
     Unlike pandas query syntax, inclusion queries should follow the pattern of
@@ -467,46 +419,16 @@ def include_by_include_where(metadata, include_where):
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
     include_where : str
         Filter query used to include strains
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa"}, {"region": "Europe"}], index=["strain1", "strain2"])
-    >>> include_by_include_where(metadata, "region!=Europe")
-    {'strain1'}
-    >>> include_by_include_where(metadata, "region=Europe")
-    {'strain2'}
-    >>> include_by_include_where(metadata, "region=europe")
-    {'strain2'}
-
-    If the column referenced in the given query does not exist, skip the filter.
-
-    >>> include_by_include_where(metadata, "missing_column=value")
-    set()
-
+    str:
+        expression for duckdb.filter
     """
     column, op, value = parse_filter_query(include_where)
-
-    if column in metadata.columns:
-        # Apply a test operator (equality or inequality) to values from the
-        # column in the given query. This produces an array of boolean values we
-        # can index with.
-        included_index = op(
-            metadata[column].astype(str).str.lower(),
-            value.lower()
-        )
-        included = set(metadata[included_index].index.values)
-    else:
-        # Skip the inclusion filter if the requested column does not exist.
-        included = set()
-
-    return included
+    return f"{column} {op} '{value}'"
 
 
 def construct_filters(args, sequence_index):
@@ -537,28 +459,20 @@ def construct_filters(args, sequence_index):
     if args.include:
         # Collect the union of all given strains to include.
         for include_file in args.include:
-            include_by.append((
-                include,
-                {
-                    "include_file": include_file,
-                }
-            ))
+            include_by.append(include_strains_duckdb_filter(include_file))
 
     # Add sequences with particular metadata attributes.
     if args.include_where:
         for include_where in args.include_where:
-            include_by.append((
-                include_by_include_where,
-                {
-                    "include_where": include_where,
-                }
-            ))
+            include_by.append(include_where_duckdb_filter(include_where))
 
     # Exclude all strains by default.
+    # TODO: SQL-ify
     if args.exclude_all:
         exclude_by.append((filter_by_exclude_all, {}))
 
     # Filter by sequence index.
+    # TODO: SQL-ify
     if sequence_index is not None:
         exclude_by.append((
             filter_by_sequence_index,
@@ -570,22 +484,15 @@ def construct_filters(args, sequence_index):
     # Remove strains explicitly excluded by name.
     if args.exclude:
         for exclude_file in args.exclude:
-            exclude_by.append((
-                filter_by_exclude,
-                {
-                    "exclude_file": exclude_file,
-                }
-            ))
+            exclude_by.append(exclude_strains_duckdb_filter(exclude_file))
 
     # Exclude strain my metadata field like 'host=camel'.
     if args.exclude_where:
         for exclude_where in args.exclude_where:
-            exclude_by.append((
-                filter_by_exclude_where,
-                {"exclude_where": exclude_where}
-            ))
+            exclude_by.append(exclude_where_duckdb_filter(exclude_where))
 
     # Exclude strains by metadata, using pandas querying.
+    # TODO: SQL querying
     if args.query:
         exclude_by.append((
             filter_by_query,
@@ -593,6 +500,7 @@ def construct_filters(args, sequence_index):
         ))
 
     # Filter by ambiguous dates.
+    # TODO: SQL date filtering
     if args.exclude_ambiguous_dates_by:
         exclude_by.append((
             filter_by_ambiguous_date,
@@ -603,6 +511,7 @@ def construct_filters(args, sequence_index):
         ))
 
     # Filter by date.
+    # TODO: SQL-ify
     if args.min_date or args.max_date:
         exclude_by.append((
             filter_by_date,
@@ -614,6 +523,7 @@ def construct_filters(args, sequence_index):
         ))
 
     # Filter by sequence length.
+    # TODO: SQL-ify
     if args.min_length:
         # Skip VCF files and warn the user that the min length filter does not
         # make sense for VCFs.
@@ -631,6 +541,7 @@ def construct_filters(args, sequence_index):
             ))
 
     # Exclude sequences with non-nucleotide characters.
+    # TODO: SQL-ify
     if args.non_nucleotide:
         exclude_by.append((
             filter_by_non_nucleotide,
@@ -1350,6 +1261,32 @@ def run(args):
     valid_strains = set() # TODO: rename this more clearly
     all_sequences_to_include = set()
     filter_counts = defaultdict(int)
+
+    load_metadata(args.metadata)
+
+    connection = duckdb.connect(DEFAULT_DB_FILE)
+
+    metadata = connection.table(TABLE_NAME)
+    rel_include = None
+    for include in include_by:
+        if not rel_include:
+            rel_include = metadata.filter(include)
+        else:
+            rel_include = rel_include.union(metadata.filter(include))
+    # rel_include.create_view("metadata_force_include")
+
+    metadata = connection.table(TABLE_NAME)
+    rel_exclude = None
+    for exclude in exclude_by:
+        if not rel_exclude:
+            rel_exclude = metadata.filter(exclude)
+        else:
+            rel_exclude = rel_exclude.filter(exclude)
+    # rel_exclude.create_view("metadata_exclude_applied")
+
+    rel_include.union(rel_exclude).create_view("metadata_filtered")
+
+    return
 
     metadata_reader = read_metadata(
         args.metadata,
