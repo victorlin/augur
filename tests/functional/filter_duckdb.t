@@ -61,3 +61,13 @@ Sequence index is missing 1 strain
   >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
   $ wc -l "$TMP/filtered_metadata.tsv"
   \s*12 .* (re)
+
+Filter using only metadata without sequence input or output and save results as filtered metadata.
+
+  $ ${AUGUR} filter \
+  >  --sequence-index filter/sequence_index.tsv \
+  >  --metadata filter/metadata.tsv \
+  >  --min-length 10500 \
+  >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
+  $ wc -l "$TMP/filtered_metadata.tsv"
+  \s*10 .* (re)
