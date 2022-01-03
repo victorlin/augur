@@ -456,7 +456,7 @@ def generate_date_view(connection:DuckDBPyConnection, date_column="date"):
             string_split({date_column}, '-')[2] AS day
         FROM metadata;
     """
-    connection.execute(f"CREATE VIEW {DATE_VIEW_NAME} AS {query}")
+    connection.execute(f"CREATE OR REPLACE VIEW {DATE_VIEW_NAME} AS {query}")
 
 
 def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
