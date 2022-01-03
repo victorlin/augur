@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
-from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME
+from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
@@ -260,25 +260,18 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
     return filtered
 
 
-def filter_by_sequence_index(sequence_index):
+def filter_by_sequence_index():
     """Filter metadata by presence of corresponding entries in a given sequence
     index. This filter effectively intersects the strain ids in the metadata and
     sequence index.
-
-    Parameters
-    ----------
-    sequence_index : pandas.DataFrame
-        Sequence index
 
     Returns
     -------
     str:
         expression for duckdb.filter
     """
-    sequence_index_strains = set(sequence_index.index.values)
-    sequence_index_strains = [f"'{strain}'" for strain in sequence_index_strains]
-    # TODO: read sequence index into table, join on strain
-    return f"strain IN ({','.join(sequence_index_strains)})"
+    # TODO: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
+    return f"strain IN (SELECT strain FROM {SEQUENCE_INDEX_TABLE_NAME})"
 
 
 def filter_by_sequence_length(metadata, sequence_index, min_length=0):
@@ -389,7 +382,7 @@ def include_where_duckdb_filter(include_where):
     return f"{column} {op} '{value}'"
 
 
-def construct_filters(args, sequence_index):
+def construct_filters(args, use_sequences=False):
     """Construct lists of filters and inclusion criteria based on user-provided
     arguments.
 
@@ -397,8 +390,8 @@ def construct_filters(args, sequence_index):
     ----------
     args : argparse.Namespace
         Command line arguments provided by the user.
-    sequence_index : pandas.DataFrame
-        Sequence index for the provided arguments.
+    use_sequences : boolean
+        Sequences are used based on arguments.
 
     Returns
     -------
@@ -429,8 +422,8 @@ def construct_filters(args, sequence_index):
         exclude_by.append(filter_by_exclude_all())
 
     # Filter by sequence index.
-    if sequence_index is not None:
-        exclude_by.append(filter_by_sequence_index(sequence_index))
+    if use_sequences:
+        exclude_by.append(filter_by_sequence_index())
 
     # Remove strains explicitly excluded by name.
     if args.exclude:
@@ -482,7 +475,7 @@ def construct_filters(args, sequence_index):
             exclude_by.append((
                 filter_by_sequence_length,
                 {
-                    "sequence_index": sequence_index,
+                    "sequence_index": None, # TODO: fix
                     "min_length": args.min_length,
                 }
             ))
@@ -493,7 +486,7 @@ def construct_filters(args, sequence_index):
         exclude_by.append((
             filter_by_non_nucleotide,
             {
-                "sequence_index": sequence_index,
+                "sequence_index": None, # TODO: fix
             }
         ))
 
@@ -963,6 +956,7 @@ def run(args):
     # VCF, if sequence output has been requested (so we can filter strains by
     # sequences that are present), or if any other sequence-based filters have
     # been requested.
+    use_sequences = args.sequence_index is not None
     sequence_strains = None
     sequence_index_path = args.sequence_index
     build_sequence_index = False
@@ -970,6 +964,7 @@ def run(args):
 
     if sequence_index_path is None and args.sequences and not args.exclude_all:
         build_sequence_index = True
+        use_sequences = True
 
     if build_sequence_index:
         # Generate the sequence index on the fly, for backwards compatibility
@@ -990,21 +985,19 @@ def run(args):
         else:
             index_sequences(args.sequences, sequence_index_path)
 
-    # Load the sequence index, if a path exists.
-    sequence_index = None
-    if sequence_index_path:
-        sequence_index = pd.read_csv(
-            sequence_index_path,
-            sep="\t",
-            index_col="strain",
-        )
+    # Load the sequence index
+    if use_sequences:
+        load_tsv(sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
 
         # Remove temporary index file, if it exists.
         if build_sequence_index:
             os.unlink(sequence_index_path)
 
         # Calculate summary statistics needed for filtering.
-        sequence_strains = set(sequence_index.index.values)
+        connection = duckdb.connect(DEFAULT_DB_FILE, read_only=True)
+        sequence_index_table = connection.table(SEQUENCE_INDEX_TABLE_NAME)
+        sequence_strains = set(sequence_index_table.project('strain').df().set_index('strain').index.values)
+        connection.close()
 
     #####################################
     #Filtering steps
@@ -1013,7 +1006,7 @@ def run(args):
     # Setup filters.
     exclude_by, include_by = construct_filters(
         args,
-        sequence_index,
+        use_sequences,
     )
 
     # Setup grouping. We handle the following major use cases:
