@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
-from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME
+from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
@@ -492,7 +492,7 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
 
     if not include_by:
         return rel_exclude
-    return rel_include.union(rel_exclude).create_view("metadata_filtered")
+    return rel_include.union(rel_exclude).create_view(FILTERED_VIEW_NAME)
 
 
 def get_groups_for_subsampling(strains, metadata, group_by=None):
