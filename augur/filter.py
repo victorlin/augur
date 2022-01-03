@@ -260,33 +260,25 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
     return filtered
 
 
-def filter_by_sequence_index(metadata, sequence_index):
+def filter_by_sequence_index(sequence_index):
     """Filter metadata by presence of corresponding entries in a given sequence
     index. This filter effectively intersects the strain ids in the metadata and
     sequence index.
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
     sequence_index : pandas.DataFrame
         Sequence index
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-01"}, {"region": "Europe", "date": "2020-01-02"}], index=["strain1", "strain2"])
-    >>> sequence_index = pd.DataFrame([{"strain": "strain1", "ACGT": 28000}]).set_index("strain")
-    >>> filter_by_sequence_index(metadata, sequence_index)
-    {'strain1'}
-
+    str:
+        expression for duckdb.filter
     """
-    metadata_strains = set(metadata.index.values)
     sequence_index_strains = set(sequence_index.index.values)
-
-    return metadata_strains & sequence_index_strains
+    sequence_index_strains = [f"'{strain}'" for strain in sequence_index_strains]
+    # TODO: read sequence index into table, join on strain
+    return f"strain IN ({','.join(sequence_index_strains)})"
 
 
 def filter_by_sequence_length(metadata, sequence_index, min_length=0):
@@ -437,14 +429,8 @@ def construct_filters(args, sequence_index):
         exclude_by.append(filter_by_exclude_all())
 
     # Filter by sequence index.
-    # TODO: SQL-ify
     if sequence_index is not None:
-        exclude_by.append((
-            filter_by_sequence_index,
-            {
-                "sequence_index": sequence_index,
-            },
-        ))
+        exclude_by.append(filter_by_sequence_index(sequence_index))
 
     # Remove strains explicitly excluded by name.
     if args.exclude:
