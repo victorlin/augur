@@ -294,34 +294,19 @@ def filter_by_sequence_length(min_length=0):
     )"""
 
 
-def filter_by_non_nucleotide(metadata, sequence_index):
+def filter_by_non_nucleotide():
     """Filter metadata for strains with invalid nucleotide content.
-
-    Parameters
-    ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
-    sequence_index : pandas.DataFrame
-        Sequence index
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-01"}, {"region": "Europe", "date": "2020-01-02"}], index=["strain1", "strain2"])
-    >>> sequence_index = pd.DataFrame([{"strain": "strain1", "invalid_nucleotides": 0}, {"strain": "strain2", "invalid_nucleotides": 1}]).set_index("strain")
-    >>> filter_by_non_nucleotide(metadata, sequence_index)
-    {'strain1'}
-
+    str:
+        expression for duckdb.filter
     """
-    strains = set(metadata.index.values)
-    filtered_sequence_index = sequence_index.loc[
-        sequence_index.index.intersection(strains)
-    ]
-    no_invalid_nucleotides = filtered_sequence_index["invalid_nucleotides"] == 0
-
-    return set(filtered_sequence_index[no_invalid_nucleotides].index.values)
+    return f"""strain IN (
+        SELECT strain
+        FROM {SEQUENCE_INDEX_TABLE_NAME}
+        WHERE invalid_nucleotides = 0
+    )"""
 
 
 def include_strains_duckdb_filter(include_file):
@@ -456,14 +441,8 @@ def construct_filters(args, use_sequences=False):
             exclude_by.append(filter_by_sequence_length(args.min_length))
 
     # Exclude sequences with non-nucleotide characters.
-    # TODO: SQL-ify
     if args.non_nucleotide:
-        exclude_by.append((
-            filter_by_non_nucleotide,
-            {
-                "sequence_index": None, # TODO: fix
-            }
-        ))
+        exclude_by.append(filter_by_non_nucleotide())
 
     return exclude_by, include_by
 
