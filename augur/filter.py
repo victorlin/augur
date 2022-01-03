@@ -274,42 +274,24 @@ def filter_by_sequence_index():
     return f"strain IN (SELECT strain FROM {SEQUENCE_INDEX_TABLE_NAME})"
 
 
-def filter_by_sequence_length(metadata, sequence_index, min_length=0):
+def filter_by_sequence_length(min_length=0):
     """Filter metadata by sequence length from a given sequence index.
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
-    sequence_index : pandas.DataFrame
-        Sequence index
     min_length : int
         Minimum number of standard nucleotide characters (A, C, G, or T) in each sequence
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-01"}, {"region": "Europe", "date": "2020-01-02"}], index=["strain1", "strain2"])
-    >>> sequence_index = pd.DataFrame([{"strain": "strain1", "A": 7000, "C": 7000, "G": 7000, "T": 7000}, {"strain": "strain2", "A": 6500, "C": 6500, "G": 6500, "T": 6500}]).set_index("strain")
-    >>> filter_by_sequence_length(metadata, sequence_index, min_length=27000)
-    {'strain1'}
-
-    It is possible for the sequence index to be missing strains present in the metadata.
-
-    >>> sequence_index = pd.DataFrame([{"strain": "strain3", "A": 7000, "C": 7000, "G": 7000, "T": 7000}, {"strain": "strain2", "A": 6500, "C": 6500, "G": 6500, "T": 6500}]).set_index("strain")
-    >>> filter_by_sequence_length(metadata, sequence_index, min_length=27000)
-    set()
-
+    str:
+        expression for duckdb.filter
     """
-    strains = set(metadata.index.values)
-    filtered_sequence_index = sequence_index.loc[
-        sequence_index.index.intersection(strains)
-    ]
-    filtered_sequence_index["ACGT"] = filtered_sequence_index.loc[:, ["A", "C", "G", "T"]].sum(axis=1)
-
-    return set(filtered_sequence_index[filtered_sequence_index["ACGT"] >= min_length].index.values)
+    return f"""strain IN (
+        SELECT strain
+        FROM {SEQUENCE_INDEX_TABLE_NAME}
+        WHERE A+C+G+T > {min_length}
+    )"""
 
 
 def filter_by_non_nucleotide(metadata, sequence_index):
@@ -463,7 +445,6 @@ def construct_filters(args, use_sequences=False):
         ))
 
     # Filter by sequence length.
-    # TODO: SQL-ify
     if args.min_length:
         # Skip VCF files and warn the user that the min length filter does not
         # make sense for VCFs.
@@ -472,13 +453,7 @@ def construct_filters(args, use_sequences=False):
         if is_vcf: #doesn't make sense for VCF, ignore.
             print("WARNING: Cannot use min_length for VCF files. Ignoring...")
         else:
-            exclude_by.append((
-                filter_by_sequence_length,
-                {
-                    "sequence_index": None, # TODO: fix
-                    "min_length": args.min_length,
-                }
-            ))
+            exclude_by.append(filter_by_sequence_length(args.min_length))
 
     # Exclude sequences with non-nucleotide characters.
     # TODO: SQL-ify
