@@ -488,6 +488,7 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
     # rel_exclude.create_view("metadata_exclude_applied")
 
     # TODO: figure out parity for strains_to_force_include
+    # TODO: figure out parity for strains_to_filter (reason for exclusion, used in final report output)
 
     if not include_by:
         return rel_exclude
