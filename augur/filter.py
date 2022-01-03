@@ -32,6 +32,8 @@ SEQUENCE_ONLY_FILTERS = (
     "non_nucleotide",
 )
 
+DEFAULT_DATE_COL = "date"
+
 
 class FilterException(Exception):
     """Representation of an error that occurred during filtering.
@@ -204,15 +206,11 @@ def filter_by_ambiguous_date(metadata, date_column="date", ambiguity="any"):
     return filtered
 
 
-def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
-    """Filter metadata by minimum or maximum date.
+def filter_by_min_date(min_date):
+    """Filter metadata by minimum date.
 
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
-    date_column : str
-        Column in the dataframe with dates.
     min_date : float
         Minimum date
     max_date : float
@@ -220,44 +218,34 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-01"}, {"region": "Europe", "date": "2020-01-02"}], index=["strain1", "strain2"])
-    >>> filter_by_date(metadata, min_date=numeric_date("2020-01-02"))
-    {'strain2'}
-    >>> filter_by_date(metadata, max_date=numeric_date("2020-01-01"))
-    {'strain1'}
-    >>> filter_by_date(metadata, min_date=numeric_date("2020-01-03"), max_date=numeric_date("2020-01-10"))
-    set()
-    >>> sorted(filter_by_date(metadata, min_date=numeric_date("2019-12-30"), max_date=numeric_date("2020-01-10")))
-    ['strain1', 'strain2']
-    >>> sorted(filter_by_date(metadata))
-    ['strain1', 'strain2']
-
-    If the requested date column does not exist, we quietly skip this filter.
-
-    >>> sorted(filter_by_date(metadata, date_column="missing_column", min_date=numeric_date("2020-01-02")))
-    ['strain1', 'strain2']
-
+    str:
+        expression for duckdb.filter
     """
-    strains = set(metadata.index.values)
+    return f"""strain IN (
+        SELECT strain
+        FROM {DATE_VIEW_NAME}
+        WHERE date >= {min_date}
+    )"""
 
-    # Skip this filter if no valid min/max date is given or the date column does
-    # not exist.
-    if (not min_date and not max_date) or date_column not in metadata.columns:
-        return strains
 
-    dates = get_numerical_dates(metadata, date_col=date_column, fmt="%Y-%m-%d")
-    filtered = {strain for strain in strains if dates[strain] is not None}
+def filter_by_max_date(max_date):
+    """Filter metadata by maximum date.
 
-    if min_date:
-        filtered = {s for s in filtered if (np.isscalar(dates[s]) or all(dates[s])) and np.max(dates[s]) >= min_date}
+    Parameters
+    ----------
+    max_date : float
+        Maximum date
 
-    if max_date:
-        filtered = {s for s in filtered if (np.isscalar(dates[s]) or all(dates[s])) and np.min(dates[s]) <= max_date}
-
-    return filtered
+    Returns
+    -------
+    str:
+        expression for duckdb.filter
+    """
+    return f"""strain IN (
+        SELECT strain
+        FROM {DATE_VIEW_NAME}
+        WHERE date <= {max_date}
+    )"""
 
 
 def filter_by_sequence_index():
@@ -349,7 +337,7 @@ def include_where_duckdb_filter(include_where):
     return f"{column} {op} '{value}'"
 
 
-def construct_filters(args, use_sequences=False):
+def construct_filters(args, use_sequences:bool, has_date_col:bool):
     """Construct lists of filters and inclusion criteria based on user-provided
     arguments.
 
@@ -406,28 +394,23 @@ def construct_filters(args, use_sequences=False):
     if args.query:
         exclude_by.append(args.query)
 
-    # Filter by ambiguous dates.
-    # TODO: SQL date filtering
-    if args.exclude_ambiguous_dates_by:
-        exclude_by.append((
-            filter_by_ambiguous_date,
-            {
-                "date_column": "date",
-                "ambiguity": args.exclude_ambiguous_dates_by,
-            }
-        ))
+    if has_date_col:
+        # Filter by ambiguous dates.
+        # TODO: SQL date filtering
+        if args.exclude_ambiguous_dates_by:
+            exclude_by.append((
+                filter_by_ambiguous_date,
+                {
+                    "date_column": "date",
+                    "ambiguity": args.exclude_ambiguous_dates_by,
+                }
+            ))
 
-    # Filter by date.
-    # TODO: SQL-ify
-    if args.min_date or args.max_date:
-        exclude_by.append((
-            filter_by_date,
-            {
-                "date_column": "date",
-                "min_date": args.min_date,
-                "max_date": args.max_date,
-            }
-        ))
+        # Filter by date.
+        if args.min_date:
+            exclude_by.append(filter_by_min_date(args.min_date))
+        if args.max_date:
+            exclude_by.append(filter_by_max_date(args.max_date))
 
     # Filter by sequence length.
     if args.min_length:
@@ -447,14 +430,35 @@ def construct_filters(args, use_sequences=False):
     return exclude_by, include_by
 
 
-def generate_date_view(connection:DuckDBPyConnection, date_column="date"):
+def check_date_col(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
+    metadata = connection.table(METADATA_TABLE_NAME)
+    return date_column in metadata.columns
+
+
+def generate_date_view(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
     query = f"""
         SELECT
-            strain,
-            string_split({date_column}, '-')[0] AS year,
-            string_split({date_column}, '-')[1] AS month,
-            string_split({date_column}, '-')[2] AS day
-        FROM metadata;
+            d1.strain,
+            d2.date,
+            d1.year,
+            d1.month,
+            d1.day
+        FROM (
+            SELECT
+                strain,
+                string_split({date_column}, '-')[0] AS year,
+                string_split({date_column}, '-')[1] AS month,
+                string_split({date_column}, '-')[2] AS day
+            FROM {METADATA_TABLE_NAME}
+        ) d1
+        LEFT OUTER JOIN (
+            SELECT
+                strain,
+                {date_column}::date AS date
+            FROM {METADATA_TABLE_NAME}
+            WHERE regexp_matches({date_column}, '^\d{{4}}\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01])$')
+        ) d2
+        ON (d1.strain = d2.strain);
     """
     connection.execute(f"CREATE OR REPLACE VIEW {DATE_VIEW_NAME} AS {query}")
 
@@ -966,94 +970,32 @@ def run(args):
         sequence_strains = set(sequence_index_table.project('strain').df().set_index('strain').index.values)
         connection.close()
 
-    #####################################
-    #Filtering steps
-    #####################################
+    # Load metadata
+    load_tsv(args.metadata, METADATA_TABLE_NAME)
+    connection = duckdb.connect(DEFAULT_DB_FILE)
+    has_date_col = check_date_col(connection)
+    if has_date_col:
+        generate_date_view(connection)
 
     # Setup filters.
     exclude_by, include_by = construct_filters(
         args,
         use_sequences,
+        has_date_col
     )
 
-    # Setup grouping. We handle the following major use cases:
-    #
-    # 1. group by and sequences per group defined -> use the given values by the
-    # user to identify the highest priority records from each group in a single
-    # pass through the metadata.
-    #
-    # 2. group by and maximum sequences defined -> use the first pass through
-    # the metadata to count the number of records in each group, calculate the
-    # sequences per group that satisfies the requested maximum, and use a second
-    # pass through the metadata to select that many sequences per group.
-    #
-    # 3. group by not defined but maximum sequences defined -> use a "dummy"
-    # group such that we select at most the requested maximum number of
-    # sequences in a single pass through the metadata.
-    #
-    # Each case relies on a priority queue to track the highest priority records
-    # per group. In the best case, we can track these records in a single pass
-    # through the metadata. In the worst case, we don't know how many sequences
-    # per group to use, so we need to calculate this number after the first pass
-    # and use a second pass to add records to the queue.
-    group_by = args.group_by
-    sequences_per_group = args.sequences_per_group
-    records_per_group = None
-
-    if group_by and args.subsample_max_sequences:
-        # In this case, we need two passes through the metadata with the first
-        # pass used to count the number of records per group.
-        records_per_group = defaultdict(int)
-    elif not group_by and args.subsample_max_sequences:
-        group_by = ("_dummy",)
-        sequences_per_group = args.subsample_max_sequences
-
-    # If we are grouping data, use queues to store the highest priority strains
-    # for each group. When no priorities are provided, they will be randomly
-    # generated.
-    queues_by_group = None
-    if group_by:
-        # Use user-defined priorities, if possible. Otherwise, setup a
-        # corresponding dictionary that returns a random float for each strain.
-        if args.priority:
-            priorities = read_priority_scores(args.priority)
-        else:
-            random_generator = np.random.default_rng(args.subsample_seed)
-            priorities = defaultdict(random_generator.random)
-
-    # Setup logging.
-    output_log_writer = None
-    if args.output_log:
-        # Log the names of strains that were filtered or force-included, so we
-        # can properly account for each strain (e.g., including those that were
-        # initially filtered for one reason and then included again for another
-        # reason).
-        output_log = open(args.output_log, "w", newline='')
-        output_log_header = ("strain", "filter", "kwargs")
-        output_log_writer = csv.DictWriter(
-            output_log,
-            fieldnames=output_log_header,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        output_log_writer.writeheader()
-
-    # Load metadata. Metadata are the source of truth for which sequences we
-    # want to keep in filtered output.
-    metadata_strains = set()
-    valid_strains = set() # TODO: rename this more clearly
-    all_sequences_to_include = set()
-    filter_counts = defaultdict(int)
-
-    load_tsv(args.metadata, METADATA_TABLE_NAME)
-    connection = duckdb.connect(DEFAULT_DB_FILE)
-    generate_date_view(connection, date_column="date")
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     if args.output_strains:
         rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
     if args.output_metadata:
         rel_metadata_filtered.df().to_csv(args.output_metadata, sep='\t', index=None)
     return
+
+    # TODO: args.group_by
+    # TODO: args.sequences_per_group
+    # TODO: priority queue
+    # TODO: args.output_log
+    # TODO: filter_counts
 
     metadata_reader = read_metadata(
         args.metadata,
