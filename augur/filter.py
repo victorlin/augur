@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
-from .io_duckdb import load_metadata, DEFAULT_DB_FILE, TABLE_NAME
+from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
@@ -566,7 +566,7 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
     DuckDBPyRelation
         relation for filtered metadata
     """
-    metadata = connection.table(TABLE_NAME)
+    metadata = connection.table(METADATA_TABLE_NAME)
 
     # no exclusions
     if not exclude_by:
@@ -580,7 +580,7 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
             rel_include = rel_include.union(metadata.filter(include))
     # rel_include.create_view("metadata_force_include")
 
-    metadata = connection.table(TABLE_NAME)
+    metadata = connection.table(METADATA_TABLE_NAME)
     rel_exclude = None
     for exclude in exclude_by:
         if not rel_exclude:
@@ -1134,7 +1134,7 @@ def run(args):
     all_sequences_to_include = set()
     filter_counts = defaultdict(int)
 
-    load_metadata(args.metadata)
+    load_tsv(args.metadata, METADATA_TABLE_NAME)
     connection = duckdb.connect(DEFAULT_DB_FILE)
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     if args.output_strains:
