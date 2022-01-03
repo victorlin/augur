@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
-from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME
+from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_VIEW_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
@@ -445,6 +445,18 @@ def construct_filters(args, use_sequences=False):
         exclude_by.append(filter_by_non_nucleotide())
 
     return exclude_by, include_by
+
+
+def generate_date_view(connection:DuckDBPyConnection, date_column="date"):
+    query = f"""
+        SELECT
+            strain,
+            string_split({date_column}, '-')[0] AS year,
+            string_split({date_column}, '-')[1] AS month,
+            string_split({date_column}, '-')[2] AS day
+        FROM metadata;
+    """
+    connection.execute(f"CREATE VIEW {DATE_VIEW_NAME} AS {query}")
 
 
 def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
@@ -1035,6 +1047,7 @@ def run(args):
 
     load_tsv(args.metadata, METADATA_TABLE_NAME)
     connection = duckdb.connect(DEFAULT_DB_FILE)
+    generate_date_view(connection, date_column="date")
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     if args.output_strains:
         rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
