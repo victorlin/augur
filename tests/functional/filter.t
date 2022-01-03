@@ -408,3 +408,13 @@ This should fail with a helpful error message.
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   ERROR: You must specify a number of sequences per group or maximum sequences to subsample.
   [1]
+
+Filter out a sequence with invalid nucleotides.
+
+  $ ${AUGUR} filter \
+  >  --sequence-index filter/sequence_index.tsv \
+  >  --metadata filter/metadata.tsv \
+  >  --non-nucleotide \
+  >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
+  $ wc -l "$TMP/filtered_metadata.tsv"
+  \s*11 .* (re)
