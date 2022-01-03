@@ -53,3 +53,11 @@ Force-include without any exclude should return original metadata
   $ diff "filter/metadata.tsv" "$TMP/filtered_metadata.tsv"
   $ rm -f "$TMP/filtered_metadata.tsv"
 
+Sequence index is missing 1 strain
+
+  $ ${AUGUR} filter \
+  >  --sequence-index filter/sequence_index.tsv \
+  >  --metadata filter/metadata.tsv \
+  >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
+  $ wc -l "$TMP/filtered_metadata.tsv"
+  \s*12 .* (re)
