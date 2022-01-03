@@ -71,3 +71,13 @@ Filter using only metadata without sequence input or output and save results as 
   >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
   $ wc -l "$TMP/filtered_metadata.tsv"
   \s*10 .* (re)
+
+Filter out a sequence with invalid nucleotides.
+
+  $ ${AUGUR} filter \
+  >  --sequence-index filter/sequence_index.tsv \
+  >  --metadata filter/metadata.tsv \
+  >  --non-nucleotide \
+  >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
+  $ wc -l "$TMP/filtered_metadata.tsv"
+  \s*11 .* (re)
