@@ -983,6 +983,7 @@ def run(args):
     )
 
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
+    rel_metadata_filtered.execute()
     if args.output_strains:
         rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
     if args.output_metadata:
