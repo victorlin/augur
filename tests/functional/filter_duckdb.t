@@ -81,3 +81,12 @@ Filter out a sequence with invalid nucleotides.
   >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
   $ wc -l "$TMP/filtered_metadata.tsv"
   \s*11 .* (re)
+
+Filter by min date.
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --min-date 2016 \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*9 .* (re)
