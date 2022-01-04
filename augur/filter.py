@@ -21,7 +21,7 @@ from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
-from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_VIEW_NAME
+from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_TABLE_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
@@ -220,7 +220,7 @@ def filter_by_min_date(min_date):
     """
     return f"""strain IN (
         SELECT strain
-        FROM {DATE_VIEW_NAME}
+        FROM {DATE_TABLE_NAME}
         WHERE date >= '{min_date}'
     )"""
 
@@ -240,7 +240,7 @@ def filter_by_max_date(max_date):
     """
     return f"""strain IN (
         SELECT strain
-        FROM {DATE_VIEW_NAME}
+        FROM {DATE_TABLE_NAME}
         WHERE date <= '{max_date}'
     )"""
 
@@ -457,7 +457,9 @@ def generate_date_view(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_C
         ) d2
         ON (d1.strain = d2.strain);
     """
-    connection.execute(f"CREATE OR REPLACE VIEW {DATE_VIEW_NAME} AS {query}")
+    # TODO: use VIEW when this is fixed https://github.com/duckdb/duckdb/issues/2860
+    connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
+    connection.execute(f"CREATE TABLE {DATE_TABLE_NAME} AS {query}")
 
 
 def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
