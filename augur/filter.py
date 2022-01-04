@@ -213,8 +213,6 @@ def filter_by_min_date(min_date):
     ----------
     min_date : float
         Minimum date
-    max_date : float
-        Maximum date
 
     Returns
     -------
