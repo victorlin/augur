@@ -4,7 +4,6 @@ Filter and subsample a sequence set.
 from Bio import SeqIO
 from collections import defaultdict
 import csv
-import datetime
 import duckdb
 import heapq
 import itertools
@@ -23,7 +22,7 @@ from duckdb import DuckDBPyConnection
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
 from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_VIEW_NAME
-from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
+from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
 
@@ -222,7 +221,7 @@ def filter_by_min_date(min_date):
     return f"""strain IN (
         SELECT strain
         FROM {DATE_VIEW_NAME}
-        WHERE date >= {min_date}
+        WHERE date >= '{min_date}'
     )"""
 
 
@@ -242,7 +241,7 @@ def filter_by_max_date(max_date):
     return f"""strain IN (
         SELECT strain
         FROM {DATE_VIEW_NAME}
-        WHERE date <= {max_date}
+        WHERE date <= '{max_date}'
     )"""
 
 
@@ -812,8 +811,8 @@ def register_arguments(parser):
         Uses Pandas Dataframe querying, see https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#indexing-query for syntax.
         (e.g., --query "country == 'Colombia'" or --query "(country == 'USA' & (division == 'Washington'))")"""
     )
-    metadata_filter_group.add_argument('--min-date', type=numeric_date, help="minimal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
-    metadata_filter_group.add_argument('--max-date', type=numeric_date, help="maximal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
+    metadata_filter_group.add_argument('--min-date', type=date_string, help="minimal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
+    metadata_filter_group.add_argument('--max-date', type=date_string, help="maximal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
     metadata_filter_group.add_argument('--exclude-ambiguous-dates-by', choices=['any', 'day', 'month', 'year'],
                                 help='Exclude ambiguous dates by day (e.g., 2020-09-XX), month (e.g., 2020-XX-XX), year (e.g., 200X-10-01), or any date fields. An ambiguous year makes the corresponding month and day ambiguous, too, even if those fields have unambiguous values (e.g., "201X-10-01"). Similarly, an ambiguous month makes the corresponding day ambiguous (e.g., "2010-XX-01").')
     metadata_filter_group.add_argument('--exclude', type=str, nargs="+", help="file(s) with list of strains to exclude")
@@ -1327,22 +1326,14 @@ def _filename_gz(filename):
     return filename.lower().endswith(".gz")
 
 
-def numeric_date(date):
+def date_string(date):
     """
-    Converts the given *date* string to a :py:class:`float`.
-
-    *date* may be given as a number (a float) with year as the integer part, or
-    in the YYYY-MM-DD (ISO 8601) syntax.
-
-    >>> numeric_date("2020.42")
-    2020.42
-    >>> numeric_date("2020-06-04")
-    2020.42486...
+    Converts the given *date* to a :py:class:`string` in the YYYY-MM-DD (ISO 8601) syntax.
     """
-    try:
-        return float(date)
-    except ValueError:
-        return treetime.utils.numeric_date(datetime.date(*map(int, date.split("-", 2))))
+    if type(date) is float or type(date) is int:
+        return treetime.utils.datestring_from_numeric(date)
+    if type(date) is str:
+        return date # TODO: verify
 
 
 def calculate_sequences_per_group(target_max_value, counts_per_group, allow_probabilistic=True):
