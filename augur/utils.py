@@ -205,11 +205,11 @@ def to_numeric_date(date, ambiguity_resolver="min"):
     return None
 
 
-def to_iso_date(date, ambiguity_resolver="min"):
+def to_iso_date_str(date, ambiguity_resolver="min"):
     numeric_date = to_numeric_date(date, ambiguity_resolver)
     if not numeric_date:
         return None
-    return numeric_date_to_iso(numeric_date)
+    return numeric_date_to_iso(numeric_date).strftime('%Y-%m-%d')
 
 
 def numeric_date_to_iso(numeric_date):

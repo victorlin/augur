@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
 from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_TABLE_NAME
-from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous, to_iso_date
+from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous, to_iso_date_str
 
 comment_char = '#'
 
@@ -434,8 +434,8 @@ def check_date_col(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
 
 def populate_date_min_max(df:pd.DataFrame):
     # TODO: parameterize date column name
-    df['date_min'] = df['date'].apply(lambda date: to_iso_date(date, 'min'))
-    df['date_max'] = df['date'].apply(lambda date: to_iso_date(date, 'max'))
+    df['date_min'] = df['date'].apply(lambda date: to_iso_date_str(date, 'min'))
+    df['date_max'] = df['date'].apply(lambda date: to_iso_date_str(date, 'max'))
     return df
 
 
