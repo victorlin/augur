@@ -221,7 +221,7 @@ def filter_by_min_date(min_date):
     return f"""strain IN (
         SELECT strain
         FROM {DATE_TABLE_NAME}
-        WHERE date >= '{min_date}'
+        WHERE date_min >= '{min_date}'
     )"""
 
 
@@ -241,7 +241,7 @@ def filter_by_max_date(max_date):
     return f"""strain IN (
         SELECT strain
         FROM {DATE_TABLE_NAME}
-        WHERE date <= '{max_date}'
+        WHERE date_max <= '{max_date}'
     )"""
 
 
