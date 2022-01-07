@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
 from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_TABLE_NAME
-from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous
+from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous, to_iso_date
 
 comment_char = '#'
 
@@ -432,34 +432,36 @@ def check_date_col(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
     return date_column in metadata.columns
 
 
-def generate_date_view(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
-    query = f"""
-        SELECT
-            d1.strain,
-            d2.date,
-            d1.year,
-            d1.month,
-            d1.day
-        FROM (
-            SELECT
-                strain,
-                string_split({date_column}, '-')[0] AS year,
-                string_split({date_column}, '-')[1] AS month,
-                string_split({date_column}, '-')[2] AS day
-            FROM {METADATA_TABLE_NAME}
-        ) d1
-        LEFT OUTER JOIN (
-            SELECT
-                strain,
-                {date_column}::date AS date
-            FROM {METADATA_TABLE_NAME}
-            WHERE regexp_matches({date_column}, '^\d{{4}}\-(0?[1-9]|1[012])\-(0?[1-9]|[12][0-9]|3[01])$')
-        ) d2
-        ON (d1.strain = d2.strain);
-    """
-    # TODO: use VIEW when this is fixed https://github.com/duckdb/duckdb/issues/2860
+def populate_date_min_max(df:pd.DataFrame):
+    # TODO: parameterize date column name
+    df['date_min'] = df['date'].apply(lambda date: to_iso_date(date, 'min'))
+    df['date_max'] = df['date'].apply(lambda date: to_iso_date(date, 'max'))
+    return df
+
+
+def generate_date_view(connection:DuckDBPyConnection):
+    metadata = connection.table(METADATA_TABLE_NAME)
+    tmp_table = "tmp"
+    rel_tmp = metadata.project("""
+        strain,
+        date,
+        '' as date_min,
+        '' as date_max
+    """)
+    rel_tmp = rel_tmp.map(populate_date_min_max)
+    rel_tmp.execute()
+    rel_tmp.create(tmp_table)
+    # unable to cast to date type before creating table, possibly related to https://github.com/duckdb/duckdb/issues/2860
+    rel = connection.table(tmp_table)
+    rel = rel.project("""
+        strain,
+        date_min::DATE as date_min,
+        date_max::DATE as date_max
+    """)
+    rel.execute()
     connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
-    connection.execute(f"CREATE TABLE {DATE_TABLE_NAME} AS {query}")
+    rel.create(DATE_TABLE_NAME)
+    connection.execute(f"DROP TABLE IF EXISTS {tmp_table}")
 
 
 def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):

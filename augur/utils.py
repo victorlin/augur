@@ -168,14 +168,6 @@ def get_numerical_dates(meta_dict, name_col = None, date_col='date', fmt=None, m
     return numerical_dates
 
 
-def to_numeric_date_min(date):
-    return to_numeric_date(date, ambiguity_resolver="min")
-
-
-def to_numeric_date_max(date):
-    return to_numeric_date(date, ambiguity_resolver="max")
-
-
 def to_numeric_date(date, ambiguity_resolver="min"):
     """Return numeric date from string, [incomplete] ISO date string, or datetime.date object.
 
@@ -192,7 +184,7 @@ def to_numeric_date(date, ambiguity_resolver="min"):
 
     Returns
     -------
-    float
+    float | None
     """
     if type(date) is datetime.date:
         return numeric_date(date)
@@ -210,7 +202,14 @@ def to_numeric_date(date, ambiguity_resolver="min"):
                 return ambiguous_date_resolved[0]
             if ambiguity_resolver == "max":
                 return ambiguous_date_resolved[1]
-    raise ValueError(f"Unparsable date value: {date!r}")
+    return None
+
+
+def to_iso_date(date, ambiguity_resolver="min"):
+    numeric_date = to_numeric_date(date, ambiguity_resolver)
+    if not numeric_date:
+        return None
+    return numeric_date_to_iso(numeric_date)
 
 
 def numeric_date_to_iso(numeric_date):
