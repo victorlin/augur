@@ -432,10 +432,24 @@ def check_date_col(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
     return date_column in metadata.columns
 
 
-def populate_date_min_max(df:pd.DataFrame):
+def get_date_level(row:pd.Series, level:str):
+    if not row['date_min']:
+        return
+    year_pair, month_pair, day_pair = list(zip(row['date_min'].split('-'), row['date_max'].split('-')))
+    if level == 'year':
+        return None if year_pair[0] != year_pair[1] else year_pair[0]
+    if level == 'month':
+        return None if month_pair[0] != month_pair[1] else month_pair[0]
+    if level == 'day':
+        return None if day_pair[0] != day_pair[1] else day_pair[0]
+
+
+def populate_date_cols(df:pd.DataFrame):
     # TODO: parameterize date column name
     df['date_min'] = df['date'].apply(lambda date: to_iso_date_str(date, 'min'))
     df['date_max'] = df['date'].apply(lambda date: to_iso_date_str(date, 'max'))
+    for level in ['year', 'month', 'day']:
+        df[level] = df.apply(lambda row: get_date_level(row, level), axis=1)
     return df
 
 
@@ -446,9 +460,12 @@ def generate_date_view(connection:DuckDBPyConnection):
         strain,
         date,
         '' as date_min,
-        '' as date_max
+        '' as date_max,
+        '' as year,
+        '' as month,
+        '' as day
     """)
-    rel_tmp = rel_tmp.map(populate_date_min_max)
+    rel_tmp = rel_tmp.map(populate_date_cols)
     rel_tmp.execute()
     rel_tmp.create(tmp_table)
     # unable to cast to date type before creating table, possibly related to https://github.com/duckdb/duckdb/issues/2860
@@ -456,7 +473,10 @@ def generate_date_view(connection:DuckDBPyConnection):
     rel = rel.project("""
         strain,
         date_min::DATE as date_min,
-        date_max::DATE as date_max
+        date_max::DATE as date_max,
+        year::FLOAT4 as year,
+        month::FLOAT4 as month,
+        day::FLOAT4 as day
     """)
     rel.execute()
     connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
