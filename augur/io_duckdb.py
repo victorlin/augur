@@ -8,6 +8,7 @@ PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 
 FILTERED_VIEW_NAME = 'metadata_filtered'
+EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 
 
 def load_tsv(tsv_file:str, table_name:str, db_file:str=DEFAULT_DB_FILE, header=True, names=[]):

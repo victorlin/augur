@@ -29,6 +29,7 @@ from .io_duckdb import (
     PRIORITIES_TABLE_NAME,
     DATE_TABLE_NAME,
     FILTERED_VIEW_NAME,
+    EXTENDED_VIEW_NAME,
 )
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote
 
@@ -1061,23 +1062,54 @@ def run(args):
     rel_metadata_filtered.create_view(FILTERED_VIEW_NAME)
     rel_metadata_filtered.execute()
 
+    output_metadata = rel_metadata_filtered
+
+    # ===SUBSAMPLING=== #
+
+    # create new view that extends strain with year/month/day and priority
+    connection.execute(f"""
+    CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
+        select m.*, d.year, d.month, d.day, p.priority from {FILTERED_VIEW_NAME} m
+        join {DATE_TABLE_NAME} d on m.strain = d.strain
+        join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
+    )
+    """)
+
     if args.group_by:
         if args.priority:
             load_tsv(args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
         else:
             generate_priorities_table(connection, args.subsample_seed)
 
-    # TODO: args.group_by
-    # TODO: args.sequences_per_group
-    # TODO: priority queue
+        if args.sequences_per_group:
+            subsample_strains_view = 'subsample_strains'
+            where_conditions = [f'group_i <= {args.sequences_per_group}']
+            for group in args.group_by:
+                where_conditions.append(f'{group} IS NOT NULL')
+            query = f"""
+                SELECT strain
+                FROM (
+                    SELECT ROW_NUMBER() OVER (
+                        PARTITION BY {','.join(args.group_by)}
+                        ORDER BY priority DESC
+                    ) AS group_i, *
+                    FROM {EXTENDED_VIEW_NAME}
+                )
+                WHERE {' AND '.join(where_conditions)}
+            """
+            connection.execute(f"CREATE OR REPLACE VIEW {subsample_strains_view} AS {query}")
+            output_metadata = output_metadata.filter(f'strain in (select strain from {subsample_strains_view})')
+            output_metadata.execute()
+
+    # TODO: args.subsample_max_sequences
     # TODO: args.output_log
     # TODO: args.output (sequences)
     # TODO: filter_counts
 
     if args.output_strains:
-        rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
+        output_metadata.project('strain').df().to_csv(args.output_strains, index=None, header=False)
     if args.output_metadata:
-        rel_metadata_filtered.df().to_csv(args.output_metadata, sep='\t', index=None)
+        output_metadata.df().to_csv(args.output_metadata, sep='\t', index=None)
     return
 
     metadata_reader = read_metadata(
