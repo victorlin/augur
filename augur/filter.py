@@ -432,24 +432,71 @@ def check_date_col(connection:DuckDBPyConnection, date_column=DEFAULT_DATE_COL):
     return date_column in metadata.columns
 
 
-def get_date_level(row:pd.Series, level:str):
+def get_date_levels(row:pd.Series):
     if not row['date_min']:
         return
     year_pair, month_pair, day_pair = list(zip(row['date_min'].split('-'), row['date_max'].split('-')))
-    if level == 'year':
-        return None if year_pair[0] != year_pair[1] else year_pair[0]
-    if level == 'month':
-        return None if month_pair[0] != month_pair[1] else month_pair[0]
-    if level == 'day':
-        return None if day_pair[0] != day_pair[1] else day_pair[0]
+    year = None if year_pair[0] != year_pair[1] else year_pair[0]
+    month = None if month_pair[0] != month_pair[1] else month_pair[0]
+    day = None if day_pair[0] != day_pair[1] else day_pair[0]
+    return (year, month, day)
+
+
+def get_date_parts(df: pd.DataFrame) -> pd.DataFrame:
+    """Expand the date column of a DataFrame to minimum and maximum date (ISO 8601 format) based on potential ambiguity.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame containing date column.
+    Returns
+    -------
+    pandas.DataFrame :
+        The input metadata with expanded date columns.
+    """
+    # TODO: np.where to convert numerical dates
+    # TODO: BC dates
+    # replace date with year/month/day as nullable ints
+    date_cols = ['year', 'month', 'day']
+    df_date_parts = df['date'].str.split('-', n=2, expand=True)
+    df_date_parts = df_date_parts.set_axis(date_cols[:len(df_date_parts.columns)], axis=1)
+    missing_date_cols = set(date_cols) - set(df_date_parts.columns)
+    for col in missing_date_cols:
+        df_date_parts[col] = pd.NA
+    for col in date_cols:
+        df_date_parts[col] = pd.to_numeric(df_date_parts[col], errors='coerce').astype(pd.Int64Dtype())
+    year_str = df_date_parts['year'].astype(str)
+    min_month = df_date_parts['month'].fillna(1).astype(str).str.zfill(2)
+    min_day = df_date_parts['day'].fillna(1).astype(str).str.zfill(2)
+    # set max month=12 if missing
+    max_month = df_date_parts['month'].fillna(12)
+    # set max day based on max month
+    max_day_na_fill = np.where(
+        max_month.isin([1,3,5,7,8,10,12]), 31,
+        np.where(
+            max_month.eq(2), 28,
+            30
+        )
+    )
+    max_day = df_date_parts['day'].fillna(pd.Series(max_day_na_fill)).astype(str).str.zfill(2)
+    max_month = max_month.astype(str).str.zfill(2)
+    df_date_parts['date_min'] = np.where(
+        df_date_parts['year'].notna(),
+        year_str.str.cat([min_month, min_day], sep="-"),
+        None)
+    df_date_parts['date_max'] = np.where(
+        df_date_parts['year'].notna(),
+        year_str.str.cat([max_month, max_day], sep="-"),
+        None)
+    df_date_parts.drop(date_cols, axis=1, inplace=True)
+    return df_date_parts
 
 
 def populate_date_cols(df:pd.DataFrame):
-    # TODO: parameterize date column name
-    df['date_min'] = df['date'].apply(lambda date: to_iso_date_str(date, 'min'))
-    df['date_max'] = df['date'].apply(lambda date: to_iso_date_str(date, 'max'))
-    for level in ['year', 'month', 'day']:
-        df[level] = df.apply(lambda row: get_date_level(row, level), axis=1)
+    if df.empty:
+        return df  # sometimes duckdb makes empty passes
+    df_date_parts = get_date_parts(df)
+    for col in df_date_parts.columns:
+        df[col] = df_date_parts[col]
     return df
 
 
@@ -460,10 +507,7 @@ def generate_date_view(connection:DuckDBPyConnection):
         strain,
         date,
         '' as date_min,
-        '' as date_max,
-        '' as year,
-        '' as month,
-        '' as day
+        '' as date_max
     """)
     rel_tmp = rel_tmp.map(populate_date_cols)
     rel_tmp.execute()
@@ -473,10 +517,7 @@ def generate_date_view(connection:DuckDBPyConnection):
     rel = rel.project("""
         strain,
         date_min::DATE as date_min,
-        date_max::DATE as date_max,
-        year::FLOAT4 as year,
-        month::FLOAT4 as month,
-        day::FLOAT4 as day
+        date_max::DATE as date_max
     """)
     rel.execute()
     connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
