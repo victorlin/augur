@@ -126,3 +126,16 @@ Filter out any ambiguous date
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   $ wc -l "$TMP/filtered_strains.txt"
   \s*7 .* (re)
+
+Subsample one strain per year with priorities.
+There are two years (2015 and 2016) represented in the metadata.
+The two highest priority strains are in these two years.
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --group-by year \
+  >  --priority filter/priorities.tsv \
+  >  --sequences-per-group 1 \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+
+  $ diff -u <(sort -k 2,2rn -k 1,1 filter/priorities.tsv | head -n 2 | cut -f 1) <(sort -k 1,1 "$TMP/filtered_strains.txt")
