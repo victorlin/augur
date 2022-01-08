@@ -572,7 +572,7 @@ def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
 
     if not include_by:
         return rel_exclude
-    return rel_include.union(rel_exclude).create_view(FILTERED_VIEW_NAME)
+    return rel_include.union(rel_exclude)
 
 
 def get_groups_for_subsampling(strains, metadata, group_by=None):
@@ -1049,6 +1049,7 @@ def run(args):
     )
 
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
+    rel_metadata_filtered.create_view(FILTERED_VIEW_NAME)
     rel_metadata_filtered.execute()
 
     if args.priority:
