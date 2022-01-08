@@ -1046,6 +1046,7 @@ def run(args):
 
     # Load metadata
     load_tsv(connection, args.metadata, METADATA_TABLE_NAME)
+    # TODO: check id column is unique
     has_date_col = check_date_col(connection)
     if has_date_col:
         generate_date_view(connection)
