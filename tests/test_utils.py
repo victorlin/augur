@@ -102,35 +102,6 @@ class TestUtils:
             fh.write("\n".join(drm_lines))
         assert utils.read_mask_file(drm_file) == expected_sites
 
-    def test_is_date_ambiguous(self):
-        """is_date_ambiguous should return true for ambiguous dates and false for valid dates."""
-        # Test complete date strings with ambiguous values.
-        assert utils.is_date_ambiguous("2019-0X-0X", "any")
-        assert utils.is_date_ambiguous("2019-XX-09", "month")
-        assert utils.is_date_ambiguous("2019-03-XX", "day")
-        assert utils.is_date_ambiguous("201X-03-09", "year")
-        assert utils.is_date_ambiguous("20XX-01-09", "month")
-        assert utils.is_date_ambiguous("2019-XX-03", "day")
-        assert utils.is_date_ambiguous("20XX-01-03", "day")
-
-        # Test incomplete date strings with ambiguous values.
-        assert utils.is_date_ambiguous("2019", "any")
-        assert utils.is_date_ambiguous("201X", "year")
-        assert utils.is_date_ambiguous("2019-XX", "month")
-        assert utils.is_date_ambiguous("2019-10", "day")
-        assert utils.is_date_ambiguous("2019-XX", "any")
-        assert utils.is_date_ambiguous("2019-XX", "day")
-
-        # Test complete date strings without ambiguous dates for the requested field.
-        assert not utils.is_date_ambiguous("2019-09-03", "any")
-        assert not utils.is_date_ambiguous("2019-03-XX", "month")
-        assert not utils.is_date_ambiguous("2019-09-03", "day")
-        assert not utils.is_date_ambiguous("2019-XX-XX", "year")
-
-        # Test incomplete date strings without ambiguous dates for the requested fields.
-        assert not utils.is_date_ambiguous("2019", "year")
-        assert not utils.is_date_ambiguous("2019-10", "month")
-
     def test_read_strains(self, tmpdir):
         # Write one list of filenames with some unnecessary whitespace.
         strains1 = Path(tmpdir) / Path("strains1.txt")
