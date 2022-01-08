@@ -90,3 +90,39 @@ Filter by min date.
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   $ wc -l "$TMP/filtered_strains.txt"
   \s*9 .* (re)
+
+Filter out ambiguous days
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --exclude-ambiguous-dates-by day \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*7 .* (re)
+
+Filter out ambiguous months
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --exclude-ambiguous-dates-by month \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*10 .* (re)
+
+Filter out ambiguous years
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --exclude-ambiguous-dates-by year \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*11 .* (re)
+
+Filter out any ambiguous date
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --exclude-ambiguous-dates-by any \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*7 .* (re)
