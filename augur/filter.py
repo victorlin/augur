@@ -478,7 +478,6 @@ def get_date_parts(df: pd.DataFrame) -> pd.DataFrame:
         None)
     for col in date_cols:
         df_date_parts[f'{col}_ambiguous'] = df_date_parts[col].isna()
-    df_date_parts.drop(date_cols, axis=1, inplace=True)
     return df_date_parts
 
 
@@ -497,6 +496,9 @@ def generate_date_view(connection:DuckDBPyConnection):
     rel_tmp = metadata.project("""
         strain,
         date,
+        0::BIGINT as year,
+        0::BIGINT as month,
+        0::BIGINT as day,
         '' as date_min,
         '' as date_max,
         FALSE as year_ambiguous,
@@ -510,6 +512,9 @@ def generate_date_view(connection:DuckDBPyConnection):
     rel = connection.table(tmp_table)
     rel = rel.project("""
         strain,
+        year,
+        month,
+        day,
         date_min::DATE as date_min,
         date_max::DATE as date_max,
         year_ambiguous,
