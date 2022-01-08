@@ -22,7 +22,7 @@ from duckdb import DuckDBPyConnection
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
 from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_TABLE_NAME
-from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote, is_date_ambiguous
+from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote
 
 comment_char = '#'
 
@@ -164,45 +164,41 @@ def exclude_where_duckdb_filter(exclude_where):
     return f"{column} {op} '{value}'"
 
 
-def filter_by_ambiguous_date(metadata, date_column="date", ambiguity="any"):
+def filter_by_ambiguous_date(ambiguity="any"):
     """Filter metadata in the given pandas DataFrame where values in the given date
     column have a given level of ambiguity.
 
+    Determine ambiguity hierarchically such that, for example, an ambiguous
+    month implicates an ambiguous day even when day information is available.
+
     Parameters
     ----------
-    metadata : pandas.DataFrame
-        Metadata indexed by strain name
-    date_column : str
-        Column in the dataframe with dates.
     ambiguity : str
         Level of date ambiguity to filter metadata by
 
     Returns
     -------
-    set[str]:
-        Strains that pass the filter
-
-    >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-XX"}, {"region": "Europe", "date": "2020-01-02"}], index=["strain1", "strain2"])
-    >>> filter_by_ambiguous_date(metadata)
-    {'strain2'}
-    >>> sorted(filter_by_ambiguous_date(metadata, ambiguity="month"))
-    ['strain1', 'strain2']
-
-    If the requested date column does not exist, we quietly skip this filter.
-
-    >>> sorted(filter_by_ambiguous_date(metadata, date_column="missing_column"))
-    ['strain1', 'strain2']
-
+    str:
+        expression for duckdb.filter
     """
-    if date_column in metadata.columns:
-        date_is_ambiguous = metadata[date_column].apply(
-            lambda date: is_date_ambiguous(date, ambiguity)
-        )
-        filtered = set(metadata[~date_is_ambiguous].index.values)
-    else:
-        filtered = set(metadata.index.values)
-
-    return filtered
+    if ambiguity == 'year':
+        return f"""strain IN (
+            SELECT strain
+            FROM {DATE_TABLE_NAME}
+            WHERE NOT year_ambiguous
+        )"""
+    if ambiguity == 'month':
+        return f"""strain IN (
+            SELECT strain
+            FROM {DATE_TABLE_NAME}
+            WHERE NOT month_ambiguous AND NOT year_ambiguous
+        )"""
+    if ambiguity == 'day' or ambiguity == 'any':
+        return f"""strain IN (
+            SELECT strain
+            FROM {DATE_TABLE_NAME}
+            WHERE NOT day_ambiguous AND NOT month_ambiguous AND NOT year_ambiguous
+        )"""
 
 
 def filter_by_min_date(min_date):
@@ -393,15 +389,8 @@ def construct_filters(args, use_sequences:bool, has_date_col:bool):
 
     if has_date_col:
         # Filter by ambiguous dates.
-        # TODO: SQL date filtering
         if args.exclude_ambiguous_dates_by:
-            exclude_by.append((
-                filter_by_ambiguous_date,
-                {
-                    "date_column": "date",
-                    "ambiguity": args.exclude_ambiguous_dates_by,
-                }
-            ))
+            exclude_by.append(filter_by_ambiguous_date(args.exclude_ambiguous_dates_by))
 
         # Filter by date.
         if args.min_date:
@@ -487,6 +476,8 @@ def get_date_parts(df: pd.DataFrame) -> pd.DataFrame:
         df_date_parts['year'].notna(),
         year_str.str.cat([max_month, max_day], sep="-"),
         None)
+    for col in date_cols:
+        df_date_parts[f'{col}_ambiguous'] = df_date_parts[col].isna()
     df_date_parts.drop(date_cols, axis=1, inplace=True)
     return df_date_parts
 
@@ -507,7 +498,10 @@ def generate_date_view(connection:DuckDBPyConnection):
         strain,
         date,
         '' as date_min,
-        '' as date_max
+        '' as date_max,
+        FALSE as year_ambiguous,
+        FALSE as month_ambiguous,
+        FALSE as day_ambiguous
     """)
     rel_tmp = rel_tmp.map(populate_date_cols)
     rel_tmp.execute()
@@ -517,7 +511,10 @@ def generate_date_view(connection:DuckDBPyConnection):
     rel = rel.project("""
         strain,
         date_min::DATE as date_min,
-        date_max::DATE as date_max
+        date_max::DATE as date_max,
+        year_ambiguous,
+        month_ambiguous,
+        day_ambiguous
     """)
     rel.execute()
     connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
