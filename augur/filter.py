@@ -1045,17 +1045,19 @@ def run(args):
 
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     rel_metadata_filtered.execute()
-    if args.output_strains:
-        rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
-    if args.output_metadata:
-        rel_metadata_filtered.df().to_csv(args.output_metadata, sep='\t', index=None)
-    return
 
     # TODO: args.group_by
     # TODO: args.sequences_per_group
     # TODO: priority queue
     # TODO: args.output_log
+    # TODO: args.output (sequences)
     # TODO: filter_counts
+
+    if args.output_strains:
+        rel_metadata_filtered.project('strain').df().to_csv(args.output_strains, index=None, header=False)
+    if args.output_metadata:
+        rel_metadata_filtered.df().to_csv(args.output_metadata, sep='\t', index=None)
+    return
 
     metadata_reader = read_metadata(
         args.metadata,
