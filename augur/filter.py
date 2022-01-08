@@ -21,7 +21,7 @@ from duckdb import DuckDBPyConnection
 
 from .index import index_sequences, index_vcf
 from .io import open_file, read_metadata, read_sequences, write_sequences
-from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, FILTERED_VIEW_NAME, DATE_TABLE_NAME
+from .io_duckdb import load_tsv, DEFAULT_DB_FILE, METADATA_TABLE_NAME, SEQUENCE_INDEX_TABLE_NAME, PRIORITIES_TABLE_NAME, FILTERED_VIEW_NAME, DATE_TABLE_NAME
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote
 
 comment_char = '#'
@@ -1050,6 +1050,9 @@ def run(args):
 
     rel_metadata_filtered = apply_filters(connection, exclude_by, include_by)
     rel_metadata_filtered.execute()
+
+    if args.priority:
+        load_tsv(args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
 
     # TODO: args.group_by
     # TODO: args.sequences_per_group
