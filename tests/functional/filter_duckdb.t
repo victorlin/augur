@@ -139,3 +139,13 @@ The two highest priority strains are in these two years.
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
 
   $ diff -u <(sort -k 2,2rn -k 1,1 filter/priorities.tsv | head -n 2 | cut -f 1) <(sort -k 1,1 "$TMP/filtered_strains.txt")
+
+Subsample 10 sequences given priorities.
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.tsv \
+  >  --priority filter/priorities.tsv \
+  >  --subsample-max-sequences 10 \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*10 .* (re)
