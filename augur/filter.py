@@ -185,19 +185,19 @@ def filter_by_ambiguous_date(ambiguity="any"):
         return f"""strain IN (
             SELECT strain
             FROM {DATE_TABLE_NAME}
-            WHERE NOT year_ambiguous
+            WHERE year IS NOT NULL
         )"""
     if ambiguity == 'month':
         return f"""strain IN (
             SELECT strain
             FROM {DATE_TABLE_NAME}
-            WHERE NOT month_ambiguous AND NOT year_ambiguous
+            WHERE month IS NOT NULL AND year IS NOT NULL
         )"""
     if ambiguity == 'day' or ambiguity == 'any':
         return f"""strain IN (
             SELECT strain
             FROM {DATE_TABLE_NAME}
-            WHERE NOT day_ambiguous AND NOT month_ambiguous AND NOT year_ambiguous
+            WHERE day IS NOT NULL AND month IS NOT NULL AND year IS NOT NULL
         )"""
 
 
@@ -476,8 +476,6 @@ def get_date_parts(df: pd.DataFrame) -> pd.DataFrame:
         df_date_parts['year'].notna(),
         year_str.str.cat([max_month, max_day], sep="-"),
         None)
-    for col in date_cols:
-        df_date_parts[f'{col}_ambiguous'] = df_date_parts[col].isna()
     return df_date_parts
 
 
@@ -500,10 +498,7 @@ def generate_date_view(connection:DuckDBPyConnection):
         0::BIGINT as month,
         0::BIGINT as day,
         '' as date_min,
-        '' as date_max,
-        FALSE as year_ambiguous,
-        FALSE as month_ambiguous,
-        FALSE as day_ambiguous
+        '' as date_max
     """)
     rel_tmp = rel_tmp.map(populate_date_cols)
     rel_tmp.execute()
@@ -516,10 +511,7 @@ def generate_date_view(connection:DuckDBPyConnection):
         month,
         day,
         date_min::DATE as date_min,
-        date_max::DATE as date_max,
-        year_ambiguous,
-        month_ambiguous,
-        day_ambiguous
+        date_max::DATE as date_max
     """)
     rel.execute()
     connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
