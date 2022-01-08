@@ -1030,23 +1030,22 @@ def run(args):
         else:
             index_sequences(args.sequences, sequence_index_path)
 
+    connection = duckdb.connect(DEFAULT_DB_FILE)
+
     # Load the sequence index
     if use_sequences:
-        load_tsv(sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
+        load_tsv(connection, sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
 
         # Remove temporary index file, if it exists.
         if build_sequence_index:
             os.unlink(sequence_index_path)
 
         # Calculate summary statistics needed for filtering.
-        connection = duckdb.connect(DEFAULT_DB_FILE, read_only=True)
         sequence_index_table = connection.table(SEQUENCE_INDEX_TABLE_NAME)
         sequence_strains = set(sequence_index_table.project('strain').df().set_index('strain').index.values)
-        connection.close()
 
     # Load metadata
-    load_tsv(args.metadata, METADATA_TABLE_NAME)
-    connection = duckdb.connect(DEFAULT_DB_FILE)
+    load_tsv(connection, args.metadata, METADATA_TABLE_NAME)
     has_date_col = check_date_col(connection)
     if has_date_col:
         generate_date_view(connection)
@@ -1066,20 +1065,20 @@ def run(args):
 
     # ===SUBSAMPLING=== #
 
-    # create new view that extends strain with year/month/day and priority
-    connection.execute(f"""
-    CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
-        select m.*, d.year, d.month, d.day, p.priority from {FILTERED_VIEW_NAME} m
-        join {DATE_TABLE_NAME} d on m.strain = d.strain
-        join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
-    )
-    """)
-
     if args.group_by:
         if args.priority:
-            load_tsv(args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
+            load_tsv(connection, args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
         else:
             generate_priorities_table(connection, args.subsample_seed)
+
+        # create new view that extends strain with year/month/day and priority
+        connection.execute(f"""
+        CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
+            select m.*, d.year, d.month, d.day, p.priority from {FILTERED_VIEW_NAME} m
+            join {DATE_TABLE_NAME} d on m.strain = d.strain
+            join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
+        )
+        """)
 
         if args.sequences_per_group:
             subsample_strains_view = 'subsample_strains'
