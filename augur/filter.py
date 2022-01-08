@@ -527,6 +527,15 @@ def generate_date_view(connection:DuckDBPyConnection):
     connection.execute(f"DROP TABLE IF EXISTS {tmp_table}")
 
 
+def generate_priorities_table(connection:DuckDBPyConnection, seed:int=None):
+    strain_col = 'strain'
+    priority_col = 'priority'
+    if seed:
+        connection.execute(f"SELECT setseed({seed})")
+    connection.execute(f"DROP TABLE IF EXISTS {PRIORITIES_TABLE_NAME}")
+    connection.execute(f"CREATE TABLE {PRIORITIES_TABLE_NAME} AS SELECT {strain_col}, random() as {priority_col} FROM {FILTERED_VIEW_NAME}")
+
+
 def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
     """Apply a list of filters to exclude or force-include records from the given
     metadata and return the strains to keep, to exclude, and to force include.
@@ -1052,8 +1061,11 @@ def run(args):
     rel_metadata_filtered.create_view(FILTERED_VIEW_NAME)
     rel_metadata_filtered.execute()
 
-    if args.priority:
-        load_tsv(args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
+    if args.group_by:
+        if args.priority:
+            load_tsv(args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
+        else:
+            generate_priorities_table(connection, args.subsample_seed)
 
     # TODO: args.group_by
     # TODO: args.sequences_per_group
