@@ -1065,42 +1065,59 @@ def run(args):
 
     # ===SUBSAMPLING=== #
 
-    if args.group_by:
+    if args.group_by or args.subsample_max_sequences:
         if args.priority:
             load_tsv(connection, args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
         else:
             generate_priorities_table(connection, args.subsample_seed)
 
-        # create new view that extends strain with year/month/day and priority
+        # create new view that extends strain with year/month/day, priority, dummy
+        dummy_col = 'dummy'
         connection.execute(f"""
         CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
-            select m.*, d.year, d.month, d.day, p.priority from {FILTERED_VIEW_NAME} m
+            select m.*, d.year, d.month, d.day, p.priority, TRUE as {dummy_col}
+            from {FILTERED_VIEW_NAME} m
             join {DATE_TABLE_NAME} d on m.strain = d.strain
             left outer join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
         )
         """)
 
-        if args.sequences_per_group:
-            subsample_strains_view = 'subsample_strains'
-            where_conditions = [f'group_i <= {args.sequences_per_group}']
-            for group in args.group_by:
-                where_conditions.append(f'{group} IS NOT NULL')
-            query = f"""
-                SELECT strain
-                FROM (
-                    SELECT ROW_NUMBER() OVER (
-                        PARTITION BY {','.join(args.group_by)}
-                        ORDER BY priority DESC NULLS LAST
-                    ) AS group_i, *
-                    FROM {EXTENDED_VIEW_NAME}
-                )
-                WHERE {' AND '.join(where_conditions)}
-            """
-            connection.execute(f"CREATE OR REPLACE VIEW {subsample_strains_view} AS {query}")
-            output_metadata = output_metadata.filter(f'strain in (select strain from {subsample_strains_view})')
-            output_metadata.execute()
+        group_by = args.group_by
+        sequences_per_group = args.sequences_per_group
 
-    # TODO: args.subsample_max_sequences
+        if args.subsample_max_sequences:
+            if args.group_by:
+                counts_per_group = None # TODO: calculate
+            else:
+                group_by = [dummy_col]
+                n_strains = rel_metadata_filtered.aggregate('count(*)').df().iloc[0,0]
+                counts_per_group = [n_strains]
+
+            sequences_per_group, probabilistic_used = calculate_sequences_per_group(
+                args.subsample_max_sequences,
+                counts_per_group,
+                allow_probabilistic=args.probabilistic_sampling
+            )
+
+        subsample_strains_view = 'subsample_strains'
+        where_conditions = [f'group_i <= {sequences_per_group}']
+        for group in group_by:
+            where_conditions.append(f'{group} IS NOT NULL')
+        query = f"""
+            SELECT strain
+            FROM (
+                SELECT ROW_NUMBER() OVER (
+                    PARTITION BY {','.join(group_by)}
+                    ORDER BY priority DESC NULLS LAST
+                ) AS group_i, *
+                FROM {EXTENDED_VIEW_NAME}
+            )
+            WHERE {' AND '.join(where_conditions)}
+        """
+        connection.execute(f"CREATE OR REPLACE VIEW {subsample_strains_view} AS {query}")
+        output_metadata = output_metadata.filter(f'strain in (select strain from {subsample_strains_view})')
+        output_metadata.execute()
+
     # TODO: args.output_log
     # TODO: args.output (sequences)
     # TODO: filter_counts
