@@ -1076,7 +1076,7 @@ def run(args):
         CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
             select m.*, d.year, d.month, d.day, p.priority from {FILTERED_VIEW_NAME} m
             join {DATE_TABLE_NAME} d on m.strain = d.strain
-            join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
+            left outer join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
         )
         """)
 
@@ -1090,7 +1090,7 @@ def run(args):
                 FROM (
                     SELECT ROW_NUMBER() OVER (
                         PARTITION BY {','.join(args.group_by)}
-                        ORDER BY priority DESC
+                        ORDER BY priority DESC NULLS LAST
                     ) AS group_i, *
                     FROM {EXTENDED_VIEW_NAME}
                 )
