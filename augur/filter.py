@@ -1088,7 +1088,9 @@ def run(args):
 
         if args.subsample_max_sequences:
             if args.group_by:
-                counts_per_group = None # TODO: calculate
+                count_col = 'count'
+                df = connection.view(EXTENDED_VIEW_NAME).aggregate(f"{','.join(group_by)}, count(*) as {count_col}").df()
+                counts_per_group = df[count_col].values
             else:
                 group_by = [dummy_col]
                 n_strains = rel_metadata_filtered.aggregate('count(*)').df().iloc[0,0]
