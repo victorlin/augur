@@ -950,6 +950,7 @@ def run(args):
             index_sequences(args.sequences, sequence_index_path)
 
     connection = duckdb.connect(DEFAULT_DB_FILE)
+    connection.execute("PRAGMA memory_limit='4GB'")
 
     # Load the sequence index
     if use_sequences:
