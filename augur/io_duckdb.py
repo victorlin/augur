@@ -20,9 +20,3 @@ def load_tsv(connection:DuckDBPyConnection, tsv_file:str, table_name:str, db_fil
     if not header and names:
         for i, name in enumerate(names):
             connection.execute(f"ALTER TABLE {table_name} RENAME COLUMN column{i} TO {name}")
-
-
-def query_df(query:str, db_file:str=DEFAULT_DB_FILE):
-    connection = duckdb.connect(db_file)
-    return connection.execute(query).fetch_df()
-
