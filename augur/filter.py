@@ -30,6 +30,7 @@ from .io_duckdb import (
     DATE_TABLE_NAME,
     FILTERED_VIEW_NAME,
     EXTENDED_VIEW_NAME,
+    GROUP_SIZES_TABLE_NAME,
 )
 from .utils import is_vcf as filename_is_vcf, read_vcf, read_strains, run_shell_command, shquote
 
@@ -537,6 +538,14 @@ def generate_priorities_table(connection:DuckDBPyConnection, seed:int=None):
     connection.execute(f"CREATE TABLE {PRIORITIES_TABLE_NAME} AS SELECT {strain_col}, random() as {priority_col} FROM {FILTERED_VIEW_NAME}")
 
 
+def generate_group_sizes_table(connection:DuckDBPyConnection, group_by:list, sequences_per_group:float, random_seed=None):
+    df_extended = connection.view(EXTENDED_VIEW_NAME).aggregate(','.join(group_by)).df()
+    df_sizes = create_sizes_per_group(df_extended, sequences_per_group, random_seed=random_seed)
+    connection.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
+    connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
+    # TODO: check if connection.register as a view is sufficient
+
+
 def apply_filters(connection:DuckDBPyConnection, exclude_by, include_by):
     """Apply a list of filters to exclude or force-include records from the given
     metadata and return the strains to keep, to exclude, and to force include.
@@ -816,7 +825,7 @@ class PriorityQueue:
             yield item
 
 
-def create_sizes_per_group(groups, max_size, max_attempts=100, random_seed=None):
+def create_sizes_per_group(df_groups:pd.DataFrame, max_size, max_attempts=100, random_seed=None, size_col='size'):
     """Create a dictionary of sizes per group for the given maximum size.
 
     When the maximum size is fractional, probabilistically sample the maximum
@@ -824,53 +833,41 @@ def create_sizes_per_group(groups, max_size, max_attempts=100, random_seed=None)
     attempts to create groups for which the sum of their maximum sizes is
     greater than zero.
 
-    Create sizes for two groups with a fixed maximum size.
+    Parameters
+    ----------
+    df_groups : pd.DataFrame
+        DataFrame with one row per group.
+    max_size : int | float
+        Maximum size of a group.
+    max_attempts : int
+        Maximum number of attempts for creating group sizes.
+    random_seed
+        Seed value for np.random.default_rng for reproducible randomness.
+    size_col : str
+        Name of new column for group size.
 
-    >>> groups = ("2015", "2016")
-    >>> sizes = create_sizes_per_group(groups, 2)
-    >>> sum(sizes.values())
-    4
-
-    Create sizes for two groups with a fractional maximum size. Their total max
-    size should still be an integer value greater than zero.
-
-    >>> seed = 314159
-    >>> sizes = create_sizes_per_group(groups, 0.1, random_seed=seed)
-    >>> int(sum(sizes.values())) > 0
-    True
-
-    A subsequent run of this function with the same groups and random seed
-    should produce the same sizes.
-
-    >>> more_sizes = create_sizes_per_group(groups, 0.1, random_seed=seed)
-    >>> list(sizes.values()) == list(more_sizes.values())
-    True
-
+    Returns
+    -------
+    pd.DataFrame
+        df_groups with an additional column (size_col) containing group size.
     """
-    size_per_group = {}
     total_max_size = 0
     attempts = 0
-
-    if max_size < 1.0:
-        random_generator = np.random.default_rng(random_seed)
 
     # For small fractional maximum sizes, it is possible to randomly select
     # maximum sizes that all equal zero. When this happens, filtering
     # fails unexpectedly. We make multiple attempts to create sizes with
     # maximum sizes greater than zero for at least one group.
     while total_max_size == 0 and attempts < max_attempts:
-        for group in groups:
-            if max_size < 1.0:
-                group_max_size = random_generator.poisson(max_size)
-            else:
-                group_max_size = max_size
-
-            size_per_group[group] = group_max_size
-
-        total_max_size = sum(size_per_group.values())
+        if max_size < 1.0:
+            df_groups[size_col] = np.random.default_rng(random_seed).poisson(max_size, size=len(df_groups))
+        else:
+            df_groups[size_col] = max_size
+        total_max_size = sum(df_groups[size_col])
         attempts += 1
 
-    return size_per_group
+    # TODO: raise error if total_max_size is still 0
+    return df_groups
 
 
 def register_arguments(parser):
@@ -1101,6 +1098,8 @@ def run(args):
                 counts_per_group,
                 allow_probabilistic=args.probabilistic_sampling
             )
+
+        generate_group_sizes_table(connection, group_by, sequences_per_group, args.subsample_seed)
 
         subsample_strains_view = 'subsample_strains'
         where_conditions = [f'group_i <= {sequences_per_group}']
