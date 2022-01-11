@@ -538,9 +538,9 @@ def generate_priorities_table(connection:DuckDBPyConnection, seed:int=None):
     connection.execute(f"CREATE TABLE {PRIORITIES_TABLE_NAME} AS SELECT {strain_col}, random() as {priority_col} FROM {FILTERED_VIEW_NAME}")
 
 
-def generate_group_sizes_table(connection:DuckDBPyConnection, group_by:list, sequences_per_group:float, random_seed=None):
+def generate_group_sizes_table(connection:DuckDBPyConnection, group_by:list, sequences_per_group:float, size_col, random_seed=None):
     df_extended = connection.view(EXTENDED_VIEW_NAME).aggregate(','.join(group_by)).df()
-    df_sizes = create_sizes_per_group(df_extended, sequences_per_group, random_seed=random_seed)
+    df_sizes = create_sizes_per_group(df_extended, size_col, sequences_per_group, random_seed=random_seed)
     connection.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
     connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
     # TODO: check if connection.register as a view is sufficient
@@ -825,7 +825,7 @@ class PriorityQueue:
             yield item
 
 
-def create_sizes_per_group(df_groups:pd.DataFrame, max_size, max_attempts=100, random_seed=None, size_col='size'):
+def create_sizes_per_group(df_groups:pd.DataFrame, size_col, max_size, max_attempts=100, random_seed=None):
     """Create a dictionary of sizes per group for the given maximum size.
 
     When the maximum size is fractional, probabilistically sample the maximum
@@ -837,14 +837,14 @@ def create_sizes_per_group(df_groups:pd.DataFrame, max_size, max_attempts=100, r
     ----------
     df_groups : pd.DataFrame
         DataFrame with one row per group.
+    size_col : str
+        Name of new column for group size.
     max_size : int | float
         Maximum size of a group.
     max_attempts : int
         Maximum number of attempts for creating group sizes.
     random_seed
         Seed value for np.random.default_rng for reproducible randomness.
-    size_col : str
-        Name of new column for group size.
 
     Returns
     -------
@@ -1099,21 +1099,23 @@ def run(args):
                 allow_probabilistic=args.probabilistic_sampling
             )
 
-        generate_group_sizes_table(connection, group_by, sequences_per_group, args.subsample_seed)
+        size_col = 'size'
+        generate_group_sizes_table(connection, group_by, sequences_per_group, size_col, args.subsample_seed)
 
         subsample_strains_view = 'subsample_strains'
-        where_conditions = [f'group_i <= {sequences_per_group}']
+        where_conditions = [f'group_i <= {size_col}']
         for group in group_by:
             where_conditions.append(f'{group} IS NOT NULL')
         query = f"""
             SELECT strain
             FROM (
-                SELECT ROW_NUMBER() OVER (
+                SELECT *, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by)}
                     ORDER BY priority DESC NULLS LAST
-                ) AS group_i, *
+                ) AS group_i
                 FROM {EXTENDED_VIEW_NAME}
             )
+            JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by)})
             WHERE {' AND '.join(where_conditions)}
         """
         connection.execute(f"CREATE OR REPLACE VIEW {subsample_strains_view} AS {query}")
