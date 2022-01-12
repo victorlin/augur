@@ -1,16 +1,6 @@
-import duckdb
 from duckdb import DuckDBPyConnection
 
 DEFAULT_DB_FILE = 'test.duckdb'
-
-METADATA_TABLE_NAME = 'metadata'
-SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
-PRIORITIES_TABLE_NAME = 'priorities'
-DATE_TABLE_NAME = 'metadata_date_expanded'
-GROUP_SIZES_TABLE_NAME = 'group_sizes'
-
-FILTERED_VIEW_NAME = 'metadata_filtered'
-EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 
 
 def load_tsv(connection:DuckDBPyConnection, tsv_file:str, table_name:str, db_file:str=DEFAULT_DB_FILE, header=True, names=[]):
