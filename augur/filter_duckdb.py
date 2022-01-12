@@ -19,9 +19,11 @@ SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
+OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
 FILTERED_VIEW_NAME = 'metadata_filtered'
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
+SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 
 DEFAULT_DATE_COL = "date"
 DUMMY_COL = 'dummy'
@@ -32,32 +34,32 @@ class FilterDuckDB():
     def __init__(self, args:argparse.Namespace):
         self.args = args
         self.connection = duckdb.connect(DEFAULT_DB_FILE)
+        self.use_sequences = bool(self.args.sequence_index or (self.args.sequences and not self.args.exclude_all))
 
     def run(self):
-        self.load_sequences() # self.use_sequences
-        self.load_metadata() # self.has_date_col
+        self.load_sequences(SEQUENCE_INDEX_TABLE_NAME)
+        self.load_metadata(METADATA_TABLE_NAME)
+        self.has_date_col = (DEFAULT_DATE_COL in self.connection.table(METADATA_TABLE_NAME).columns)
         if self.has_date_col:
-            self.create_date_table()
+            self.create_date_table(METADATA_TABLE_NAME, DATE_TABLE_NAME)
         exclude_by, include_by = self.construct_filters() # keep abstract filtering logic in construct_filters
             # or have a class method per filter type?
-        self.create_filtered_view(exclude_by, include_by)
-        rel_output = self.connection.view(FILTERED_VIEW_NAME)
+        self.create_filtered_view(exclude_by, include_by, FILTERED_VIEW_NAME)
         if self.args.group_by or self.args.subsample_max_sequences:
-            rel_output = self.subsample(rel_output)
-            rel_output.execute()
+            self.subsample(FILTERED_VIEW_NAME, OUTPUT_METADATA_TABLE_NAME)
+        else:
+            self.create_output_table(FILTERED_VIEW_NAME, OUTPUT_METADATA_TABLE_NAME)
         # TODO: args.output_log
         # TODO: args.output (sequences)
         # TODO: filter_counts
-        self.write_outputs(rel_output)
+        self.write_outputs(OUTPUT_METADATA_TABLE_NAME)
 
-    def load_sequences(self):
-        self.use_sequences = self.args.sequence_index is not None
+    def load_sequences(self, table_name:str):
         sequence_index_path = self.args.sequence_index
         build_sequence_index = False
 
-        if sequence_index_path is None and self.args.sequences and not self.args.exclude_all:
+        if sequence_index_path is None and self.use_sequences:
             build_sequence_index = True
-            self.use_sequences = True
 
         if build_sequence_index:
             # Generate the sequence index on the fly, for backwards compatibility
@@ -79,19 +81,18 @@ class FilterDuckDB():
 
         if self.use_sequences:
             # TODO: verify VCF
-            load_tsv(self.connection, sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
+            load_tsv(self.connection, sequence_index_path, table_name)
 
             # Remove temporary index file, if it exists.
             if build_sequence_index:
                 os.unlink(sequence_index_path)
 
-    def load_metadata(self):
-        load_tsv(self.connection, self.args.metadata, METADATA_TABLE_NAME)
-        metadata = self.connection.table(METADATA_TABLE_NAME)
-        self.has_date_col = (DEFAULT_DATE_COL in metadata.columns)
+    def load_metadata(self, table_name:str):
+        load_tsv(self.connection, self.args.metadata, table_name)
 
-    def create_date_table(self):
-        metadata = self.connection.table(METADATA_TABLE_NAME)
+    def create_date_table(self, input_table:str, output_table:str):
+        metadata = self.connection.table(input_table)
+        # create temporary table to generate date columns
         tmp_table = "tmp"
         rel_tmp = metadata.project("""
             strain,
@@ -106,6 +107,7 @@ class FilterDuckDB():
         rel_tmp.execute()
         rel_tmp.create(tmp_table)
         # unable to cast to date type before creating table, possibly related to https://github.com/duckdb/duckdb/issues/2860
+        # so we create the actual date table here
         rel = self.connection.table(tmp_table)
         rel = rel.project("""
             strain,
@@ -116,8 +118,8 @@ class FilterDuckDB():
             date_max::DATE as date_max
         """)
         rel.execute()
-        self.connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
-        rel.create(DATE_TABLE_NAME)
+        self.connection.execute(f"DROP TABLE IF EXISTS {output_table}")
+        rel.create(output_table)
         self.connection.execute(f"DROP TABLE IF EXISTS {tmp_table}")
 
     def construct_filters(self):
@@ -422,9 +424,9 @@ class FilterDuckDB():
         column, op, value = self.parse_filter_query(include_where)
         return f"{column} {op} '{value}'"
 
-    def create_filtered_view(self, exclude_by:List[str], include_by:List[str]):
+    def create_filtered_view(self, exclude_by:List[str], include_by:List[str], view_name:str):
         rel_filtered = self.apply_filters(exclude_by, include_by)
-        rel_filtered.create_view(FILTERED_VIEW_NAME).execute()
+        rel_filtered.create_view(view_name).execute()
 
     def apply_filters(self, exclude_by:List[str], include_by:List[str]):
         """Apply a list of filters to exclude or force-include records from the given
@@ -469,9 +471,15 @@ class FilterDuckDB():
             return rel_exclude
         return rel_include.union(rel_exclude)
 
-    def subsample(self, rel_metadata_filtered:DuckDBPyRelation):
+    def create_output_table(self, input_view:str, output_table:str):
+        rel_input = self.connection.view(input_view)
+        self.connection.execute(f"DROP TABLE IF EXISTS {output_table}")
+        rel_input.create(output_table)
+
+    def subsample(self, input_view:str, output_table:str):
         self.create_priorities_table()
         self.create_extended_metadata_view()
+        rel_input = self.connection.view(input_view)
 
         group_by_cols = self.args.group_by
         sequences_per_group = self.args.sequences_per_group
@@ -483,7 +491,7 @@ class FilterDuckDB():
                 counts_per_group = df[count_col].values
             else:
                 group_by_cols = [DUMMY_COL]
-                n_strains = rel_metadata_filtered.aggregate('COUNT(*)').df().iloc[0,0]
+                n_strains = rel_input.aggregate('COUNT(*)').df().iloc[0,0]
                 counts_per_group = [n_strains]
 
             sequences_per_group, probabilistic_used = calculate_sequences_per_group(
@@ -494,7 +502,6 @@ class FilterDuckDB():
 
         self.create_group_sizes_table(group_by_cols, sequences_per_group)
 
-        subsample_strains_view = 'subsample_strains'
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
             where_conditions.append(f'{col} IS NOT NULL')
@@ -510,8 +517,12 @@ class FilterDuckDB():
             JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
         """
-        self.connection.execute(f"CREATE OR REPLACE VIEW {subsample_strains_view} AS {query}")
-        return rel_metadata_filtered.filter(f'strain IN (SELECT strain FROM {subsample_strains_view})')
+        self.connection.execute(f"CREATE OR REPLACE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
+        rel_output = rel_input.filter(f'strain IN (SELECT strain FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
+        rel_output.execute()
+        self.connection.execute(f"DROP TABLE IF EXISTS {output_table}")
+        rel_output.create(output_table)
+
 
     def create_priorities_table(self):
         if self.args.priority:
@@ -547,7 +558,8 @@ class FilterDuckDB():
         self.connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
         # TODO: check if connection.register as a view is sufficient
 
-    def write_outputs(self, rel_output: DuckDBPyRelation):
+    def write_outputs(self, table_name:str):
+        rel_output = self.connection.table(table_name)
         if self.args.output_strains:
             rel_output.project('strain').df().to_csv(self.args.output_strains, index=None, header=False)
         if self.args.output_metadata:
