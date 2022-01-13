@@ -463,23 +463,17 @@ class FilterDuckDB():
         if not exclude_by:
             return metadata
 
-        rel_exclude = None
+        rel_exclude = metadata # start with all rows
         for exclude in exclude_by:
-            if not rel_exclude:
-                rel_exclude = metadata.filter(exclude)
-            else:
-                rel_exclude = rel_exclude.filter(exclude)
+            rel_exclude = rel_exclude.filter(exclude)
 
         # no force-inclusions
         if not include_by:
             return rel_exclude
 
-        rel_include = None
+        rel_include = metadata.limit(0) # start with 0 rows
         for include in include_by:
-            if not rel_include:
-                rel_include = metadata.filter(include)
-            else:
-                rel_include = rel_include.union(metadata.filter(include))
+            rel_include = rel_include.union(metadata.filter(include))
 
         # TODO: figure out parity for strains_to_force_include
         # TODO: figure out parity for strains_to_filter (reason for exclusion, used in final report output)
