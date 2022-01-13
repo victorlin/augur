@@ -35,9 +35,9 @@ PRIORITY_COL = 'priority'
 class FilterDuckDB():
     def __init__(self, args:argparse.Namespace):
         self.args = args
-        self.connection = duckdb.connect(DEFAULT_DB_FILE)
 
     def run(self):
+        self.db_connect()
         self.load_metadata()
         self.add_attributes()
         self.handle_sequences()
@@ -55,6 +55,9 @@ class FilterDuckDB():
         # TODO: args.output (sequences)
         # TODO: filter_counts
         self.write_outputs()
+
+    def db_connect(self):
+        self.connection = duckdb.connect(DEFAULT_DB_FILE)
 
     def db_load_table(self, path:str, name:str):
         load_tsv(self.connection, path, name)
