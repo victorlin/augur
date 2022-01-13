@@ -1,16 +1,14 @@
-import os
 import re
 from typing import List
 import duckdb
 import numpy as np
 import pandas as pd
-from tempfile import NamedTemporaryFile
 import argparse
-from .index import index_sequences, index_vcf
-from .io import print_err
+
+from augur.filter_db import FilterDB
 from .io_duckdb import load_tsv, DEFAULT_DB_FILE
-from .utils import is_vcf, read_strains
-from .filter_subsample_helpers import calculate_sequences_per_group, get_sizes_per_group
+from .utils import read_strains
+from .filter_subsample_helpers import get_sizes_per_group
 
 
 METADATA_TABLE_NAME = 'metadata'
@@ -32,29 +30,9 @@ STRAIN_COL = 'strain'
 PRIORITY_COL = 'priority'
 
 
-class FilterDuckDB():
+class FilterDuckDB(FilterDB):
     def __init__(self, args:argparse.Namespace):
-        self.args = args
-
-    def run(self):
-        self.db_connect()
-        self.load_metadata()
-        self.add_attributes()
-        self.handle_sequences()
-        if self.has_date_col:
-            self.db_create_date_table()
-        exclude_by, include_by = self.construct_filters() # keep abstract filtering logic in construct_filters
-            # or have a class method per filter type?
-        self.db_create_filtered_view(exclude_by, include_by)
-        if self.args.group_by or self.args.subsample_max_sequences:
-            self.subsample()
-            self.db_create_output_table(SUBSAMPLED_TABLE_NAME)
-        else:
-            self.db_create_output_table(FILTERED_TABLE_NAME)
-        # TODO: args.output_log
-        # TODO: args.output (sequences)
-        # TODO: filter_counts
-        self.write_outputs()
+        super().__init__(args)
 
     def db_connect(self):
         self.connection = duckdb.connect(DEFAULT_DB_FILE)
@@ -62,48 +40,8 @@ class FilterDuckDB():
     def db_load_table(self, path:str, name:str):
         load_tsv(self.connection, path, name)
 
-    def load_metadata(self):
-        self.db_load_table(self.args.metadata, METADATA_TABLE_NAME)
-
-    def add_attributes(self):
-        self.has_date_col = self.db_has_date_col()
-        self.use_sequences = bool(self.args.sequence_index or (self.args.sequences and not self.args.exclude_all))
-
     def db_has_date_col(self):
         return (DEFAULT_DATE_COL in self.connection.table(METADATA_TABLE_NAME).columns)
-
-    def handle_sequences(self):
-        sequence_index_path = self.args.sequence_index
-        build_sequence_index = False
-
-        if sequence_index_path is None and self.use_sequences:
-            build_sequence_index = True
-
-        if build_sequence_index:
-            # Generate the sequence index on the fly, for backwards compatibility
-            # with older workflows that don't generate the index ahead of time.
-            # Create a temporary index using a random filename to avoid collisions
-            # between multiple filter commands.
-            with NamedTemporaryFile(delete=False) as sequence_index_file:
-                sequence_index_path = sequence_index_file.name
-
-            print_err(
-                "Note: You did not provide a sequence index, so Augur will generate one.",
-                "You can generate your own index ahead of time with `augur index` and pass it with `augur filter --sequence-index`."
-            )
-
-            if is_vcf(self.args.sequences):
-                index_vcf(self.args.sequences, sequence_index_path)
-            else:
-                index_sequences(self.args.sequences, sequence_index_path)
-
-        if self.use_sequences:
-            # TODO: verify VCF
-            self.db_load_table(sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
-
-            # Remove temporary index file, if it exists.
-            if build_sequence_index:
-                os.unlink(sequence_index_path)
 
     def db_create_date_table(self):
         metadata = self.connection.table(METADATA_TABLE_NAME)
@@ -136,67 +74,6 @@ class FilterDuckDB():
         self.connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
         rel.create(DATE_TABLE_NAME)
         self.connection.execute(f"DROP TABLE IF EXISTS {tmp_table}")
-
-    def construct_filters(self):
-        exclude_by = []
-        include_by = []
-
-        # Force include sequences specified in file(s).
-        if self.args.include:
-            # Collect the union of all given strains to include.
-            for include_file in self.args.include:
-                include_by.append(self.include_strains_duckdb_filter(include_file))
-
-        # Add sequences with particular metadata attributes.
-        if self.args.include_where:
-            for include_where in self.args.include_where:
-                include_by.append(self.include_where_duckdb_filter(include_where))
-
-        # Exclude all strains by default.
-        if self.args.exclude_all:
-            exclude_by.append(self.filter_by_exclude_all())
-
-        # Filter by sequence index.
-        if self.use_sequences:
-            exclude_by.append(self.exclude_by_sequence_index())
-
-        # Remove strains explicitly excluded by name.
-        if self.args.exclude:
-            for exclude_file in self.args.exclude:
-                exclude_by.append(self.exclude_strains_duckdb_filter(exclude_file))
-
-        # Exclude strain my metadata field like 'host=camel'.
-        if self.args.exclude_where:
-            for exclude_where in self.args.exclude_where:
-                exclude_by.append(self.exclude_where_duckdb_filter(exclude_where))
-
-        # Exclude strains by metadata, using SQL querying.
-        if self.args.query:
-            exclude_by.append(self.args.query)
-
-        if self.has_date_col:
-            # Filter by ambiguous dates.
-            if self.args.exclude_ambiguous_dates_by:
-                exclude_by.append(self.exclude_by_ambiguous_date(self.args.exclude_ambiguous_dates_by))
-
-            # Filter by date.
-            if self.args.min_date:
-                exclude_by.append(self.exclude_by_min_date(self.args.min_date))
-            if self.args.max_date:
-                exclude_by.append(self.exclude_by_max_date(self.args.max_date))
-
-        # Filter by sequence length.
-        if self.args.min_length:
-            if is_vcf(self.args.sequences):
-                print("WARNING: Cannot use min_length for VCF files. Ignoring...")
-            else:
-                exclude_by.append(self.exclude_by_sequence_length(self.args.min_length))
-
-        # Exclude sequences with non-nucleotide characters.
-        if self.args.non_nucleotide:
-            exclude_by.append(self.exclude_by_non_nucleotide())
-
-        return exclude_by, include_by
 
     def filter_by_exclude_all(self):
         """Exclude all strains regardless of the given metadata content.
@@ -489,29 +366,6 @@ class FilterDuckDB():
         self.connection.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
         rel_input.create(OUTPUT_METADATA_TABLE_NAME)
 
-    def subsample(self):
-        self.create_priorities_table()
-        self.db_create_extended_filtered_metadata_view()
-
-        group_by_cols = self.args.group_by
-        sequences_per_group = self.args.sequences_per_group
-
-        if self.args.subsample_max_sequences:
-            if self.args.group_by:
-                counts_per_group = self.db_get_counts_per_group(group_by_cols)
-            else:
-                group_by_cols = [DUMMY_COL]
-                counts_per_group = [self.db_get_filtered_strains_count()]
-
-            sequences_per_group, probabilistic_used = calculate_sequences_per_group(
-                self.args.subsample_max_sequences,
-                counts_per_group,
-                allow_probabilistic=self.args.probabilistic_sampling
-            )
-
-        self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
-        self.db_create_subsampled_table(group_by_cols)
-
     def db_get_counts_per_group(self, group_by_cols:List[str]):
         count_col = 'count'
         df = self.connection.view(EXTENDED_VIEW_NAME).aggregate(f"{','.join(group_by_cols)}, COUNT(*) AS {count_col}").df()
@@ -544,12 +398,6 @@ class FilterDuckDB():
         self.connection.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
         rel_output.create(SUBSAMPLED_TABLE_NAME)
 
-    def create_priorities_table(self):
-        if self.args.priority:
-            self.db_load_priorities_table()
-        else:
-            self.db_generate_priorities_table(self.args.subsample_seed)
-
     def db_load_priorities_table(self):
         load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL])
 
@@ -580,12 +428,6 @@ class FilterDuckDB():
         self.connection.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
         self.connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
         # TODO: check if connection.register as a view is sufficient
-
-    def write_outputs(self):
-        if self.args.output_strains:
-            self.db_output_strains()
-        if self.args.output_metadata:
-            self.db_output_metadata()
 
     def db_output_strains(self):
         rel_output = self.connection.table(OUTPUT_METADATA_TABLE_NAME)
