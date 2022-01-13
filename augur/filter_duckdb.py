@@ -25,7 +25,7 @@ OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 
-DEFAULT_DATE_COL = "date"
+DEFAULT_DATE_COL = 'date'
 DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
 STRAIN_COL = 'strain'
@@ -108,7 +108,7 @@ class FilterDuckDB():
         tmp_table = "tmp"
         rel_tmp = metadata.project(f"""
             {STRAIN_COL},
-            date,
+            {DEFAULT_DATE_COL},
             0::BIGINT as year,
             0::BIGINT as month,
             0::BIGINT as day,
@@ -616,7 +616,7 @@ def get_date_parts(df:pd.DataFrame) -> pd.DataFrame:
     # TODO: BC dates
     # replace date with year/month/day as nullable ints
     date_cols = ['year', 'month', 'day']
-    df_date_parts = df['date'].str.split('-', n=2, expand=True)
+    df_date_parts = df[DEFAULT_DATE_COL].str.split('-', n=2, expand=True)
     df_date_parts = df_date_parts.set_axis(date_cols[:len(df_date_parts.columns)], axis=1)
     missing_date_cols = set(date_cols) - set(df_date_parts.columns)
     for col in missing_date_cols:
