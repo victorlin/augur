@@ -463,14 +463,6 @@ class FilterDuckDB():
         if not exclude_by:
             return metadata
 
-        rel_include = None
-        for include in include_by:
-            if not rel_include:
-                rel_include = metadata.filter(include)
-            else:
-                rel_include = rel_include.union(metadata.filter(include))
-
-        metadata = self.connection.table(METADATA_TABLE_NAME)
         rel_exclude = None
         for exclude in exclude_by:
             if not rel_exclude:
@@ -478,12 +470,22 @@ class FilterDuckDB():
             else:
                 rel_exclude = rel_exclude.filter(exclude)
 
+        # no force-inclusions
+        if not include_by:
+            return rel_exclude
+
+        rel_include = None
+        for include in include_by:
+            if not rel_include:
+                rel_include = metadata.filter(include)
+            else:
+                rel_include = rel_include.union(metadata.filter(include))
+
         # TODO: figure out parity for strains_to_force_include
         # TODO: figure out parity for strains_to_filter (reason for exclusion, used in final report output)
 
-        if not include_by:
-            return rel_exclude
-        return rel_include.union(rel_exclude)
+        # exclusions + force-inclusions
+        return rel_exclude.union(rel_include)
 
     def db_create_output_table(self, input_table:str):
         rel_input = self.connection.table(input_table)

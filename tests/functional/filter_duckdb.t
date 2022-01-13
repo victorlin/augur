@@ -16,8 +16,8 @@ Force include one South American record by country to get two total records.
   $ wc -l "$TMP/filtered_strains.txt"
   \s*2 .* (re)
   $ cat "$TMP/filtered_strains.txt"
-  EcEs062_16
   ZKC2/2016
+  EcEs062_16
   $ wc -l "$TMP/filtered_metadata.tsv"
   \s*3 .* (re)
   $ rm -f "$TMP/filtered_strains.txt"
