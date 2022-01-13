@@ -54,7 +54,7 @@ class FilterDuckDB():
         # TODO: args.output_log
         # TODO: args.output (sequences)
         # TODO: filter_counts
-        self.db_write_outputs(OUTPUT_METADATA_TABLE_NAME)
+        self.write_outputs()
 
     def db_load_table(self, path:str, name:str):
         load_tsv(self.connection, path, name)
@@ -582,13 +582,19 @@ class FilterDuckDB():
         self.connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
         # TODO: check if connection.register as a view is sufficient
 
-    def db_write_outputs(self, table_name:str):
-        rel_output = self.connection.table(table_name)
+    def write_outputs(self):
         if self.args.output_strains:
-            rel_output.project(STRAIN_COL).df().to_csv(self.args.output_strains, index=None, header=False)
+            self.db_output_strains()
         if self.args.output_metadata:
-            rel_output.df().to_csv(self.args.output_metadata, sep='\t', index=None)
+            self.db_output_metadata()
 
+    def db_output_strains(self):
+        rel_output = self.connection.table(OUTPUT_METADATA_TABLE_NAME)
+        rel_output.project(STRAIN_COL).df().to_csv(self.args.output_strains, index=None, header=False)
+
+    def db_output_metadata(self):
+        rel_output = self.connection.table(OUTPUT_METADATA_TABLE_NAME)
+        rel_output.df().to_csv(self.args.output_metadata, sep='\t', index=None)
 
 def populate_date_cols(df:pd.DataFrame):
     if df.empty:
