@@ -28,6 +28,8 @@ SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 DEFAULT_DATE_COL = "date"
 DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
+STRAIN_COL = 'strain'
+PRIORITY_COL = 'priority'
 
 
 class FilterDuckDB():
@@ -45,7 +47,7 @@ class FilterDuckDB():
             # or have a class method per filter type?
         self.db_create_filtered_view(exclude_by, include_by)
         if self.args.group_by or self.args.subsample_max_sequences:
-            self.db_subsample()
+            self.subsample()
             self.db_create_output_table(SUBSAMPLED_TABLE_NAME)
         else:
             self.db_create_output_table(FILTERED_TABLE_NAME)
@@ -488,23 +490,19 @@ class FilterDuckDB():
         self.connection.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
         rel_input.create(OUTPUT_METADATA_TABLE_NAME)
 
-    def db_subsample(self):
-        self.db_create_priorities_table()
-        self.db_create_extended_metadata_view()
-        rel_input = self.connection.table(FILTERED_TABLE_NAME)
+    def subsample(self):
+        self.create_priorities_table()
+        self.db_create_extended_filtered_metadata_view()
 
         group_by_cols = self.args.group_by
         sequences_per_group = self.args.sequences_per_group
 
         if self.args.subsample_max_sequences:
             if self.args.group_by:
-                count_col = 'count'
-                df = self.connection.view(EXTENDED_VIEW_NAME).aggregate(f"{','.join(group_by_cols)}, COUNT(*) AS {count_col}").df()
-                counts_per_group = df[count_col].values
+                counts_per_group = self.db_get_counts_per_group(group_by_cols)
             else:
                 group_by_cols = [DUMMY_COL]
-                n_strains = rel_input.aggregate('COUNT(*)').df().iloc[0,0]
-                counts_per_group = [n_strains]
+                counts_per_group = [self.db_get_filtered_strains_count()]
 
             sequences_per_group, probabilistic_used = calculate_sequences_per_group(
                 self.args.subsample_max_sequences,
@@ -513,7 +511,18 @@ class FilterDuckDB():
             )
 
         self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
+        self.db_create_subsampled_table(group_by_cols)
 
+    def db_get_counts_per_group(self, group_by_cols:List[str]):
+        count_col = 'count'
+        df = self.connection.view(EXTENDED_VIEW_NAME).aggregate(f"{','.join(group_by_cols)}, COUNT(*) AS {count_col}").df()
+        return df[count_col].values
+
+    def db_get_filtered_strains_count(self):
+        return self.connection.table(FILTERED_TABLE_NAME).aggregate('COUNT(*)').df().iloc[0,0]
+
+    def db_create_subsampled_table(self, group_by_cols:List[str]):
+        # create a view for subsampled strains
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
             where_conditions.append(f'{col} IS NOT NULL')
@@ -522,7 +531,7 @@ class FilterDuckDB():
             FROM (
                 SELECT *, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by_cols)}
-                    ORDER BY priority DESC NULLS LAST
+                    ORDER BY {PRIORITY_COL} DESC NULLS LAST
                 ) AS group_i
                 FROM {EXTENDED_VIEW_NAME}
             )
@@ -530,29 +539,32 @@ class FilterDuckDB():
             WHERE {' AND '.join(where_conditions)}
         """
         self.connection.execute(f"CREATE OR REPLACE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
-        rel_output = rel_input.filter(f'strain IN (SELECT strain FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
+        # use subsample strains to select rows from filtered metadata
+        rel_output = self.connection.table(FILTERED_TABLE_NAME).filter(f'strain IN (SELECT strain FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
         rel_output.execute()
         self.connection.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
         rel_output.create(SUBSAMPLED_TABLE_NAME)
 
-
-    def db_create_priorities_table(self):
+    def create_priorities_table(self):
         if self.args.priority:
-            load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
+            self.db_load_priorities_table()
         else:
-            self.db_generate_priorities_table('strain', 'priority', self.args.subsample_seed)
+            self.db_generate_priorities_table(self.args.subsample_seed)
 
-    def db_generate_priorities_table(self, strain_col:str, priority_col:str, seed:int=None):
+    def db_load_priorities_table(self):
+        load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL])
+
+    def db_generate_priorities_table(self, seed:int=None):
         if seed:
             self.connection.execute(f"SELECT setseed({seed})")
         self.connection.execute(f"DROP TABLE IF EXISTS {PRIORITIES_TABLE_NAME}")
         self.connection.execute(f"""
             CREATE TABLE {PRIORITIES_TABLE_NAME} AS
-            SELECT {strain_col}, RANDOM() AS {priority_col}
+            SELECT {STRAIN_COL}, RANDOM() AS {PRIORITY_COL}
             FROM {FILTERED_TABLE_NAME}
         """)
 
-    def db_create_extended_metadata_view(self):
+    def db_create_extended_filtered_metadata_view(self):
         # create new view that extends strain with year/month/day, priority, dummy
         self.connection.execute(f"""
         CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
