@@ -106,8 +106,8 @@ class FilterDuckDB():
         metadata = self.connection.table(METADATA_TABLE_NAME)
         # create temporary table to generate date columns
         tmp_table = "tmp"
-        rel_tmp = metadata.project("""
-            strain,
+        rel_tmp = metadata.project(f"""
+            {STRAIN_COL},
             date,
             0::BIGINT as year,
             0::BIGINT as month,
@@ -121,8 +121,8 @@ class FilterDuckDB():
         # unable to cast to date type before creating table, possibly related to https://github.com/duckdb/duckdb/issues/2860
         # so we create the actual date table here
         rel = self.connection.table(tmp_table)
-        rel = rel.project("""
-            strain,
+        rel = rel.project(f"""
+            {STRAIN_COL},
             year,
             month,
             day,
@@ -223,7 +223,7 @@ class FilterDuckDB():
         """
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
-        return f"strain NOT IN ({','.join(excluded_strains)})"
+        return f"{STRAIN_COL} NOT IN ({','.join(excluded_strains)})"
 
     def parse_filter_query(self, query):
         """Parse an augur filter-style query and return the corresponding column,
@@ -296,20 +296,20 @@ class FilterDuckDB():
             expression for duckdb.filter
         """
         if ambiguity == 'year':
-            return f"""strain IN (
-                SELECT strain
+            return f"""{STRAIN_COL} IN (
+                SELECT {STRAIN_COL}
                 FROM {DATE_TABLE_NAME}
                 WHERE year IS NOT NULL
             )"""
         if ambiguity == 'month':
-            return f"""strain IN (
-                SELECT strain
+            return f"""{STRAIN_COL} IN (
+                SELECT {STRAIN_COL}
                 FROM {DATE_TABLE_NAME}
                 WHERE month IS NOT NULL AND year IS NOT NULL
             )"""
         if ambiguity == 'day' or ambiguity == 'any':
-            return f"""strain IN (
-                SELECT strain
+            return f"""{STRAIN_COL} IN (
+                SELECT {STRAIN_COL}
                 FROM {DATE_TABLE_NAME}
                 WHERE day IS NOT NULL AND month IS NOT NULL AND year IS NOT NULL
             )"""
@@ -327,8 +327,8 @@ class FilterDuckDB():
         str:
             expression for duckdb.filter
         """
-        return f"""strain IN (
-            SELECT strain
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
             WHERE date_min >= '{min_date}'
         )"""
@@ -346,8 +346,8 @@ class FilterDuckDB():
         str:
             expression for duckdb.filter
         """
-        return f"""strain IN (
-            SELECT strain
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
             WHERE date_max <= '{max_date}'
         )"""
@@ -363,7 +363,7 @@ class FilterDuckDB():
             expression for duckdb.filter
         """
         # TODO: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
-        return f"strain IN (SELECT strain FROM {SEQUENCE_INDEX_TABLE_NAME})"
+        return f"{STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
 
     def exclude_by_sequence_length(self, min_length=0):
         """Filter metadata by sequence length from a given sequence index.
@@ -378,8 +378,8 @@ class FilterDuckDB():
         str:
             expression for duckdb.filter
         """
-        return f"""strain IN (
-            SELECT strain
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
             FROM {SEQUENCE_INDEX_TABLE_NAME}
             WHERE A+C+G+T > {min_length}
         )"""
@@ -392,8 +392,8 @@ class FilterDuckDB():
         str:
             expression for duckdb.filter
         """
-        return f"""strain IN (
-            SELECT strain
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
             FROM {SEQUENCE_INDEX_TABLE_NAME}
             WHERE invalid_nucleotides = 0
         )"""
@@ -413,7 +413,7 @@ class FilterDuckDB():
         """
         included_strains = read_strains(include_file)
         included_strains = [f"'{strain}'" for strain in included_strains]
-        return f"strain IN ({','.join(included_strains)})"
+        return f"{STRAIN_COL} IN ({','.join(included_strains)})"
 
     def include_where_duckdb_filter(self, include_where):
         """Include all strains from the given metadata that match the given query.
@@ -527,7 +527,7 @@ class FilterDuckDB():
         for col in group_by_cols:
             where_conditions.append(f'{col} IS NOT NULL')
         query = f"""
-            SELECT strain
+            SELECT {STRAIN_COL}
             FROM (
                 SELECT *, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by_cols)}
@@ -540,7 +540,7 @@ class FilterDuckDB():
         """
         self.connection.execute(f"CREATE OR REPLACE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
         # use subsample strains to select rows from filtered metadata
-        rel_output = self.connection.table(FILTERED_TABLE_NAME).filter(f'strain IN (SELECT strain FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
+        rel_output = self.connection.table(FILTERED_TABLE_NAME).filter(f'{STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
         rel_output.execute()
         self.connection.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
         rel_output.create(SUBSAMPLED_TABLE_NAME)
@@ -568,10 +568,10 @@ class FilterDuckDB():
         # create new view that extends strain with year/month/day, priority, dummy
         self.connection.execute(f"""
         CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
-            select m.*, d.year, d.month, d.day, p.priority, TRUE as {DUMMY_COL}
-            from {FILTERED_TABLE_NAME} m
-            join {DATE_TABLE_NAME} d on m.strain = d.strain
-            left outer join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
+            SELECT m.*, d.year, d.month, d.day, p.{PRIORITY_COL}, TRUE AS {DUMMY_COL}
+            FROM {FILTERED_TABLE_NAME} m
+            JOIN {DATE_TABLE_NAME} d ON m.{STRAIN_COL} = d.{STRAIN_COL}
+            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p ON m.{STRAIN_COL} = p.{STRAIN_COL}
         )
         """)
 
@@ -585,7 +585,7 @@ class FilterDuckDB():
     def db_write_outputs(self, table_name:str):
         rel_output = self.connection.table(table_name)
         if self.args.output_strains:
-            rel_output.project('strain').df().to_csv(self.args.output_strains, index=None, header=False)
+            rel_output.project(STRAIN_COL).df().to_csv(self.args.output_strains, index=None, header=False)
         if self.args.output_metadata:
             rel_output.df().to_csv(self.args.output_metadata, sep='\t', index=None)
 
