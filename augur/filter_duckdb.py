@@ -11,7 +11,6 @@ from .io import print_err
 from .io_duckdb import load_tsv, DEFAULT_DB_FILE
 from .utils import is_vcf, read_strains
 from .filter_subsample_helpers import calculate_sequences_per_group, get_sizes_per_group
-from duckdb import DuckDBPyRelation
 
 
 METADATA_TABLE_NAME = 'metadata'
@@ -19,9 +18,10 @@ SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
+FILTERED_TABLE_NAME = 'metadata_filtered'
+SUBSAMPLED_TABLE_NAME = 'metadata_subsampled'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
-FILTERED_VIEW_NAME = 'metadata_filtered'
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 
@@ -34,27 +34,40 @@ class FilterDuckDB():
     def __init__(self, args:argparse.Namespace):
         self.args = args
         self.connection = duckdb.connect(DEFAULT_DB_FILE)
-        self.use_sequences = bool(self.args.sequence_index or (self.args.sequences and not self.args.exclude_all))
 
     def run(self):
-        self.load_sequences(SEQUENCE_INDEX_TABLE_NAME)
-        self.load_metadata(METADATA_TABLE_NAME)
-        self.has_date_col = (DEFAULT_DATE_COL in self.connection.table(METADATA_TABLE_NAME).columns)
+        self.load_metadata()
+        self.add_attributes()
+        self.handle_sequences()
         if self.has_date_col:
-            self.create_date_table(METADATA_TABLE_NAME, DATE_TABLE_NAME)
+            self.db_create_date_table()
         exclude_by, include_by = self.construct_filters() # keep abstract filtering logic in construct_filters
             # or have a class method per filter type?
-        self.create_filtered_view(exclude_by, include_by, FILTERED_VIEW_NAME)
+        self.db_create_filtered_view(exclude_by, include_by)
         if self.args.group_by or self.args.subsample_max_sequences:
-            self.subsample(FILTERED_VIEW_NAME, OUTPUT_METADATA_TABLE_NAME)
+            self.db_subsample()
+            self.db_create_output_table(SUBSAMPLED_TABLE_NAME)
         else:
-            self.create_output_table(FILTERED_VIEW_NAME, OUTPUT_METADATA_TABLE_NAME)
+            self.db_create_output_table(FILTERED_TABLE_NAME)
         # TODO: args.output_log
         # TODO: args.output (sequences)
         # TODO: filter_counts
-        self.write_outputs(OUTPUT_METADATA_TABLE_NAME)
+        self.db_write_outputs(OUTPUT_METADATA_TABLE_NAME)
 
-    def load_sequences(self, table_name:str):
+    def db_load_table(self, path:str, name:str):
+        load_tsv(self.connection, path, name)
+
+    def load_metadata(self):
+        self.db_load_table(self.args.metadata, METADATA_TABLE_NAME)
+
+    def add_attributes(self):
+        self.has_date_col = self.db_has_date_col()
+        self.use_sequences = bool(self.args.sequence_index or (self.args.sequences and not self.args.exclude_all))
+
+    def db_has_date_col(self):
+        return (DEFAULT_DATE_COL in self.connection.table(METADATA_TABLE_NAME).columns)
+
+    def handle_sequences(self):
         sequence_index_path = self.args.sequence_index
         build_sequence_index = False
 
@@ -81,17 +94,14 @@ class FilterDuckDB():
 
         if self.use_sequences:
             # TODO: verify VCF
-            load_tsv(self.connection, sequence_index_path, table_name)
+            self.db_load_table(sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
 
             # Remove temporary index file, if it exists.
             if build_sequence_index:
                 os.unlink(sequence_index_path)
 
-    def load_metadata(self, table_name:str):
-        load_tsv(self.connection, self.args.metadata, table_name)
-
-    def create_date_table(self, input_table:str, output_table:str):
-        metadata = self.connection.table(input_table)
+    def db_create_date_table(self):
+        metadata = self.connection.table(METADATA_TABLE_NAME)
         # create temporary table to generate date columns
         tmp_table = "tmp"
         rel_tmp = metadata.project("""
@@ -118,8 +128,8 @@ class FilterDuckDB():
             date_max::DATE as date_max
         """)
         rel.execute()
-        self.connection.execute(f"DROP TABLE IF EXISTS {output_table}")
-        rel.create(output_table)
+        self.connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
+        rel.create(DATE_TABLE_NAME)
         self.connection.execute(f"DROP TABLE IF EXISTS {tmp_table}")
 
     def construct_filters(self):
@@ -424,11 +434,13 @@ class FilterDuckDB():
         column, op, value = self.parse_filter_query(include_where)
         return f"{column} {op} '{value}'"
 
-    def create_filtered_view(self, exclude_by:List[str], include_by:List[str], view_name:str):
-        rel_filtered = self.apply_filters(exclude_by, include_by)
-        rel_filtered.create_view(view_name).execute()
+    def db_create_filtered_view(self, exclude_by:List[str], include_by:List[str]):
+        rel_filtered = self.db_apply_filters(exclude_by, include_by)
+        rel_filtered.execute()
+        self.connection.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
+        rel_filtered.create(FILTERED_TABLE_NAME)
 
-    def apply_filters(self, exclude_by:List[str], include_by:List[str]):
+    def db_apply_filters(self, exclude_by:List[str], include_by:List[str]):
         """Apply a list of filters to exclude or force-include records from the given
         metadata and return the strains to keep, to exclude, and to force include.
 
@@ -471,15 +483,15 @@ class FilterDuckDB():
             return rel_exclude
         return rel_include.union(rel_exclude)
 
-    def create_output_table(self, input_view:str, output_table:str):
-        rel_input = self.connection.view(input_view)
-        self.connection.execute(f"DROP TABLE IF EXISTS {output_table}")
-        rel_input.create(output_table)
+    def db_create_output_table(self, input_table:str):
+        rel_input = self.connection.table(input_table)
+        self.connection.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
+        rel_input.create(OUTPUT_METADATA_TABLE_NAME)
 
-    def subsample(self, input_view:str, output_table:str):
-        self.create_priorities_table()
-        self.create_extended_metadata_view()
-        rel_input = self.connection.view(input_view)
+    def db_subsample(self):
+        self.db_create_priorities_table()
+        self.db_create_extended_metadata_view()
+        rel_input = self.connection.table(FILTERED_TABLE_NAME)
 
         group_by_cols = self.args.group_by
         sequences_per_group = self.args.sequences_per_group
@@ -500,7 +512,7 @@ class FilterDuckDB():
                 allow_probabilistic=self.args.probabilistic_sampling
             )
 
-        self.create_group_sizes_table(group_by_cols, sequences_per_group)
+        self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
 
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
@@ -520,45 +532,45 @@ class FilterDuckDB():
         self.connection.execute(f"CREATE OR REPLACE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
         rel_output = rel_input.filter(f'strain IN (SELECT strain FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
         rel_output.execute()
-        self.connection.execute(f"DROP TABLE IF EXISTS {output_table}")
-        rel_output.create(output_table)
+        self.connection.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
+        rel_output.create(SUBSAMPLED_TABLE_NAME)
 
 
-    def create_priorities_table(self):
+    def db_create_priorities_table(self):
         if self.args.priority:
             load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=['strain', 'priority'])
         else:
-            self.generate_priorities_table('strain', 'priority', self.args.subsample_seed)
+            self.db_generate_priorities_table('strain', 'priority', self.args.subsample_seed)
 
-    def generate_priorities_table(self, strain_col:str, priority_col:str, seed:int=None):
+    def db_generate_priorities_table(self, strain_col:str, priority_col:str, seed:int=None):
         if seed:
             self.connection.execute(f"SELECT setseed({seed})")
         self.connection.execute(f"DROP TABLE IF EXISTS {PRIORITIES_TABLE_NAME}")
         self.connection.execute(f"""
             CREATE TABLE {PRIORITIES_TABLE_NAME} AS
             SELECT {strain_col}, RANDOM() AS {priority_col}
-            FROM {FILTERED_VIEW_NAME}
+            FROM {FILTERED_TABLE_NAME}
         """)
 
-    def create_extended_metadata_view(self):
+    def db_create_extended_metadata_view(self):
         # create new view that extends strain with year/month/day, priority, dummy
         self.connection.execute(f"""
         CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
             select m.*, d.year, d.month, d.day, p.priority, TRUE as {DUMMY_COL}
-            from {FILTERED_VIEW_NAME} m
+            from {FILTERED_TABLE_NAME} m
             join {DATE_TABLE_NAME} d on m.strain = d.strain
             left outer join {PRIORITIES_TABLE_NAME} p on m.strain = p.strain
         )
         """)
 
-    def create_group_sizes_table(self, group_by:list, sequences_per_group:float):
+    def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
         df_groups = self.connection.view(EXTENDED_VIEW_NAME).aggregate(','.join(group_by)).df()
         df_sizes = get_sizes_per_group(df_groups, GROUP_SIZE_COL, sequences_per_group, random_seed=self.args.subsample_seed)
         self.connection.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
         self.connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
         # TODO: check if connection.register as a view is sufficient
 
-    def write_outputs(self, table_name:str):
+    def db_write_outputs(self, table_name:str):
         rel_output = self.connection.table(table_name)
         if self.args.output_strains:
             rel_output.project('strain').df().to_csv(self.args.output_strains, index=None, header=False)
