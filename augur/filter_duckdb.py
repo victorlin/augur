@@ -371,9 +371,12 @@ class FilterDuckDB(FilterDB):
         self.connection.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
 
     def db_get_counts_per_group(self, group_by_cols:List[str]):
-        count_col = 'count'
-        df = self.connection.view(EXTENDED_VIEW_NAME).aggregate(f"{','.join(group_by_cols)}, COUNT(*) AS {count_col}").df()
-        return df[count_col].values
+        self.connection.execute(f"""
+            SELECT {','.join(group_by_cols)}, COUNT(*)
+            FROM {EXTENDED_VIEW_NAME}
+            GROUP BY {','.join(group_by_cols)}
+        """)
+        return [row[-1] for row in self.connection.fetchall()]
 
     def db_get_filtered_strains_count(self):
         return self.connection.table(FILTERED_TABLE_NAME).aggregate('COUNT(*)').df().iloc[0,0]
