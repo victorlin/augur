@@ -64,6 +64,7 @@ class FilterDB(abc.ABC):
         self.db_load_table(self.args.metadata, METADATA_TABLE_NAME)
 
     def add_attributes(self):
+        """Check if there is a date column and if sequences are used."""
         self.has_date_col = self.db_has_date_col()
         self.use_sequences = bool(self.args.sequence_index or (self.args.sequences and not self.args.exclude_all))
 
@@ -71,6 +72,7 @@ class FilterDB(abc.ABC):
     def db_has_date_col(self): pass
 
     def handle_sequences(self):
+        """Load sequence index"""
         sequence_index_path = self.args.sequence_index
         build_sequence_index = False
 
@@ -224,6 +226,7 @@ class FilterDB(abc.ABC):
                 counts_per_group = self.db_get_counts_per_group(group_by_cols)
             else:
                 group_by_cols = [DUMMY_COL]
+                # might not be needed
                 counts_per_group = [self.db_get_filtered_strains_count()]
 
             sequences_per_group, probabilistic_used = calculate_sequences_per_group(

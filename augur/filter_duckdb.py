@@ -36,6 +36,10 @@ class FilterDuckDB(FilterDB):
 
     def db_connect(self):
         self.connection = duckdb.connect(DEFAULT_DB_FILE)
+        self.connection.execute("PRAGMA memory_limit='4GB'")
+        # beware https://github.com/duckdb/duckdb/issues/1650
+        # [note] this is just duckdb memory
+        # pandas currently uses a lot of memory in populate_date_cols and supporting fns
 
     def db_load_table(self, path:str, name:str):
         load_tsv(self.connection, path, name)
@@ -357,6 +361,7 @@ class FilterDuckDB(FilterDB):
 
         # TODO: figure out parity for strains_to_force_include
         # TODO: figure out parity for strains_to_filter (reason for exclusion, used in final report output)
+        # possibly add new column for filter reason
 
         # exclusions + force-inclusions
         return rel_exclude.union(rel_include)
