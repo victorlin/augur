@@ -367,9 +367,8 @@ class FilterDuckDB(FilterDB):
         return rel_exclude.union(rel_include)
 
     def db_create_output_table(self, input_table:str):
-        rel_input = self.connection.table(input_table)
         self.connection.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
-        rel_input.create(OUTPUT_METADATA_TABLE_NAME)
+        self.connection.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
 
     def db_get_counts_per_group(self, group_by_cols:List[str]):
         count_col = 'count'
