@@ -5,6 +5,7 @@ import os
 import sys
 import treetime.utils
 from augur.filter_duckdb import FilterDuckDB
+from augur.filter_sqlite import FilterSQLite
 
 from .utils import is_vcf, run_shell_command, shquote
 
@@ -160,7 +161,7 @@ def run(args):
     if not validate_arguments(args):
         return 1
 
-    filter = FilterDuckDB(args)
+    filter = FilterSQLite(args)
     filter.run()
 
 
