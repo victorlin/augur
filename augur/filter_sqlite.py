@@ -57,8 +57,8 @@ class FilterSQLite(FilterDB):
                 get_year(date) as year,
                 get_month(date) as month,
                 get_day(date) as day,
-                get_date_min(date) as date_min,
-                get_date_max(date) as date_max
+                date(get_date_min(date)) as date_min,
+                date(get_date_max(date)) as date_max
             FROM {METADATA_TABLE_NAME}
         """)
 
