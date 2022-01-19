@@ -1,8 +1,6 @@
 import re
 from typing import List
 import sqlite3
-import numpy as np
-import pandas as pd
 import argparse
 
 from augur.filter_db import FilterDB
@@ -35,49 +33,34 @@ class FilterSQLite(FilterDB):
         super().__init__(args)
 
     def db_connect(self):
-        self.connection = duckdb.connect(DEFAULT_DB_FILE)
-        self.connection.execute("PRAGMA memory_limit='4GB'")
-        # beware https://github.com/duckdb/duckdb/issues/1650
-        # [note] this is just duckdb memory
-        # pandas currently uses a lot of memory in populate_date_cols and supporting fns
+        self.connection = sqlite3.connect(DEFAULT_DB_FILE)
+        self.cur = self.connection.cursor()
 
     def db_load_table(self, path:str, name:str):
         load_tsv(self.connection, path, name)
 
     def db_has_date_col(self):
-        return (DEFAULT_DATE_COL in self.connection.table(METADATA_TABLE_NAME).columns)
+        columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
+        return (DEFAULT_DATE_COL in columns)
 
     def db_create_date_table(self):
-        metadata = self.connection.table(METADATA_TABLE_NAME)
-        # create temporary table to generate date columns
-        tmp_table = "tmp"
-        rel_tmp = metadata.project(f"""
-            {STRAIN_COL},
-            {DEFAULT_DATE_COL},
-            0::BIGINT as year,
-            0::BIGINT as month,
-            0::BIGINT as day,
-            '' as date_min,
-            '' as date_max
-        """)
-        rel_tmp = rel_tmp.map(populate_date_cols)
-        rel_tmp.execute()
-        rel_tmp.create(tmp_table)
-        # unable to cast to date type before creating table, possibly related to https://github.com/duckdb/duckdb/issues/2860
-        # so we create the actual date table here
-        rel = self.connection.table(tmp_table)
-        rel = rel.project(f"""
-            {STRAIN_COL},
-            year,
-            month,
-            day,
-            date_min::DATE as date_min,
-            date_max::DATE as date_max
-        """)
-        rel.execute()
+        self.connection.create_function('get_year', 1, get_year)
+        self.connection.create_function('get_month', 1, get_month)
+        self.connection.create_function('get_day', 1, get_day)
+        self.connection.create_function('get_date_min', 1, get_date_min)
+        self.connection.create_function('get_date_max', 1, get_date_max)
         self.connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
-        rel.create(DATE_TABLE_NAME)
-        self.connection.execute(f"DROP TABLE IF EXISTS {tmp_table}")
+        self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
+            SELECT
+                {STRAIN_COL},
+                {DEFAULT_DATE_COL},
+                get_year(date) as year,
+                get_month(date) as month,
+                get_day(date) as day,
+                get_date_min(date) as date_min,
+                get_date_max(date) as date_max
+            FROM {METADATA_TABLE_NAME}
+        """)
 
     def filter_by_exclude_all(self):
         """Exclude all strains regardless of the given metadata content.
@@ -444,58 +427,54 @@ class FilterSQLite(FilterDB):
         rel_output = self.connection.table(OUTPUT_METADATA_TABLE_NAME)
         rel_output.df().to_csv(self.args.output_metadata, sep='\t', index=None)
 
-def populate_date_cols(df:pd.DataFrame):
-    if df.empty:
-        return df  # sometimes duckdb makes empty passes
-    df_date_parts = get_date_parts(df)
-    for col in df_date_parts.columns:
-        df[col] = df_date_parts[col]
-    return df
+
+def get_year(date:str):
+    try:
+        return int(date.split('-')[0])
+    except:
+        return None
 
 
-def get_date_parts(df:pd.DataFrame) -> pd.DataFrame:
-    """Expand the date column of a DataFrame to minimum and maximum date (ISO 8601 format) based on potential ambiguity.
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        DataFrame containing date column.
-    Returns
-    -------
-    pandas.DataFrame :
-        The input metadata with expanded date columns.
-    """
-    # TODO: np.where to convert numerical dates
-    # TODO: BC dates
-    # replace date with year/month/day as nullable ints
-    date_cols = ['year', 'month', 'day']
-    df_date_parts = df[DEFAULT_DATE_COL].str.split('-', n=2, expand=True)
-    df_date_parts = df_date_parts.set_axis(date_cols[:len(df_date_parts.columns)], axis=1)
-    missing_date_cols = set(date_cols) - set(df_date_parts.columns)
-    for col in missing_date_cols:
-        df_date_parts[col] = pd.NA
-    for col in date_cols:
-        df_date_parts[col] = pd.to_numeric(df_date_parts[col], errors='coerce').astype(pd.Int64Dtype())
-    year_str = df_date_parts['year'].astype(str)
-    min_month = df_date_parts['month'].fillna(1).astype(str).str.zfill(2)
-    min_day = df_date_parts['day'].fillna(1).astype(str).str.zfill(2)
-    # set max month=12 if missing
-    max_month = df_date_parts['month'].fillna(12)
-    # set max day based on max month
-    max_day_na_fill = np.where(
-        max_month.isin([1,3,5,7,8,10,12]), 31,
-        np.where(
-            max_month.eq(2), 28,
-            30
-        )
-    )
-    max_day = df_date_parts['day'].fillna(pd.Series(max_day_na_fill)).astype(str).str.zfill(2)
-    max_month = max_month.astype(str).str.zfill(2)
-    df_date_parts['date_min'] = np.where(
-        df_date_parts['year'].notna(),
-        year_str.str.cat([min_month, min_day], sep="-"),
-        None)
-    df_date_parts['date_max'] = np.where(
-        df_date_parts['year'].notna(),
-        year_str.str.cat([max_month, max_day], sep="-"),
-        None)
-    return df_date_parts
+def get_month(date:str):
+    try:
+        return int(date.split('-')[1])
+    except:
+        return None
+
+
+def get_day(date:str):
+    try:
+        return int(date.split('-')[2])
+    except:
+        return None
+
+
+def get_date_min(date:str):
+    # TODO: check month/day value boundaries
+    if not date:
+        return None
+    date_parts = date.split('-', maxsplit=2)
+    year = date_parts[0]
+    month = date_parts[1] if len(date_parts) > 1 and date_parts[1].isnumeric() else '01'
+    day = date_parts[2] if len(date_parts) > 2 and date_parts[2].isnumeric() else '01'
+    return f'{year}-{month}-{day}'
+
+
+def get_date_max(date:str):
+    # TODO: check month/day value boundaries
+    if not date:
+        return None
+    date_parts = date.split('-', maxsplit=2)
+    year = date_parts[0]
+    month = date_parts[1] if len(date_parts) > 1 and date_parts[1].isnumeric() else '12'
+    if len(date_parts) == 3 and date_parts[2].isnumeric():
+        day = date_parts[2]
+    else:
+        month_num = int(month)
+        if month_num in {1,3,5,7,8,10,12}:
+            day = '31'
+        elif month_num == 2:
+            day = '28'
+        else:
+            day = '30'
+    return f'{year}-{month}-{day}'
