@@ -390,15 +390,16 @@ class FilterSQLite(FilterDB):
         self.cur.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
 
     def db_get_counts_per_group(self, group_by_cols:List[str]):
-        self.connection.execute(f"""
+        self.cur.execute(f"""
             SELECT {','.join(group_by_cols)}, COUNT(*)
             FROM {EXTENDED_VIEW_NAME}
             GROUP BY {','.join(group_by_cols)}
         """)
-        return [row[-1] for row in self.connection.fetchall()]
+        return [row[-1] for row in self.cur.fetchall()]
 
     def db_get_filtered_strains_count(self):
-        return self.connection.table(FILTERED_TABLE_NAME).aggregate('COUNT(*)').df().iloc[0,0]
+        self.cur.execute(f"SELECT COUNT(*) FROM {FILTERED_TABLE_NAME}")
+        return self.cur.fetchone()[0]
 
     def db_create_subsampled_table(self, group_by_cols:List[str]):
         # create a view for subsampled strains
@@ -417,21 +418,23 @@ class FilterSQLite(FilterDB):
             JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
         """
-        self.connection.execute(f"CREATE OR REPLACE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
+        self.cur.execute(f"DROP VIEW IF EXISTS {SUBSAMPLE_STRAINS_VIEW_NAME}")
+        self.cur.execute(f"CREATE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
         # use subsample strains to select rows from filtered metadata
-        rel_output = self.connection.table(FILTERED_TABLE_NAME).filter(f'{STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_VIEW_NAME})')
-        rel_output.execute()
         self.connection.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
-        rel_output.create(SUBSAMPLED_TABLE_NAME)
+        df_subsampled = pd.read_sql_query(f"""
+            SELECT * FROM {FILTERED_TABLE_NAME}
+            WHERE {STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_VIEW_NAME})
+        """, self.connection)
+        df_subsampled.to_sql(SUBSAMPLED_TABLE_NAME, self.connection)
 
     def db_load_priorities_table(self):
         load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL])
 
     def db_generate_priorities_table(self, seed:int=None):
-        if seed:
-            self.connection.execute(f"SELECT setseed({seed})")
-        self.connection.execute(f"DROP TABLE IF EXISTS {PRIORITIES_TABLE_NAME}")
-        self.connection.execute(f"""
+        # TODO: seed... might not be possible https://stackoverflow.com/a/24394275
+        self.cur.execute(f"DROP TABLE IF EXISTS {PRIORITIES_TABLE_NAME}")
+        self.cur.execute(f"""
             CREATE TABLE {PRIORITIES_TABLE_NAME} AS
             SELECT {STRAIN_COL}, RANDOM() AS {PRIORITY_COL}
             FROM {FILTERED_TABLE_NAME}
@@ -439,21 +442,24 @@ class FilterSQLite(FilterDB):
 
     def db_create_extended_filtered_metadata_view(self):
         # create new view that extends strain with year/month/day, priority, dummy
-        self.connection.execute(f"""
-        CREATE OR REPLACE VIEW {EXTENDED_VIEW_NAME} AS (
+        self.cur.execute(f"DROP VIEW IF EXISTS {EXTENDED_VIEW_NAME}")
+        self.cur.execute(f"""
+        CREATE VIEW {EXTENDED_VIEW_NAME} AS
             SELECT m.*, d.year, d.month, d.day, p.{PRIORITY_COL}, TRUE AS {DUMMY_COL}
             FROM {FILTERED_TABLE_NAME} m
             JOIN {DATE_TABLE_NAME} d ON m.{STRAIN_COL} = d.{STRAIN_COL}
             LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p ON m.{STRAIN_COL} = p.{STRAIN_COL}
-        )
         """)
 
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
-        df_groups = self.connection.view(EXTENDED_VIEW_NAME).aggregate(','.join(group_by)).df()
+        df_groups = pd.read_sql_query(f"""
+                SELECT {','.join(group_by)}
+                FROM {EXTENDED_VIEW_NAME}
+                GROUP BY {','.join(group_by)}
+            """, self.connection)
         df_sizes = get_sizes_per_group(df_groups, GROUP_SIZE_COL, sequences_per_group, random_seed=self.args.subsample_seed)
-        self.connection.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
-        self.connection.from_df(df_sizes).create(GROUP_SIZES_TABLE_NAME)
-        # TODO: check if connection.register as a view is sufficient
+        self.cur.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
+        df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.connection)
 
     def db_output_strains(self):
         df = pd.read_sql_query(f"SELECT {STRAIN_COL} FROM {OUTPUT_METADATA_TABLE_NAME}", self.connection)
