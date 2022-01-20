@@ -7,9 +7,9 @@ DEFAULT_DB_FILE = 'test.sqlite3'
 def load_tsv(connection:Connection, tsv_file:str, table_name:str, db_file:str=DEFAULT_DB_FILE, header=True, names=[]):
     connection.execute(f"DROP TABLE IF EXISTS {table_name}")
     if header:
-        df_chunks = pd.read_csv(tsv_file, sep='\t', chunksize=1000)
+        df_chunks = pd.read_csv(tsv_file, sep='\t', chunksize=100000)
     elif names:
-        df_chunks = pd.read_csv(tsv_file, sep='\t', header=None, names=names, chunksize=1000)
+        df_chunks = pd.read_csv(tsv_file, sep='\t', header=None, names=names, chunksize=100000)
     else:
         raise ValueError()
     for chunk in df_chunks:
