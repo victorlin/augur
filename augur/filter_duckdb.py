@@ -92,7 +92,7 @@ class FilterDuckDB(FilterDB):
         """
         return 'False'
 
-    def exclude_strains_duckdb_filter(self, exclude_file):
+    def filter_exclude_strains(self, exclude_file):
         """Exclude the given set of strains from the given metadata.
 
         Parameters
@@ -140,7 +140,7 @@ class FilterDuckDB(FilterDB):
 
         return column, op, value
 
-    def exclude_where_duckdb_filter(self, exclude_where):
+    def filter_exclude_where(self, exclude_where):
         """Exclude all strains from the given metadata that match the given exclusion query.
 
         Unlike pandas query syntax, exclusion queries should follow the pattern of
@@ -282,7 +282,7 @@ class FilterDuckDB(FilterDB):
             WHERE invalid_nucleotides = 0
         )"""
 
-    def include_strains_duckdb_filter(self, include_file):
+    def force_include_strains(self, include_file):
         """Include strains in the given text file from the given metadata.
 
         Parameters
@@ -299,7 +299,7 @@ class FilterDuckDB(FilterDB):
         included_strains = [f"'{strain}'" for strain in included_strains]
         return f"{STRAIN_COL} IN ({','.join(included_strains)})"
 
-    def include_where_duckdb_filter(self, include_where):
+    def force_include_where(self, include_where):
         """Include all strains from the given metadata that match the given query.
 
         Unlike pandas query syntax, inclusion queries should follow the pattern of

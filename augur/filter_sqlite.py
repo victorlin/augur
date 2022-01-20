@@ -1,5 +1,6 @@
 import re
 from typing import List
+import pandas as pd
 import sqlite3
 import argparse
 
@@ -13,6 +14,7 @@ METADATA_TABLE_NAME = 'metadata'
 SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
+METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 FILTERED_TABLE_NAME = 'metadata_filtered'
 SUBSAMPLED_TABLE_NAME = 'metadata_subsampled'
@@ -22,6 +24,9 @@ EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 
 DEFAULT_DATE_COL = 'date'
+FILTER_REASON_COL = 'filter_reason'
+EXCLUDE_COL = 'exclude'
+INCLUDE_COL = 'force_include'
 DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
 STRAIN_COL = 'strain'
@@ -73,9 +78,9 @@ class FilterSQLite(FilterDB):
         str:
             expression for duckdb.filter
         """
-        return 'False'
+        return 'True'
 
-    def exclude_strains_duckdb_filter(self, exclude_file):
+    def filter_exclude_strains(self, exclude_file):
         """Exclude the given set of strains from the given metadata.
 
         Parameters
@@ -90,7 +95,7 @@ class FilterSQLite(FilterDB):
         """
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
-        return f"{STRAIN_COL} NOT IN ({','.join(excluded_strains)})"
+        return f"{STRAIN_COL} IN ({','.join(excluded_strains)})"
 
     def parse_filter_query(self, query):
         """Parse an augur filter-style query and return the corresponding column,
@@ -123,7 +128,7 @@ class FilterSQLite(FilterDB):
 
         return column, op, value
 
-    def exclude_where_duckdb_filter(self, exclude_where):
+    def filter_exclude_where(self, exclude_where):
         """Exclude all strains from the given metadata that match the given exclusion query.
 
         Unlike pandas query syntax, exclusion queries should follow the pattern of
@@ -142,8 +147,20 @@ class FilterSQLite(FilterDB):
             expression for duckdb.filter
         """
         column, op, value = self.parse_filter_query(exclude_where)
-        op = '=' if op == '!=' else '!=' # negate for exclude
-        return f"{column} {op} '{value}'"
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
+            FROM {METADATA_TABLE_NAME}
+            WHERE {column} {op} '{value}'
+        )
+        """
+
+    def filter_by_query(self, query):
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
+            FROM {METADATA_TABLE_NAME}
+            WHERE NOT {query}
+        )
+        """
 
     def exclude_by_ambiguous_date(self, ambiguity="any"):
         """Filter metadata in the given pandas DataFrame where values in the given date
@@ -166,19 +183,19 @@ class FilterSQLite(FilterDB):
             return f"""{STRAIN_COL} IN (
                 SELECT {STRAIN_COL}
                 FROM {DATE_TABLE_NAME}
-                WHERE year IS NOT NULL
+                WHERE year IS NULL
             )"""
         if ambiguity == 'month':
             return f"""{STRAIN_COL} IN (
                 SELECT {STRAIN_COL}
                 FROM {DATE_TABLE_NAME}
-                WHERE month IS NOT NULL AND year IS NOT NULL
+                WHERE month IS NULL OR year IS NULL
             )"""
         if ambiguity == 'day' or ambiguity == 'any':
             return f"""{STRAIN_COL} IN (
                 SELECT {STRAIN_COL}
                 FROM {DATE_TABLE_NAME}
-                WHERE day IS NOT NULL AND month IS NOT NULL AND year IS NOT NULL
+                WHERE day IS NULL OR month IS NULL OR year IS NULL
             )"""
 
     def exclude_by_min_date(self, min_date):
@@ -197,7 +214,7 @@ class FilterSQLite(FilterDB):
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
-            WHERE date_min >= '{min_date}'
+            WHERE date_min < '{min_date}' OR date_min IS NULL
         )"""
 
     def exclude_by_max_date(self, max_date):
@@ -216,7 +233,7 @@ class FilterSQLite(FilterDB):
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
-            WHERE date_max <= '{max_date}'
+            WHERE date_max > '{max_date}' OR date_max IS NULL
         )"""
 
     def exclude_by_sequence_index(self):
@@ -230,7 +247,7 @@ class FilterSQLite(FilterDB):
             expression for duckdb.filter
         """
         # TODO: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
-        return f"{STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
+        return f"{STRAIN_COL} NOT IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
 
     def exclude_by_sequence_length(self, min_length=0):
         """Filter metadata by sequence length from a given sequence index.
@@ -248,7 +265,7 @@ class FilterSQLite(FilterDB):
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {SEQUENCE_INDEX_TABLE_NAME}
-            WHERE A+C+G+T > {min_length}
+            WHERE A+C+G+T < {min_length}
         )"""
 
     def exclude_by_non_nucleotide(self):
@@ -262,10 +279,10 @@ class FilterSQLite(FilterDB):
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {SEQUENCE_INDEX_TABLE_NAME}
-            WHERE invalid_nucleotides = 0
+            WHERE invalid_nucleotides != 0
         )"""
 
-    def include_strains_duckdb_filter(self, include_file):
+    def force_include_strains(self, include_file):
         """Include strains in the given text file from the given metadata.
 
         Parameters
@@ -282,7 +299,7 @@ class FilterSQLite(FilterDB):
         included_strains = [f"'{strain}'" for strain in included_strains]
         return f"{STRAIN_COL} IN ({','.join(included_strains)})"
 
-    def include_where_duckdb_filter(self, include_where):
+    def force_include_where(self, include_where):
         """Include all strains from the given metadata that match the given query.
 
         Unlike pandas query syntax, inclusion queries should follow the pattern of
@@ -301,57 +318,76 @@ class FilterSQLite(FilterDB):
             expression for duckdb.filter
         """
         column, op, value = self.parse_filter_query(include_where)
-        return f"{column} {op} '{value}'"
+        return f"""{STRAIN_COL} IN (
+            SELECT {STRAIN_COL}
+            FROM {METADATA_TABLE_NAME}
+            WHERE {column} {op} '{value}'
+        )
+        """
 
-    def db_create_filtered_view(self, exclude_by:List[str], include_by:List[str]):
-        rel_filtered = self.db_apply_filters(exclude_by, include_by)
-        rel_filtered.execute()
-        self.connection.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
-        rel_filtered.create(FILTERED_TABLE_NAME)
+    def db_create_filtered_view(self, exclude_by:list, include_by:list):
+        self.db_apply_filters(exclude_by, include_by)
+        # self.connection.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
+        # rel_filtered.create(FILTERED_TABLE_NAME)
 
-    def db_apply_filters(self, exclude_by:List[str], include_by:List[str]):
+    def db_apply_filters(self, exclude_by:list, include_by:list):
         """Apply a list of filters to exclude or force-include records from the given
         metadata and return the strains to keep, to exclude, and to force include.
 
         Parameters
         ----------
-        exclude_by : list[str]
+        exclude_by : list
             A list of filter expressions for duckdb.filter.
-        include_by : list[str]
+        include_by : list
             A list of filter expressions for duckdb.filter.
         Returns
         -------
         DuckDBPyRelation
             relation for filtered metadata
         """
-        metadata = self.connection.table(METADATA_TABLE_NAME)
-
-        # no exclusions
-        if not exclude_by:
-            return metadata
-
-        rel_exclude = metadata # start with all rows
-        for exclude in exclude_by:
-            rel_exclude = rel_exclude.filter(exclude)
-
-        # no force-inclusions
-        if not include_by:
-            return rel_exclude
-
-        rel_include = metadata.limit(0) # start with 0 rows
-        for include in include_by:
-            rel_include = rel_include.union(metadata.filter(include))
-
-        # TODO: figure out parity for strains_to_force_include
-        # TODO: figure out parity for strains_to_filter (reason for exclusion, used in final report output)
-        # possibly add new column for filter reason
-
-        # exclusions + force-inclusions
-        return rel_exclude.union(rel_include)
+        # create filter reason table
+        self.cur.execute(f"DROP TABLE IF EXISTS {METADATA_FILTER_REASON_TABLE_NAME}")
+        self.cur.execute(f"""
+            CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
+            SELECT
+                {STRAIN_COL},
+                FALSE as {EXCLUDE_COL},
+                FALSE as {INCLUDE_COL},
+                NULL as {FILTER_REASON_COL}
+            FROM {METADATA_TABLE_NAME}
+        """)
+        # update with exclusions
+        for exclude_rule_name, where_filter in exclude_by:
+            self.cur.execute(f"""
+                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                SET
+                    {EXCLUDE_COL} = TRUE,
+                    {FILTER_REASON_COL} = '{exclude_rule_name}'
+                WHERE {where_filter}
+            """)
+        # update with force-inclusions
+        for include_rule_name, where_filter in include_by:
+            self.cur.execute(f"""
+                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                SET
+                    {INCLUDE_COL} = TRUE,
+                    {FILTER_REASON_COL} = '{include_rule_name}'
+                WHERE {where_filter}
+            """)
+        # create filtered table
+        self.cur.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
+        self.cur.execute(f"""
+            CREATE TABLE {FILTERED_TABLE_NAME} AS
+            SELECT m.* FROM {METADATA_TABLE_NAME} m
+            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
+                USING ({STRAIN_COL})
+            WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
+        """)
+        self.connection.commit()
 
     def db_create_output_table(self, input_table:str):
-        self.connection.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
-        self.connection.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
+        self.cur.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
+        self.cur.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
 
     def db_get_counts_per_group(self, group_by_cols:List[str]):
         self.connection.execute(f"""
@@ -420,12 +456,12 @@ class FilterSQLite(FilterDB):
         # TODO: check if connection.register as a view is sufficient
 
     def db_output_strains(self):
-        rel_output = self.connection.table(OUTPUT_METADATA_TABLE_NAME)
-        rel_output.project(STRAIN_COL).df().to_csv(self.args.output_strains, index=None, header=False)
+        df = pd.read_sql_query(f"SELECT {STRAIN_COL} FROM {OUTPUT_METADATA_TABLE_NAME}", self.connection)
+        df.to_csv(self.args.output_strains, index=None, header=False)
 
     def db_output_metadata(self):
-        rel_output = self.connection.table(OUTPUT_METADATA_TABLE_NAME)
-        rel_output.df().to_csv(self.args.output_metadata, sep='\t', index=None)
+        df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME}", self.connection)
+        df.to_csv(self.args.output_metadata, sep='\t', index=None)
 
 
 def get_year(date:str):

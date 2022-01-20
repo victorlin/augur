@@ -116,56 +116,56 @@ class FilterDB(abc.ABC):
         if self.args.include:
             # Collect the union of all given strains to include.
             for include_file in self.args.include:
-                include_by.append(self.include_strains_duckdb_filter(include_file))
+                include_by.append(('force_include_strains', self.force_include_strains(include_file)))
 
         # Add sequences with particular metadata attributes.
         if self.args.include_where:
             for include_where in self.args.include_where:
-                include_by.append(self.include_where_duckdb_filter(include_where))
+                include_by.append(('force_include_where', self.force_include_where(include_where)))
 
         # Exclude all strains by default.
         if self.args.exclude_all:
-            exclude_by.append(self.filter_by_exclude_all())
+            exclude_by.append(('filter_by_exclude_all', self.filter_by_exclude_all()))
 
         # Filter by sequence index.
         if self.use_sequences:
-            exclude_by.append(self.exclude_by_sequence_index())
+            exclude_by.append(('exclude_by_sequence_index', self.exclude_by_sequence_index()))
 
         # Remove strains explicitly excluded by name.
         if self.args.exclude:
             for exclude_file in self.args.exclude:
-                exclude_by.append(self.exclude_strains_duckdb_filter(exclude_file))
+                exclude_by.append(('filter_exclude_strains', self.filter_exclude_strains(exclude_file)))
 
         # Exclude strain my metadata field like 'host=camel'.
         if self.args.exclude_where:
             for exclude_where in self.args.exclude_where:
-                exclude_by.append(self.exclude_where_duckdb_filter(exclude_where))
+                exclude_by.append(('filter_exclude_where', self.filter_exclude_where(exclude_where)))
 
         # Exclude strains by metadata, using SQL querying.
         if self.args.query:
-            exclude_by.append(self.args.query)
+            exclude_by.append(('filter_by_query', self.filter_by_query(self.args.query)))
 
         if self.has_date_col:
             # Filter by ambiguous dates.
             if self.args.exclude_ambiguous_dates_by:
-                exclude_by.append(self.exclude_by_ambiguous_date(self.args.exclude_ambiguous_dates_by))
+                exclude_by.append(('exclude_by_ambiguous_date', self.exclude_by_ambiguous_date(self.args.exclude_ambiguous_dates_by)))
 
             # Filter by date.
             if self.args.min_date:
-                exclude_by.append(self.exclude_by_min_date(self.args.min_date))
+                exclude_by.append(('exclude_by_min_date', self.exclude_by_min_date(self.args.min_date)))
             if self.args.max_date:
-                exclude_by.append(self.exclude_by_max_date(self.args.max_date))
+                exclude_by.append(('exclude_by_max_date', self.exclude_by_max_date(self.args.max_date)))
 
         # Filter by sequence length.
         if self.args.min_length:
             if is_vcf(self.args.sequences):
                 print("WARNING: Cannot use min_length for VCF files. Ignoring...")
             else:
-                exclude_by.append(self.exclude_by_sequence_length(self.args.min_length))
+                exclude_by.append(('exclude_by_sequence_length', self.exclude_by_sequence_length(self.args.min_length)))
 
         # Exclude sequences with non-nucleotide characters.
         if self.args.non_nucleotide:
-            exclude_by.append(self.exclude_by_non_nucleotide())
+            exclude_by.append(('exclude_by_non_nucleotide', self.exclude_by_non_nucleotide()))
 
         return exclude_by, include_by
 
@@ -173,13 +173,16 @@ class FilterDB(abc.ABC):
     def filter_by_exclude_all(self): pass
 
     @abc.abstractmethod
-    def exclude_strains_duckdb_filter(self, exclude_file): pass
+    def filter_exclude_strains(self, exclude_file): pass
 
     @abc.abstractmethod
     def parse_filter_query(self, query): pass
 
     @abc.abstractmethod
-    def exclude_where_duckdb_filter(self, exclude_where): pass
+    def filter_exclude_where(self, exclude_where): pass
+
+    @abc.abstractmethod
+    def filter_by_query(self, query): pass
 
     @abc.abstractmethod
     def exclude_by_ambiguous_date(self, ambiguity="any"): pass
@@ -200,10 +203,10 @@ class FilterDB(abc.ABC):
     def exclude_by_non_nucleotide(self): pass
 
     @abc.abstractmethod
-    def include_strains_duckdb_filter(self, include_file): pass
+    def force_include_strains(self, include_file): pass
 
     @abc.abstractmethod
-    def include_where_duckdb_filter(self, include_where): pass
+    def force_include_where(self, include_where): pass
 
     @abc.abstractmethod
     def db_create_filtered_view(self, exclude_by:List[str], include_by:List[str]): pass
