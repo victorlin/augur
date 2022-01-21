@@ -17,11 +17,11 @@ DATE_TABLE_NAME = 'metadata_date_expanded'
 METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 FILTERED_TABLE_NAME = 'metadata_filtered'
+SUBSAMPLE_STRAINS_TABLE_NAME = 'subsample_strains'
 SUBSAMPLED_TABLE_NAME = 'metadata_subsampled'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
-SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 
 DEFAULT_DATE_COL = 'date'
 FILTER_REASON_COL = 'filter_reason'
@@ -399,6 +399,10 @@ class FilterSQLite(FilterDB):
                 USING ({STRAIN_COL})
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
+        self.cur.execute(f"""
+            CREATE UNIQUE INDEX idx_{FILTERED_TABLE_NAME}_{STRAIN_COL}
+            ON {FILTERED_TABLE_NAME} ({STRAIN_COL})
+        """)
 
     def db_create_output_table(self, input_table:str):
         self.cur.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
@@ -433,13 +437,18 @@ class FilterSQLite(FilterDB):
             JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
         """
-        self.cur.execute(f"DROP VIEW IF EXISTS {SUBSAMPLE_STRAINS_VIEW_NAME}")
-        self.cur.execute(f"CREATE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
+        self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLE_STRAINS_TABLE_NAME}")
+        self.cur.execute(f"CREATE TABLE {SUBSAMPLE_STRAINS_TABLE_NAME} AS {query}")
+        self.cur.execute(f"""
+            CREATE UNIQUE INDEX idx_{SUBSAMPLE_STRAINS_TABLE_NAME}_{STRAIN_COL}
+            ON {SUBSAMPLE_STRAINS_TABLE_NAME} ({STRAIN_COL})
+        """)
         # use subsample strains to select rows from filtered metadata
         self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
         self.cur.execute(f"""CREATE TABLE {SUBSAMPLED_TABLE_NAME} AS
-            SELECT * FROM {FILTERED_TABLE_NAME}
-            WHERE {STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_VIEW_NAME})
+            SELECT f.* FROM {FILTERED_TABLE_NAME} f
+            JOIN {SUBSAMPLE_STRAINS_TABLE_NAME} USING ({STRAIN_COL})
+            WHERE {STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_TABLE_NAME})
         """)
 
     def db_load_priorities_table(self):
