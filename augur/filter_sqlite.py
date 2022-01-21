@@ -32,6 +32,7 @@ GROUP_SIZE_COL = 'size'
 STRAIN_COL = 'strain'
 PRIORITY_COL = 'priority'
 
+N_JOBS = 4
 
 class FilterSQLite(FilterDB):
     def __init__(self, args:argparse.Namespace):
@@ -42,14 +43,14 @@ class FilterSQLite(FilterDB):
         self.cur = self.connection.cursor()
 
     def db_load_metadata(self):
-        load_tsv(self.connection, self.args.metadata, METADATA_TABLE_NAME)
+        load_tsv(self.connection, self.args.metadata, METADATA_TABLE_NAME, n_jobs=N_JOBS)
         self.cur.execute(f"""
             CREATE UNIQUE INDEX idx_{METADATA_TABLE_NAME}_{STRAIN_COL}
             ON {METADATA_TABLE_NAME} ({STRAIN_COL})
         """)
 
     def db_load_sequence_index(self, path):
-        load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME)
+        load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
 
     def db_has_date_col(self):
         columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
@@ -452,7 +453,7 @@ class FilterSQLite(FilterDB):
         """)
 
     def db_load_priorities_table(self):
-        load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL])
+        load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL], n_jobs=N_JOBS)
 
     def db_generate_priorities_table(self, seed:int=None):
         # TODO: seed... might not be possible https://stackoverflow.com/a/24394275
