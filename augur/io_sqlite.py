@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from sqlite3 import Connection
 
 DEFAULT_DB_FILE = 'test.sqlite3'
+ROW_ORDER_COLUMN = '_sqlite_id'
 
 
 def load_tsv(connection:Connection, tsv_file:str, table_name:str, header=True, names=[], n_jobs=1):
@@ -29,4 +30,4 @@ def load_tsv(connection:Connection, tsv_file:str, table_name:str, header=True, n
 
 def chunk_to_sql(chunk:pd.DataFrame, table_name:str):
     connection = sqlite3.connect(DEFAULT_DB_FILE, timeout=15) # to reduce OperationalError: database is locked
-    chunk.to_sql(table_name, connection, if_exists='append', index=False)
+    chunk.to_sql(table_name, connection, if_exists='append', index=True, index_label=ROW_ORDER_COLUMN)

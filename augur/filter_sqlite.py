@@ -5,7 +5,7 @@ import sqlite3
 import argparse
 
 from augur.filter_db import FilterDB
-from .io_sqlite import load_tsv, DEFAULT_DB_FILE
+from .io_sqlite import load_tsv, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
 from .utils import read_strains
 from .filter_subsample_helpers import get_sizes_per_group
 
@@ -486,11 +486,12 @@ class FilterSQLite(FilterDB):
         df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.connection)
 
     def db_output_strains(self):
-        df = pd.read_sql_query(f"SELECT {STRAIN_COL} FROM {OUTPUT_METADATA_TABLE_NAME}", self.connection)
+        df = pd.read_sql_query(f"SELECT {STRAIN_COL} FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
         df.to_csv(self.args.output_strains, index=None, header=False)
 
     def db_output_metadata(self):
-        df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME}", self.connection)
+        df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
+        df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
         df.to_csv(self.args.output_metadata, sep='\t', index=None)
 
 
