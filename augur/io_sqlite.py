@@ -10,7 +10,7 @@ def load_tsv(connection:Connection, tsv_file:str, table_name:str, db_file:str=DE
         "sep": '\t',
         "engine": "c",
         "skipinitialspace": True,
-        "dtype": "string[pyarrow]",
+        "dtype": "string",
         "na_filter": False,
         "chunksize": 100000,
     }

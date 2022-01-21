@@ -52,8 +52,7 @@ setuptools.setup(
         "duckdb",
         "jsonschema >=3.0.0",
         "packaging >=19.2",
-        "pandas >=1.3.0",
-        "pyarrow >=1.0.0",
+        "pandas >=1.0.0",
         "phylo-treetime",
         "xopen >=1.0.1"
     ],
