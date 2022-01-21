@@ -41,8 +41,15 @@ class FilterSQLite(FilterDB):
         self.connection = sqlite3.connect(DEFAULT_DB_FILE)
         self.cur = self.connection.cursor()
 
-    def db_load_table(self, path:str, name:str):
-        load_tsv(self.connection, path, name)
+    def db_load_metadata(self):
+        load_tsv(self.connection, self.args.metadata, METADATA_TABLE_NAME)
+        self.cur.execute(f"""
+            CREATE UNIQUE INDEX idx_{METADATA_TABLE_NAME}_{STRAIN_COL}
+            ON {METADATA_TABLE_NAME} ({STRAIN_COL})
+        """)
+
+    def db_load_sequence_index(self, path):
+        load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME)
 
     def db_has_date_col(self):
         columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}

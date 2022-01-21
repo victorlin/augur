@@ -36,7 +36,7 @@ class FilterDB(abc.ABC):
 
     def run(self):
         self.db_connect()
-        self.load_metadata()
+        self.db_load_metadata()
         self.add_attributes()
         self.handle_sequences()
         if self.has_date_col:
@@ -58,10 +58,10 @@ class FilterDB(abc.ABC):
     def db_connect(self): pass
 
     @abc.abstractmethod
-    def db_load_table(self, path:str, name:str): pass
+    def db_load_metadata(self): pass
 
-    def load_metadata(self):
-        self.db_load_table(self.args.metadata, METADATA_TABLE_NAME)
+    @abc.abstractmethod
+    def db_load_sequence_index(self, path): pass
 
     def add_attributes(self):
         """Check if there is a date column and if sequences are used."""
@@ -99,7 +99,7 @@ class FilterDB(abc.ABC):
 
         if self.use_sequences:
             # TODO: verify VCF
-            self.db_load_table(sequence_index_path, SEQUENCE_INDEX_TABLE_NAME)
+            self.db_load_sequence_index(sequence_index_path)
 
             # Remove temporary index file, if it exists.
             if build_sequence_index:
