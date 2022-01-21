@@ -436,12 +436,11 @@ class FilterSQLite(FilterDB):
         self.cur.execute(f"DROP VIEW IF EXISTS {SUBSAMPLE_STRAINS_VIEW_NAME}")
         self.cur.execute(f"CREATE VIEW {SUBSAMPLE_STRAINS_VIEW_NAME} AS {query}")
         # use subsample strains to select rows from filtered metadata
-        self.connection.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
-        df_subsampled = pd.read_sql_query(f"""
+        self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
+        self.cur.execute(f"""CREATE TABLE {SUBSAMPLED_TABLE_NAME} AS
             SELECT * FROM {FILTERED_TABLE_NAME}
             WHERE {STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_VIEW_NAME})
-        """, self.connection)
-        df_subsampled.to_sql(SUBSAMPLED_TABLE_NAME, self.connection)
+        """)
 
     def db_load_priorities_table(self):
         load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL])
