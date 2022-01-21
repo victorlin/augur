@@ -334,8 +334,6 @@ class FilterSQLite(FilterDB):
 
     def db_create_filtered_view(self, exclude_by:list, include_by:list):
         self.db_apply_filters(exclude_by, include_by)
-        # self.connection.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
-        # rel_filtered.create(FILTERED_TABLE_NAME)
 
     def db_apply_filters(self, exclude_by:list, include_by:list):
         """Apply a list of filters to exclude or force-include records from the given
@@ -352,7 +350,12 @@ class FilterSQLite(FilterDB):
         DuckDBPyRelation
             relation for filtered metadata
         """
-        # create filter reason table
+        self.db_create_filter_reason_table()
+        self.db_apply_exclusions(exclude_by)
+        self.db_apply_force_inclusions(include_by)
+        self.db_create_filtered_table()
+
+    def db_create_filter_reason_table(self):
         self.cur.execute(f"DROP TABLE IF EXISTS {METADATA_FILTER_REASON_TABLE_NAME}")
         self.cur.execute(f"""
             CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
@@ -363,7 +366,9 @@ class FilterSQLite(FilterDB):
                 NULL as {FILTER_REASON_COL}
             FROM {METADATA_TABLE_NAME}
         """)
-        # update with exclusions
+        self.cur.execute(f"CREATE UNIQUE INDEX idx_{METADATA_FILTER_REASON_TABLE_NAME}_{STRAIN_COL} ON {METADATA_FILTER_REASON_TABLE_NAME} ({STRAIN_COL})")
+
+    def db_apply_exclusions(self, exclude_by):
         for exclude_rule_name, where_filter in exclude_by:
             self.cur.execute(f"""
                 UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
@@ -372,7 +377,9 @@ class FilterSQLite(FilterDB):
                     {FILTER_REASON_COL} = '{exclude_rule_name}'
                 WHERE {where_filter}
             """)
-        # update with force-inclusions
+            self.connection.commit()
+
+    def db_apply_force_inclusions(self, include_by):
         for include_rule_name, where_filter in include_by:
             self.cur.execute(f"""
                 UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
@@ -381,7 +388,9 @@ class FilterSQLite(FilterDB):
                     {FILTER_REASON_COL} = '{include_rule_name}'
                 WHERE {where_filter}
             """)
-        # create filtered table
+            self.connection.commit()
+
+    def db_create_filtered_table(self):
         self.cur.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
         self.cur.execute(f"""
             CREATE TABLE {FILTERED_TABLE_NAME} AS
@@ -390,7 +399,6 @@ class FilterSQLite(FilterDB):
                 USING ({STRAIN_COL})
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
-        self.connection.commit()
 
     def db_create_output_table(self, input_table:str):
         self.cur.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
