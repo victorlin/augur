@@ -53,6 +53,7 @@ class FilterDB(abc.ABC):
         # TODO: args.output (sequences)
         # TODO: filter_counts
         self.write_outputs()
+        self.db_cleanup()
 
     @abc.abstractmethod
     def db_connect(self): pass
@@ -279,6 +280,9 @@ class FilterDB(abc.ABC):
 
     @abc.abstractmethod
     def db_output_metadata(self): pass
+
+    @abc.abstractmethod
+    def db_cleanup(self): pass
 
 def populate_date_cols(df:pd.DataFrame):
     if df.empty:

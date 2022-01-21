@@ -5,7 +5,7 @@ import sqlite3
 import argparse
 
 from augur.filter_db import FilterDB
-from .io_sqlite import load_tsv, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
+from .io_sqlite import load_tsv, cleanup, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
 from .utils import read_strains
 from .filter_subsample_helpers import get_sizes_per_group
 
@@ -493,6 +493,9 @@ class FilterSQLite(FilterDB):
         df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
         df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
         df.to_csv(self.args.output_metadata, sep='\t', index=None)
+
+    def db_cleanup(self):
+        cleanup()
 
 
 def get_year(date:str):

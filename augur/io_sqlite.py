@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import sqlite3
 from itertools import repeat
@@ -31,3 +32,7 @@ def load_tsv(connection:Connection, tsv_file:str, table_name:str, header=True, n
 def chunk_to_sql(chunk:pd.DataFrame, table_name:str):
     connection = sqlite3.connect(DEFAULT_DB_FILE, timeout=15) # to reduce OperationalError: database is locked
     chunk.to_sql(table_name, connection, if_exists='append', index=True, index_label=ROW_ORDER_COLUMN)
+
+
+def cleanup():
+    os.remove(DEFAULT_DB_FILE)
