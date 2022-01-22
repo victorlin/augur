@@ -42,12 +42,15 @@ class FilterSQLite(FilterDB):
         self.connection = sqlite3.connect(DEFAULT_DB_FILE)
         self.cur = self.connection.cursor()
 
+    def db_create_strain_index(self, table_name:str):
+        self.cur.execute(f"""
+            CREATE UNIQUE INDEX idx_{table_name}_{STRAIN_COL}
+            ON {table_name} ({STRAIN_COL})
+        """)
+
     def db_load_metadata(self):
         load_tsv(self.connection, self.args.metadata, METADATA_TABLE_NAME, n_jobs=N_JOBS)
-        self.cur.execute(f"""
-            CREATE UNIQUE INDEX idx_{METADATA_TABLE_NAME}_{STRAIN_COL}
-            ON {METADATA_TABLE_NAME} ({STRAIN_COL})
-        """)
+        self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path):
         load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
@@ -367,7 +370,7 @@ class FilterSQLite(FilterDB):
                 NULL as {FILTER_REASON_COL}
             FROM {METADATA_TABLE_NAME}
         """)
-        self.cur.execute(f"CREATE UNIQUE INDEX idx_{METADATA_FILTER_REASON_TABLE_NAME}_{STRAIN_COL} ON {METADATA_FILTER_REASON_TABLE_NAME} ({STRAIN_COL})")
+        self.db_create_strain_index(METADATA_FILTER_REASON_TABLE_NAME)
 
     def db_apply_exclusions(self, exclude_by):
         for exclude_rule_name, where_filter in exclude_by:
@@ -400,10 +403,7 @@ class FilterSQLite(FilterDB):
                 USING ({STRAIN_COL})
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
-        self.cur.execute(f"""
-            CREATE UNIQUE INDEX idx_{FILTERED_TABLE_NAME}_{STRAIN_COL}
-            ON {FILTERED_TABLE_NAME} ({STRAIN_COL})
-        """)
+        self.db_create_strain_index(FILTERED_TABLE_NAME)
 
     def db_create_output_table(self, input_table:str):
         self.cur.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
@@ -440,10 +440,7 @@ class FilterSQLite(FilterDB):
         """
         self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLE_STRAINS_TABLE_NAME}")
         self.cur.execute(f"CREATE TABLE {SUBSAMPLE_STRAINS_TABLE_NAME} AS {query}")
-        self.cur.execute(f"""
-            CREATE UNIQUE INDEX idx_{SUBSAMPLE_STRAINS_TABLE_NAME}_{STRAIN_COL}
-            ON {SUBSAMPLE_STRAINS_TABLE_NAME} ({STRAIN_COL})
-        """)
+        self.db_create_strain_index(SUBSAMPLE_STRAINS_TABLE_NAME)
         # use subsample strains to select rows from filtered metadata
         self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
         self.cur.execute(f"""CREATE TABLE {SUBSAMPLED_TABLE_NAME} AS
