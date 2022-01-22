@@ -453,7 +453,13 @@ class FilterSQLite(FilterDB):
         """)
 
     def db_load_priorities_table(self):
-        load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME, header=False, names=[STRAIN_COL, PRIORITY_COL], n_jobs=N_JOBS)
+        dtype = {
+            STRAIN_COL: 'str',
+            PRIORITY_COL: 'float'
+        }
+        load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME,
+                 header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
+                 n_jobs=N_JOBS)
 
     def db_generate_priorities_table(self, seed:int=None):
         # TODO: seed... might not be possible https://stackoverflow.com/a/24394275

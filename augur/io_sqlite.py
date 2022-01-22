@@ -9,13 +9,13 @@ DEFAULT_DB_FILE = 'test.sqlite3'
 ROW_ORDER_COLUMN = '_sqlite_id'
 
 
-def load_tsv(connection:Connection, tsv_file:str, table_name:str, header=True, names=[], n_jobs=1):
+def load_tsv(connection:Connection, tsv_file:str, table_name:str, header=True, names=[], dtype='string', n_jobs=1):
     connection.execute(f"DROP TABLE IF EXISTS {table_name}")
     read_csv_kwargs = {
         "sep": '\t',
         "engine": "c",
         "skipinitialspace": True,
-        "dtype": "string",
+        "dtype": dtype,
         "na_filter": False,
         "chunksize": 100000,
     }
