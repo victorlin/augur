@@ -66,7 +66,6 @@ class FilterSQLite(FilterDB):
         self.connection.create_function('get_day', 1, get_day)
         self.connection.create_function('get_date_min', 1, get_date_min)
         self.connection.create_function('get_date_max', 1, get_date_max)
-        self.connection.execute(f"DROP TABLE IF EXISTS {DATE_TABLE_NAME}")
         self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
             SELECT
                 {STRAIN_COL},
@@ -362,7 +361,6 @@ class FilterSQLite(FilterDB):
         self.db_create_filtered_table()
 
     def db_create_filter_reason_table(self):
-        self.cur.execute(f"DROP TABLE IF EXISTS {METADATA_FILTER_REASON_TABLE_NAME}")
         self.cur.execute(f"""
             CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
             SELECT
@@ -397,7 +395,6 @@ class FilterSQLite(FilterDB):
             self.connection.commit()
 
     def db_create_filtered_table(self):
-        self.cur.execute(f"DROP TABLE IF EXISTS {FILTERED_TABLE_NAME}")
         self.cur.execute(f"""
             CREATE TABLE {FILTERED_TABLE_NAME} AS
             SELECT m.* FROM {METADATA_TABLE_NAME} m
@@ -408,7 +405,6 @@ class FilterSQLite(FilterDB):
         self.db_create_strain_index(FILTERED_TABLE_NAME)
 
     def db_create_output_table(self, input_table:str):
-        self.cur.execute(f"DROP TABLE IF EXISTS {OUTPUT_METADATA_TABLE_NAME}")
         self.cur.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
 
     def db_get_counts_per_group(self, group_by_cols:List[str]):
@@ -440,11 +436,9 @@ class FilterSQLite(FilterDB):
             JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
         """
-        self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLE_STRAINS_TABLE_NAME}")
         self.cur.execute(f"CREATE TABLE {SUBSAMPLE_STRAINS_TABLE_NAME} AS {query}")
         self.db_create_strain_index(SUBSAMPLE_STRAINS_TABLE_NAME)
         # use subsample strains to select rows from filtered metadata
-        self.cur.execute(f"DROP TABLE IF EXISTS {SUBSAMPLED_TABLE_NAME}")
         self.cur.execute(f"""CREATE TABLE {SUBSAMPLED_TABLE_NAME} AS
             SELECT f.* FROM {FILTERED_TABLE_NAME} f
             JOIN {SUBSAMPLE_STRAINS_TABLE_NAME} USING ({STRAIN_COL})
@@ -462,7 +456,6 @@ class FilterSQLite(FilterDB):
 
     def db_generate_priorities_table(self, seed:int=None):
         # TODO: seed... might not be possible https://stackoverflow.com/a/24394275
-        self.cur.execute(f"DROP TABLE IF EXISTS {PRIORITIES_TABLE_NAME}")
         self.cur.execute(f"""
             CREATE TABLE {PRIORITIES_TABLE_NAME} AS
             SELECT {STRAIN_COL}, RANDOM() AS {PRIORITY_COL}
@@ -488,7 +481,6 @@ class FilterSQLite(FilterDB):
                 GROUP BY {','.join(group_by)}
             """, self.connection)
         df_sizes = get_sizes_per_group(df_groups, GROUP_SIZE_COL, sequences_per_group, random_seed=self.args.subsample_seed)
-        self.cur.execute(f"DROP TABLE IF EXISTS {GROUP_SIZES_TABLE_NAME}")
         df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.connection)
 
     def db_output_strains(self):
