@@ -61,20 +61,20 @@ class FilterSQLite(FilterDB):
         return (DEFAULT_DATE_COL in columns)
 
     def db_create_date_table(self):
-        self.connection.create_function('get_year', 1, get_year)
-        self.connection.create_function('get_month', 1, get_month)
-        self.connection.create_function('get_day', 1, get_day)
-        self.connection.create_function('get_date_min', 1, get_date_min)
-        self.connection.create_function('get_date_max', 1, get_date_max)
+        self.connection.create_function(get_year.__name__, 1, get_year)
+        self.connection.create_function(get_month.__name__, 1, get_month)
+        self.connection.create_function(get_day.__name__, 1, get_day)
+        self.connection.create_function(get_date_min.__name__, 1, get_date_min)
+        self.connection.create_function(get_date_max.__name__, 1, get_date_max)
         self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
             SELECT
                 {STRAIN_COL},
                 {DEFAULT_DATE_COL},
-                get_year(date) as year,
-                get_month(date) as month,
-                get_day(date) as day,
-                date(get_date_min(date)) as date_min,
-                date(get_date_max(date)) as date_max
+                {get_year.__name__}({DEFAULT_DATE_COL}) as year,
+                {get_month.__name__}({DEFAULT_DATE_COL}) as month,
+                {get_day.__name__}({DEFAULT_DATE_COL}) as day,
+                date({get_date_min.__name__}({DEFAULT_DATE_COL})) as date_min,
+                date({get_date_max.__name__}({DEFAULT_DATE_COL})) as date_max
             FROM {METADATA_TABLE_NAME}
         """)
         self.db_create_strain_index(DATE_TABLE_NAME)
