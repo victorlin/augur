@@ -117,56 +117,56 @@ class FilterDB(abc.ABC):
         if self.args.include:
             # Collect the union of all given strains to include.
             for include_file in self.args.include:
-                include_by.append(('force_include_strains', self.force_include_strains(include_file)))
+                include_by.append((self.force_include_strains.__name__, self.force_include_strains(include_file)))
 
         # Add sequences with particular metadata attributes.
         if self.args.include_where:
             for include_where in self.args.include_where:
-                include_by.append(('force_include_where', self.force_include_where(include_where)))
+                include_by.append((self.force_include_where.__name__, self.force_include_where(include_where)))
 
         # Exclude all strains by default.
         if self.args.exclude_all:
-            exclude_by.append(('filter_by_exclude_all', self.filter_by_exclude_all()))
+            exclude_by.append((self.filter_by_exclude_all.__name__, self.filter_by_exclude_all()))
 
         # Filter by sequence index.
         if self.use_sequences:
-            exclude_by.append(('exclude_by_sequence_index', self.exclude_by_sequence_index()))
+            exclude_by.append((self.exclude_by_sequence_index.__name__, self.exclude_by_sequence_index()))
 
         # Remove strains explicitly excluded by name.
         if self.args.exclude:
             for exclude_file in self.args.exclude:
-                exclude_by.append(('filter_exclude_strains', self.filter_exclude_strains(exclude_file)))
+                exclude_by.append((self.filter_exclude_strains.__name__, self.filter_exclude_strains(exclude_file)))
 
         # Exclude strain my metadata field like 'host=camel'.
         if self.args.exclude_where:
             for exclude_where in self.args.exclude_where:
-                exclude_by.append(('filter_exclude_where', self.filter_exclude_where(exclude_where)))
+                exclude_by.append((self.filter_exclude_where.__name__, self.filter_exclude_where(exclude_where)))
 
         # Exclude strains by metadata, using SQL querying.
         if self.args.query:
-            exclude_by.append(('filter_by_query', self.filter_by_query(self.args.query)))
+            exclude_by.append((self.filter_by_query.__name__, self.filter_by_query(self.args.query)))
 
         if self.has_date_col:
             # Filter by ambiguous dates.
             if self.args.exclude_ambiguous_dates_by:
-                exclude_by.append(('exclude_by_ambiguous_date', self.exclude_by_ambiguous_date(self.args.exclude_ambiguous_dates_by)))
+                exclude_by.append((self.exclude_by_ambiguous_date.__name__, self.exclude_by_ambiguous_date(self.args.exclude_ambiguous_dates_by)))
 
             # Filter by date.
             if self.args.min_date:
-                exclude_by.append(('exclude_by_min_date', self.exclude_by_min_date(self.args.min_date)))
+                exclude_by.append((self.exclude_by_min_date.__name__, self.exclude_by_min_date(self.args.min_date)))
             if self.args.max_date:
-                exclude_by.append(('exclude_by_max_date', self.exclude_by_max_date(self.args.max_date)))
+                exclude_by.append((self.exclude_by_max_date.__name__, self.exclude_by_max_date(self.args.max_date)))
 
         # Filter by sequence length.
         if self.args.min_length:
             if is_vcf(self.args.sequences):
                 print("WARNING: Cannot use min_length for VCF files. Ignoring...")
             else:
-                exclude_by.append(('exclude_by_sequence_length', self.exclude_by_sequence_length(self.args.min_length)))
+                exclude_by.append((self.exclude_by_sequence_length.__name__, self.exclude_by_sequence_length(self.args.min_length)))
 
         # Exclude sequences with non-nucleotide characters.
         if self.args.non_nucleotide:
-            exclude_by.append(('exclude_by_non_nucleotide', self.exclude_by_non_nucleotide()))
+            exclude_by.append((self.exclude_by_non_nucleotide.__name__, self.exclude_by_non_nucleotide()))
 
         return exclude_by, include_by
 
