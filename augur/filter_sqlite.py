@@ -54,6 +54,7 @@ class FilterSQLite(FilterDB):
 
     def db_load_sequence_index(self, path):
         load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
+        self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_has_date_col(self):
         columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
@@ -77,6 +78,7 @@ class FilterSQLite(FilterDB):
                 date(get_date_max(date)) as date_max
             FROM {METADATA_TABLE_NAME}
         """)
+        self.db_create_strain_index(DATE_TABLE_NAME)
 
     def filter_by_exclude_all(self):
         """Exclude all strains regardless of the given metadata content.
@@ -446,7 +448,6 @@ class FilterSQLite(FilterDB):
         self.cur.execute(f"""CREATE TABLE {SUBSAMPLED_TABLE_NAME} AS
             SELECT f.* FROM {FILTERED_TABLE_NAME} f
             JOIN {SUBSAMPLE_STRAINS_TABLE_NAME} USING ({STRAIN_COL})
-            WHERE {STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_TABLE_NAME})
         """)
 
     def db_load_priorities_table(self):
@@ -457,6 +458,7 @@ class FilterSQLite(FilterDB):
         load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME,
                  header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
                  n_jobs=N_JOBS)
+        self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_generate_priorities_table(self, seed:int=None):
         # TODO: seed... might not be possible https://stackoverflow.com/a/24394275
@@ -466,6 +468,7 @@ class FilterSQLite(FilterDB):
             SELECT {STRAIN_COL}, RANDOM() AS {PRIORITY_COL}
             FROM {FILTERED_TABLE_NAME}
         """)
+        self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_create_extended_filtered_metadata_view(self):
         # create new view that extends strain with year/month/day, priority, dummy
