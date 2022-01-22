@@ -431,7 +431,7 @@ class FilterSQLite(FilterDB):
         query = f"""
             SELECT {STRAIN_COL}
             FROM (
-                SELECT *, ROW_NUMBER() OVER (
+                SELECT {STRAIN_COL}, {','.join(group_by_cols)}, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by_cols)}
                     ORDER BY {PRIORITY_COL} DESC NULLS LAST
                 ) AS group_i
