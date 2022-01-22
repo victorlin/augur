@@ -73,8 +73,8 @@ class FilterSQLite(FilterDB):
                 {get_year.__name__}({DEFAULT_DATE_COL}) as year,
                 {get_month.__name__}({DEFAULT_DATE_COL}) as month,
                 {get_day.__name__}({DEFAULT_DATE_COL}) as day,
-                date({get_date_min.__name__}({DEFAULT_DATE_COL})) as date_min,
-                date({get_date_max.__name__}({DEFAULT_DATE_COL})) as date_max
+                {get_date_min.__name__}({DEFAULT_DATE_COL}) as date_min,
+                {get_date_max.__name__}({DEFAULT_DATE_COL}) as date_max
             FROM {METADATA_TABLE_NAME}
         """)
         self.db_create_strain_index(DATE_TABLE_NAME)
