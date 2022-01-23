@@ -3,6 +3,7 @@ from typing import List
 import pandas as pd
 import sqlite3
 import argparse
+from datetime import date
 
 from augur.filter_db import FilterDB
 from .io_sqlite import load_tsv, cleanup, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
@@ -223,10 +224,11 @@ class FilterSQLite(FilterDB):
         str:
             expression for duckdb.filter
         """
+        min_date = get_date_min(min_date)
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
-            WHERE date_min < '{min_date}' OR date_min IS NULL
+            WHERE date_min < {min_date} OR date_min IS NULL
         )"""
 
     def exclude_by_max_date(self, max_date):
@@ -242,10 +244,11 @@ class FilterSQLite(FilterDB):
         str:
             expression for duckdb.filter
         """
+        max_date = get_date_max(max_date)
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
-            WHERE date_max > '{max_date}' OR date_max IS NULL
+            WHERE date_max > {max_date} OR date_max IS NULL
         )"""
 
     def exclude_by_sequence_index(self):
@@ -496,53 +499,78 @@ class FilterSQLite(FilterDB):
         cleanup()
 
 
-def get_year(date:str):
+def get_year(date_in:str):
     try:
-        return int(date.split('-')[0])
+        return int(date_in.split('-')[0])
     except:
         return None
 
 
-def get_month(date:str):
+def get_month(date_in:str):
     try:
-        return int(date.split('-')[1])
+        return int(date_in.split('-')[1])
     except:
         return None
 
 
-def get_day(date:str):
+def get_day(date_in:str):
     try:
-        return int(date.split('-')[2])
+        return int(date_in.split('-')[2])
     except:
         return None
 
 
-def get_date_min(date:str):
+def get_date_min(date_in:str):
+    if not date_in:
+        return None
+    if date_in.lstrip('-').isnumeric() and '.' in date_in:
+        # date is a numeric date
+        # can be negative
+        # year-only is ambiguous
+        return float(date_in)
+    # convert to numeric
     # TODO: check month/day value boundaries
-    if not date:
+    # TODO: raise exception for negative ISO dates
+    date_parts = date_in.split('-', maxsplit=2)
+    year = int(date_parts[0])
+    month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
+    day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
+    return date_to_numeric(date(year, month, day))
+
+
+def get_date_max(date_in:str):
+    if not date_in:
         return None
-    date_parts = date.split('-', maxsplit=2)
-    year = date_parts[0]
-    month = date_parts[1] if len(date_parts) > 1 and date_parts[1].isnumeric() else '01'
-    day = date_parts[2] if len(date_parts) > 2 and date_parts[2].isnumeric() else '01'
-    return f'{year}-{month}-{day}'
-
-
-def get_date_max(date:str):
+    if date_in.lstrip('-').isnumeric() and '.' in date_in:
+        # date is a numeric date
+        # can be negative
+        # year-only is ambiguous
+        return float(date_in)
+    # convert to numeric
     # TODO: check month/day value boundaries
-    if not date:
-        return None
-    date_parts = date.split('-', maxsplit=2)
-    year = date_parts[0]
-    month = date_parts[1] if len(date_parts) > 1 and date_parts[1].isnumeric() else '12'
+    # TODO: raise exception for negative ISO dates
+    date_parts = date_in.split('-', maxsplit=2)
+    year = int(date_parts[0])
+    month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 12
     if len(date_parts) == 3 and date_parts[2].isnumeric():
-        day = date_parts[2]
+        day = int(date_parts[2])
     else:
-        month_num = int(month)
-        if month_num in {1,3,5,7,8,10,12}:
-            day = '31'
-        elif month_num == 2:
-            day = '28'
+        if month in {1,3,5,7,8,10,12}:
+            day = 31
+        elif month == 2:
+            day = 28
         else:
-            day = '30'
-    return f'{year}-{month}-{day}'
+            day = 30
+    return date_to_numeric(date(year, month, day))
+
+
+# copied from treetime.utils.numeric_date
+# simplified+cached for speed
+from calendar import isleap
+date_to_numeric_cache = dict()
+def date_to_numeric(d:date):
+    if d not in date_to_numeric_cache:
+        days_in_year = 366 if isleap(d.year) else 365
+        numeric_date = d.year + (d.timetuple().tm_yday-0.5) / days_in_year
+        date_to_numeric_cache[d] = numeric_date
+    return date_to_numeric_cache[d]
