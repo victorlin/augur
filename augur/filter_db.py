@@ -16,8 +16,6 @@ SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
-FILTERED_TABLE_NAME = 'metadata_filtered'
-SUBSAMPLED_TABLE_NAME = 'metadata_subsampled'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
@@ -43,16 +41,14 @@ class FilterDB(abc.ABC):
             self.db_create_date_table()
         exclude_by, include_by = self.construct_filters()
         self.db_create_filter_reason_table(exclude_by, include_by)
-        self.db_create_filtered_table()
-        if self.args.group_by or self.args.subsample_max_sequences:
+        if self.do_subsample:
             self.subsample()
-            self.db_create_output_table(SUBSAMPLED_TABLE_NAME)
-        else:
-            self.db_create_output_table(FILTERED_TABLE_NAME)
+        self.db_create_output_table()
         # TODO: args.output_log
         # TODO: args.output (sequences)
         # TODO: filter_counts
         self.write_outputs()
+        self.write_report()
         self.db_cleanup()
 
     @abc.abstractmethod
@@ -68,6 +64,7 @@ class FilterDB(abc.ABC):
         """Check if there is a date column and if sequences are used."""
         self.has_date_col = self.db_has_date_col()
         self.use_sequences = bool(self.args.sequence_index or (self.args.sequences and not self.args.exclude_all))
+        self.do_subsample = bool(self.args.group_by or self.args.subsample_max_sequences)
 
     @abc.abstractmethod
     def db_has_date_col(self): pass
@@ -228,9 +225,6 @@ class FilterDB(abc.ABC):
     def db_create_filter_reason_table(self, exclude_by:List[str], include_by:List[str]): pass
 
     @abc.abstractmethod
-    def db_create_filtered_table(self): pass
-
-    @abc.abstractmethod
     def db_create_output_table(self, input_table:str): pass
 
     def subsample(self):
@@ -255,7 +249,7 @@ class FilterDB(abc.ABC):
             )
 
         self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
-        self.db_create_subsampled_table(group_by_cols)
+        self.db_update_filter_reason_table_with_subsampling(group_by_cols)
 
     @abc.abstractmethod
     def db_get_counts_per_group(self, group_by_cols:List[str]): pass
@@ -264,7 +258,7 @@ class FilterDB(abc.ABC):
     def db_get_filtered_strains_count(self): pass
 
     @abc.abstractmethod
-    def db_create_subsampled_table(self, group_by_cols:List[str]): pass
+    def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]): pass
 
     def create_priorities_table(self):
         if self.args.priority:
@@ -289,6 +283,68 @@ class FilterDB(abc.ABC):
             self.db_output_strains()
         if self.args.output_metadata:
             self.db_output_metadata()
+
+    @abc.abstractmethod
+    def db_get_total_strains_passed(self): pass
+
+    @abc.abstractmethod
+    def db_get_num_excluded_by_lack_of_metadata(self): pass
+
+    @abc.abstractmethod
+    def db_get_num_metadata_strains(self): pass
+
+    @abc.abstractmethod
+    def db_get_num_excluded_subsamp(self): pass
+
+    def write_report(self):
+        total_strains_passed = self.db_get_total_strains_passed()
+        num_excluded_by_lack_of_metadata = self.db_get_num_excluded_by_lack_of_metadata()
+        num_metadata_strains = self.db_get_num_metadata_strains()
+        num_excluded_subsamp = self.db_get_num_excluded_subsamp()
+        filter_counts = dict() # TODO: filter_kwargs_to_str
+
+        # Calculate the number of strains passed and filtered.
+        total_strains_filtered = num_metadata_strains + num_excluded_by_lack_of_metadata - total_strains_passed
+
+        print(f"{total_strains_filtered} strains were dropped during filtering")
+
+        if num_excluded_by_lack_of_metadata:
+            print(f"\t{num_excluded_by_lack_of_metadata} had no metadata")
+
+        report_template_by_filter_name = {
+            "filter_by_sequence_index": "{count} had no sequence data",
+            "filter_by_exclude_all": "{count} of these were dropped by `--exclude-all`",
+            "filter_by_exclude": "{count} of these were dropped because they were in {exclude_file}",
+            "filter_by_exclude_where": "{count} of these were dropped because of '{exclude_where}'",
+            "filter_by_query": "{count} of these were filtered out by the query: \"{query}\"",
+            "filter_by_ambiguous_date": "{count} of these were dropped because of their ambiguous date in {ambiguity}",
+            "filter_by_date": "{count} of these were dropped because of their date (or lack of date)",
+            "filter_by_sequence_length": "{count} of these were dropped because they were shorter than minimum length of {min_length}bp",
+            "filter_by_non_nucleotide": "{count} of these were dropped because they had non-nucleotide characters",
+            "skip_group_by_with_ambiguous_year": "{count} were dropped during grouping due to ambiguous year information",
+            "skip_group_by_with_ambiguous_month": "{count} were dropped during grouping due to ambiguous month information",
+            "include": "{count} strains were added back because they were in {include_file}",
+            "include_by_include_where": "{count} sequences were added back because of '{include_where}'",
+        }
+        for (filter_name, filter_kwargs), count in filter_counts.items():
+            if filter_kwargs:
+                import json
+                parameters = dict(json.loads(filter_kwargs))
+            else:
+                parameters = {}
+
+            parameters["count"] = count
+            print("\t" + report_template_by_filter_name[filter_name].format(**parameters))
+
+        if self.do_subsample:
+            seed_txt = ", using seed {}".format(self.args.subsample_seed) if self.args.subsample_seed else ""
+            print("\t%i of these were dropped because of subsampling criteria%s" % (num_excluded_subsamp, seed_txt))
+
+        if total_strains_passed == 0:
+            print_err("ERROR: All samples have been dropped! Check filter rules and metadata file format.")
+            return 1
+
+        print(f"{total_strains_passed} strains passed all filters")
 
     @abc.abstractmethod
     def db_output_strains(self): pass

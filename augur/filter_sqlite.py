@@ -17,9 +17,7 @@ PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
-FILTERED_TABLE_NAME = 'metadata_filtered'
 SUBSAMPLE_STRAINS_TABLE_NAME = 'subsample_strains'
-SUBSAMPLED_TABLE_NAME = 'metadata_subsampled'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
@@ -32,6 +30,8 @@ DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
 STRAIN_COL = 'strain'
 PRIORITY_COL = 'priority'
+
+SUBSAMPLE_FILTER_REASON = 'subsampling'
 
 N_JOBS = 4
 
@@ -390,18 +390,14 @@ class FilterSQLite(FilterDB):
             """)
             self.connection.commit()
 
-    def db_create_filtered_table(self):
+    def db_create_output_table(self):
         self.cur.execute(f"""
-            CREATE TABLE {FILTERED_TABLE_NAME} AS
+            CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
             SELECT m.* FROM {METADATA_TABLE_NAME} m
             JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
                 USING ({STRAIN_COL})
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
-        self.db_create_strain_index(FILTERED_TABLE_NAME)
-
-    def db_create_output_table(self, input_table:str):
-        self.cur.execute(f"CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS SELECT * FROM {input_table}")
 
     def db_get_counts_per_group(self, group_by_cols:List[str]):
         self.cur.execute(f"""
@@ -412,10 +408,14 @@ class FilterSQLite(FilterDB):
         return [row[-1] for row in self.cur.fetchall()]
 
     def db_get_filtered_strains_count(self):
-        self.cur.execute(f"SELECT COUNT(*) FROM {FILTERED_TABLE_NAME}")
+        self.cur.execute(f"""
+            SELECT COUNT(*)
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
+        """)
         return self.cur.fetchone()[0]
 
-    def db_create_subsampled_table(self, group_by_cols:List[str]):
+    def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]):
         # create a view for subsampled strains
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
@@ -434,11 +434,17 @@ class FilterSQLite(FilterDB):
         """
         self.cur.execute(f"CREATE TABLE {SUBSAMPLE_STRAINS_TABLE_NAME} AS {query}")
         self.db_create_strain_index(SUBSAMPLE_STRAINS_TABLE_NAME)
-        # use subsample strains to select rows from filtered metadata
-        self.cur.execute(f"""CREATE TABLE {SUBSAMPLED_TABLE_NAME} AS
-            SELECT f.* FROM {FILTERED_TABLE_NAME} f
-            JOIN {SUBSAMPLE_STRAINS_TABLE_NAME} USING ({STRAIN_COL})
+        # update filter reason table
+        self.cur.execute(f"""
+            UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+            SET
+                {EXCLUDE_COL} = TRUE,
+                {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
+            WHERE NOT {EXCLUDE_COL} AND {STRAIN_COL} NOT IN (
+                SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_TABLE_NAME}
+            )
         """)
+        self.connection.commit()
 
     def db_load_priorities_table(self):
         dtype = {
@@ -455,7 +461,8 @@ class FilterSQLite(FilterDB):
         self.cur.execute(f"""
             CREATE TABLE {PRIORITIES_TABLE_NAME} AS
             SELECT {STRAIN_COL}, RANDOM() AS {PRIORITY_COL}
-            FROM {FILTERED_TABLE_NAME}
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
@@ -465,9 +472,11 @@ class FilterSQLite(FilterDB):
         self.cur.execute(f"""
         CREATE VIEW {EXTENDED_VIEW_NAME} AS
             SELECT m.*, d.year, d.month, d.day, p.{PRIORITY_COL}, TRUE AS {DUMMY_COL}
-            FROM {FILTERED_TABLE_NAME} m
-            JOIN {DATE_TABLE_NAME} d ON m.{STRAIN_COL} = d.{STRAIN_COL}
-            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p ON m.{STRAIN_COL} = p.{STRAIN_COL}
+            FROM {METADATA_TABLE_NAME} m
+            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m.{STRAIN_COL} = f.{STRAIN_COL})
+                AND (NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL})
+            JOIN {DATE_TABLE_NAME} d USING ({STRAIN_COL})
+            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ({STRAIN_COL})
         """)
 
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
@@ -487,6 +496,33 @@ class FilterSQLite(FilterDB):
         df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
         df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
         df.to_csv(self.args.output_metadata, sep='\t', index=None)
+
+    def db_get_total_strains_passed(self):
+        self.cur.execute(f"""
+            SELECT COUNT(*)
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
+        """)
+        return self.cur.fetchone()[0]
+
+    def db_get_num_excluded_by_lack_of_metadata(self):
+        # TODO: implement
+        return 0
+
+    def db_get_num_metadata_strains(self):
+        self.cur.execute(f"""
+            SELECT COUNT(*)
+            FROM {METADATA_TABLE_NAME}
+        """)
+        return self.cur.fetchone()[0]
+
+    def db_get_num_excluded_subsamp(self):
+        self.cur.execute(f"""
+            SELECT COUNT(*)
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
+        """)
+        return self.cur.fetchone()[0]
 
     def db_cleanup(self):
         cleanup()
