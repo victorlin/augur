@@ -45,7 +45,6 @@ class FilterDB(abc.ABC):
         self.db_create_output_table()
         # TODO: args.output_log
         # TODO: args.output (sequences)
-        # TODO: filter_counts
         self.write_outputs()
         self.write_report()
         self.db_cleanup()
@@ -113,63 +112,63 @@ class FilterDB(abc.ABC):
         if self.args.include:
             # Collect the union of all given strains to include.
             for include_file in self.args.include:
-                include_by.append((self.force_include_strains.__name__, self.force_include_strains(include_file)))
+                include_by.append((self.force_include_strains, {'include_file': include_file}))
 
         # Add sequences with particular metadata attributes.
         if self.args.include_where:
             for include_where in self.args.include_where:
-                include_by.append((self.force_include_where.__name__, self.force_include_where(include_where)))
+                include_by.append((self.force_include_where, {'include_where': include_where}))
 
         # Exclude all strains by default.
         if self.args.exclude_all:
-            exclude_by.append((self.filter_by_exclude_all.__name__, self.filter_by_exclude_all()))
+            exclude_by.append((self.filter_by_exclude_all, {}))
 
         # Filter by sequence index.
         if self.use_sequences:
-            exclude_by.append((self.filter_by_sequence_index.__name__, self.filter_by_sequence_index()))
+            exclude_by.append((self.filter_by_sequence_index, {}))
 
         # Remove strains explicitly excluded by name.
         if self.args.exclude:
             for exclude_file in self.args.exclude:
-                exclude_by.append((self.filter_by_exclude_strains.__name__, self.filter_by_exclude_strains(exclude_file)))
+                exclude_by.append((self.filter_by_exclude_strains, {'exclude_file': exclude_file}))
 
         # Exclude strain my metadata field like 'host=camel'.
         if self.args.exclude_where:
             for exclude_where in self.args.exclude_where:
-                exclude_by.append((self.filter_by_exclude_where.__name__, self.filter_by_exclude_where(exclude_where)))
+                exclude_by.append((self.filter_by_exclude_where, {'exclude_where': exclude_where}))
 
         # Exclude strains by metadata, using SQL querying.
         if self.args.query:
-            exclude_by.append((self.filter_by_query.__name__, self.filter_by_query(self.args.query)))
+            exclude_by.append((self.filter_by_query, {'query': self.args.query}))
 
         # TODO: check if no date column but filters require it
         if self.has_date_col:
             # Filter by ambiguous dates.
             if self.args.exclude_ambiguous_dates_by:
-                exclude_by.append((self.filter_by_ambiguous_date.__name__, self.filter_by_ambiguous_date(self.args.exclude_ambiguous_dates_by)))
+                exclude_by.append((self.filter_by_ambiguous_date, {'ambiguity': self.args.exclude_ambiguous_dates_by}))
 
             # Filter by date.
             if self.args.min_date:
-                exclude_by.append((self.filter_by_min_date.__name__, self.filter_by_min_date(self.args.min_date)))
+                exclude_by.append((self.filter_by_min_date, {'min_date': self.args.min_date}))
             if self.args.max_date:
-                exclude_by.append((self.filter_by_max_date.__name__, self.filter_by_max_date(self.args.max_date)))
+                exclude_by.append((self.filter_by_max_date, {'max_date': self.args.max_date}))
 
         # Filter by sequence length.
         if self.args.min_length:
             if is_vcf(self.args.sequences):
                 print("WARNING: Cannot use min_length for VCF files. Ignoring...")
             else:
-                exclude_by.append((self.filter_by_sequence_length.__name__, self.filter_by_sequence_length(self.args.min_length)))
+                exclude_by.append((self.filter_by_sequence_length, {'min_length': self.args.min_length}))
 
         if self.args.group_by:
             if "month" in self.args.group_by:
-                exclude_by.append((self.skip_group_by_with_ambiguous_month.__name__, self.skip_group_by_with_ambiguous_month()))
+                exclude_by.append((self.skip_group_by_with_ambiguous_month, {}))
             if "year" in self.args.group_by:
-                exclude_by.append((self.skip_group_by_with_ambiguous_year.__name__, self.skip_group_by_with_ambiguous_year()))
+                exclude_by.append((self.skip_group_by_with_ambiguous_year, {}))
 
         # Exclude sequences with non-nucleotide characters.
         if self.args.non_nucleotide:
-            exclude_by.append((self.filter_by_non_nucleotide.__name__, self.filter_by_non_nucleotide()))
+            exclude_by.append((self.filter_by_non_nucleotide, {}))
 
         return exclude_by, include_by
 
@@ -295,12 +294,15 @@ class FilterDB(abc.ABC):
     @abc.abstractmethod
     def db_get_num_excluded_subsamp(self): pass
 
+    @abc.abstractmethod
+    def db_get_filter_counts(self) -> list: pass
+
     def write_report(self):
         total_strains_passed = self.db_get_total_strains_passed()
         num_excluded_by_lack_of_metadata = self.db_get_num_excluded_by_lack_of_metadata()
         num_metadata_strains = self.db_get_num_metadata_strains()
         num_excluded_subsamp = self.db_get_num_excluded_subsamp()
-        filter_counts = dict() # TODO: filter_kwargs_to_str
+        filter_counts = self.db_get_filter_counts()
 
         # Calculate the number of strains passed and filtered.
         total_strains_filtered = num_metadata_strains + num_excluded_by_lack_of_metadata - total_strains_passed
@@ -313,7 +315,7 @@ class FilterDB(abc.ABC):
         report_template_by_filter_name = {
             "filter_by_sequence_index": "{count} had no sequence data",
             "filter_by_exclude_all": "{count} of these were dropped by `--exclude-all`",
-            "filter_by_exclude": "{count} of these were dropped because they were in {exclude_file}",
+            "filter_by_exclude_strains": "{count} of these were dropped because they were in {exclude_file}",
             "filter_by_exclude_where": "{count} of these were dropped because of '{exclude_where}'",
             "filter_by_query": "{count} of these were filtered out by the query: \"{query}\"",
             "filter_by_ambiguous_date": "{count} of these were dropped because of their ambiguous date in {ambiguity}",
@@ -322,10 +324,10 @@ class FilterDB(abc.ABC):
             "filter_by_non_nucleotide": "{count} of these were dropped because they had non-nucleotide characters",
             "skip_group_by_with_ambiguous_year": "{count} were dropped during grouping due to ambiguous year information",
             "skip_group_by_with_ambiguous_month": "{count} were dropped during grouping due to ambiguous month information",
-            "include": "{count} strains were added back because they were in {include_file}",
-            "include_by_include_where": "{count} sequences were added back because of '{include_where}'",
+            "force_include_strains": "{count} strains were added back because they were in {include_file}",
+            "force_include_where": "{count} sequences were added back because of '{include_where}'",
         }
-        for (filter_name, filter_kwargs), count in filter_counts.items():
+        for filter_name, filter_kwargs, count in filter_counts:
             if filter_kwargs:
                 import json
                 parameters = dict(json.loads(filter_kwargs))

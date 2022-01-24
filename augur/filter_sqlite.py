@@ -9,6 +9,7 @@ from augur.filter_db import FilterDB
 from .io_sqlite import load_tsv, cleanup, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
 from .utils import read_strains
 from .filter_subsample_helpers import get_sizes_per_group
+from .filter_output_helpers import filter_kwargs_to_str
 
 
 METADATA_TABLE_NAME = 'metadata'
@@ -23,6 +24,7 @@ EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 
 DEFAULT_DATE_COL = 'date'
 FILTER_REASON_COL = 'filter_reason'
+FILTER_REASON_KWARGS_COL = 'kwargs'
 EXCLUDE_COL = 'exclude'
 INCLUDE_COL = 'force_include'
 DUMMY_COL = 'dummy'
@@ -360,7 +362,8 @@ class FilterSQLite(FilterDB):
                 {STRAIN_COL},
                 FALSE as {EXCLUDE_COL},
                 FALSE as {INCLUDE_COL},
-                NULL as {FILTER_REASON_COL}
+                NULL as {FILTER_REASON_COL},
+                NULL as {FILTER_REASON_KWARGS_COL}
             FROM {METADATA_TABLE_NAME}
         """)
         self.db_create_strain_index(METADATA_FILTER_REASON_TABLE_NAME)
@@ -368,23 +371,31 @@ class FilterSQLite(FilterDB):
         self.db_apply_force_inclusions(include_by)
 
     def db_apply_exclusions(self, exclude_by):
-        for exclude_rule_name, where_filter in exclude_by:
+        for exclude_function, kwargs in exclude_by:
+            where_filter = exclude_function(**kwargs)
+            kwargs_str = filter_kwargs_to_str(kwargs)
+            kwargs_str = kwargs_str.replace('\'', '\'\'') # escape single quote for SQLite
             self.cur.execute(f"""
                 UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
                 SET
                     {EXCLUDE_COL} = TRUE,
-                    {FILTER_REASON_COL} = '{exclude_rule_name}'
+                    {FILTER_REASON_COL} = '{exclude_function.__name__}',
+                    {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
                 WHERE {where_filter}
             """)
             self.connection.commit()
 
     def db_apply_force_inclusions(self, include_by):
-        for include_rule_name, where_filter in include_by:
+        for include_function, kwargs in include_by:
+            where_filter = include_function(**kwargs)
+            kwargs_str = filter_kwargs_to_str(kwargs)
+            kwargs_str = kwargs_str.replace('\'', '\'\'') # escape single quote for SQLite
             self.cur.execute(f"""
                 UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
                 SET
                     {INCLUDE_COL} = TRUE,
-                    {FILTER_REASON_COL} = '{include_rule_name}'
+                    {FILTER_REASON_COL} = '{include_function.__name__}',
+                    {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
                 WHERE {where_filter}
             """)
             self.connection.commit()
@@ -520,6 +531,16 @@ class FilterSQLite(FilterDB):
             WHERE {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
         """)
         return self.cur.fetchone()[0]
+
+    def db_get_filter_counts(self):
+        self.cur.execute(f"""
+            SELECT {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}, COUNT(*)
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} IS NOT NULL
+                AND {FILTER_REASON_COL} != '{SUBSAMPLE_FILTER_REASON}'
+            GROUP BY {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
+        """)
+        return self.cur.fetchall()
 
     def db_cleanup(self):
         cleanup()
