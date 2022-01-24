@@ -41,9 +41,9 @@ class FilterDB(abc.ABC):
         self.handle_sequences()
         if self.has_date_col:
             self.db_create_date_table()
-        exclude_by, include_by = self.construct_filters() # keep abstract filtering logic in construct_filters
-            # or have a class method per filter type?
-        self.db_create_filtered_view(exclude_by, include_by)
+        exclude_by, include_by = self.construct_filters()
+        self.db_create_filter_reason_table(exclude_by, include_by)
+        self.db_create_filtered_table()
         if self.args.group_by or self.args.subsample_max_sequences:
             self.subsample()
             self.db_create_output_table(SUBSAMPLED_TABLE_NAME)
@@ -210,10 +210,10 @@ class FilterDB(abc.ABC):
     def force_include_where(self, include_where): pass
 
     @abc.abstractmethod
-    def db_create_filtered_view(self, exclude_by:List[str], include_by:List[str]): pass
+    def db_create_filter_reason_table(self, exclude_by:List[str], include_by:List[str]): pass
 
     @abc.abstractmethod
-    def db_apply_filters(self, exclude_by:List[str], include_by:List[str]): pass
+    def db_create_filtered_table(self): pass
 
     @abc.abstractmethod
     def db_create_output_table(self, input_table:str): pass

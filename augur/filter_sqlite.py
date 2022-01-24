@@ -340,10 +340,7 @@ class FilterSQLite(FilterDB):
         )
         """
 
-    def db_create_filtered_view(self, exclude_by:list, include_by:list):
-        self.db_apply_filters(exclude_by, include_by)
-
-    def db_apply_filters(self, exclude_by:list, include_by:list):
+    def db_create_filter_reason_table(self, exclude_by:list, include_by:list):
         """Apply a list of filters to exclude or force-include records from the given
         metadata and return the strains to keep, to exclude, and to force include.
 
@@ -358,12 +355,6 @@ class FilterSQLite(FilterDB):
         DuckDBPyRelation
             relation for filtered metadata
         """
-        self.db_create_filter_reason_table()
-        self.db_apply_exclusions(exclude_by)
-        self.db_apply_force_inclusions(include_by)
-        self.db_create_filtered_table()
-
-    def db_create_filter_reason_table(self):
         self.cur.execute(f"""
             CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
             SELECT
@@ -374,6 +365,8 @@ class FilterSQLite(FilterDB):
             FROM {METADATA_TABLE_NAME}
         """)
         self.db_create_strain_index(METADATA_FILTER_REASON_TABLE_NAME)
+        self.db_apply_exclusions(exclude_by)
+        self.db_apply_force_inclusions(include_by)
 
     def db_apply_exclusions(self, exclude_by):
         for exclude_rule_name, where_filter in exclude_by:
