@@ -146,6 +146,7 @@ class FilterDB(abc.ABC):
         if self.args.query:
             exclude_by.append((self.filter_by_query.__name__, self.filter_by_query(self.args.query)))
 
+        # TODO: check if no date column but filters require it
         if self.has_date_col:
             # Filter by ambiguous dates.
             if self.args.exclude_ambiguous_dates_by:
@@ -163,6 +164,12 @@ class FilterDB(abc.ABC):
                 print("WARNING: Cannot use min_length for VCF files. Ignoring...")
             else:
                 exclude_by.append((self.exclude_by_sequence_length.__name__, self.exclude_by_sequence_length(self.args.min_length)))
+
+        if self.args.group_by:
+            if "month" in self.args.group_by:
+                exclude_by.append((self.skip_group_by_with_ambiguous_month.__name__, self.skip_group_by_with_ambiguous_month()))
+            if "year" in self.args.group_by:
+                exclude_by.append((self.skip_group_by_with_ambiguous_year.__name__, self.skip_group_by_with_ambiguous_year()))
 
         # Exclude sequences with non-nucleotide characters.
         if self.args.non_nucleotide:
@@ -208,6 +215,14 @@ class FilterDB(abc.ABC):
 
     @abc.abstractmethod
     def force_include_where(self, include_where): pass
+
+    def skip_group_by_with_ambiguous_month(self):
+        """Alias to exclude_by_ambiguous_date(ambiguity="month") with a specific function name for filter reason."""
+        return self.exclude_by_ambiguous_date(ambiguity="month")
+
+    def skip_group_by_with_ambiguous_year(self):
+        """Alias to exclude_by_ambiguous_date(ambiguity="year") with a specific function name for filter reason."""
+        return self.exclude_by_ambiguous_date(ambiguity="year")
 
     @abc.abstractmethod
     def db_create_filter_reason_table(self, exclude_by:List[str], include_by:List[str]): pass
