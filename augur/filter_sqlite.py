@@ -17,7 +17,6 @@ PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
-SUBSAMPLE_STRAINS_TABLE_NAME = 'subsample_strains'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
@@ -416,11 +415,11 @@ class FilterSQLite(FilterDB):
         return self.cur.fetchone()[0]
 
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]):
-        # create a view for subsampled strains
+        # create a SQL query for strains to subsample for
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
             where_conditions.append(f'{col} IS NOT NULL')
-        query = f"""
+        query_for_subsampled_strains = f"""
             SELECT {STRAIN_COL}
             FROM (
                 SELECT {STRAIN_COL}, {','.join(group_by_cols)}, ROW_NUMBER() OVER (
@@ -432,8 +431,6 @@ class FilterSQLite(FilterDB):
             JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
         """
-        self.cur.execute(f"CREATE TABLE {SUBSAMPLE_STRAINS_TABLE_NAME} AS {query}")
-        self.db_create_strain_index(SUBSAMPLE_STRAINS_TABLE_NAME)
         # update filter reason table
         self.cur.execute(f"""
             UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
@@ -441,7 +438,7 @@ class FilterSQLite(FilterDB):
                 {EXCLUDE_COL} = TRUE,
                 {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
             WHERE NOT {EXCLUDE_COL} AND {STRAIN_COL} NOT IN (
-                SELECT {STRAIN_COL} FROM {SUBSAMPLE_STRAINS_TABLE_NAME}
+                {query_for_subsampled_strains}
             )
         """)
         self.connection.commit()

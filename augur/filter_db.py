@@ -19,7 +19,6 @@ GROUP_SIZES_TABLE_NAME = 'group_sizes'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
-SUBSAMPLE_STRAINS_VIEW_NAME = 'subsample_strains'
 
 DEFAULT_DATE_COL = 'date'
 DUMMY_COL = 'dummy'
