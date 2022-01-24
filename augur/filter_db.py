@@ -130,17 +130,17 @@ class FilterDB(abc.ABC):
 
         # Filter by sequence index.
         if self.use_sequences:
-            exclude_by.append((self.exclude_by_sequence_index.__name__, self.exclude_by_sequence_index()))
+            exclude_by.append((self.filter_by_sequence_index.__name__, self.filter_by_sequence_index()))
 
         # Remove strains explicitly excluded by name.
         if self.args.exclude:
             for exclude_file in self.args.exclude:
-                exclude_by.append((self.filter_exclude_strains.__name__, self.filter_exclude_strains(exclude_file)))
+                exclude_by.append((self.filter_by_exclude_strains.__name__, self.filter_by_exclude_strains(exclude_file)))
 
         # Exclude strain my metadata field like 'host=camel'.
         if self.args.exclude_where:
             for exclude_where in self.args.exclude_where:
-                exclude_by.append((self.filter_exclude_where.__name__, self.filter_exclude_where(exclude_where)))
+                exclude_by.append((self.filter_by_exclude_where.__name__, self.filter_by_exclude_where(exclude_where)))
 
         # Exclude strains by metadata, using SQL querying.
         if self.args.query:
@@ -150,20 +150,20 @@ class FilterDB(abc.ABC):
         if self.has_date_col:
             # Filter by ambiguous dates.
             if self.args.exclude_ambiguous_dates_by:
-                exclude_by.append((self.exclude_by_ambiguous_date.__name__, self.exclude_by_ambiguous_date(self.args.exclude_ambiguous_dates_by)))
+                exclude_by.append((self.filter_by_ambiguous_date.__name__, self.filter_by_ambiguous_date(self.args.exclude_ambiguous_dates_by)))
 
             # Filter by date.
             if self.args.min_date:
-                exclude_by.append((self.exclude_by_min_date.__name__, self.exclude_by_min_date(self.args.min_date)))
+                exclude_by.append((self.filter_by_min_date.__name__, self.filter_by_min_date(self.args.min_date)))
             if self.args.max_date:
-                exclude_by.append((self.exclude_by_max_date.__name__, self.exclude_by_max_date(self.args.max_date)))
+                exclude_by.append((self.filter_by_max_date.__name__, self.filter_by_max_date(self.args.max_date)))
 
         # Filter by sequence length.
         if self.args.min_length:
             if is_vcf(self.args.sequences):
                 print("WARNING: Cannot use min_length for VCF files. Ignoring...")
             else:
-                exclude_by.append((self.exclude_by_sequence_length.__name__, self.exclude_by_sequence_length(self.args.min_length)))
+                exclude_by.append((self.filter_by_sequence_length.__name__, self.filter_by_sequence_length(self.args.min_length)))
 
         if self.args.group_by:
             if "month" in self.args.group_by:
@@ -173,7 +173,7 @@ class FilterDB(abc.ABC):
 
         # Exclude sequences with non-nucleotide characters.
         if self.args.non_nucleotide:
-            exclude_by.append((self.exclude_by_non_nucleotide.__name__, self.exclude_by_non_nucleotide()))
+            exclude_by.append((self.filter_by_non_nucleotide.__name__, self.filter_by_non_nucleotide()))
 
         return exclude_by, include_by
 
@@ -181,34 +181,34 @@ class FilterDB(abc.ABC):
     def filter_by_exclude_all(self): pass
 
     @abc.abstractmethod
-    def filter_exclude_strains(self, exclude_file): pass
+    def filter_by_exclude_strains(self, exclude_file): pass
 
     @abc.abstractmethod
     def parse_filter_query(self, query): pass
 
     @abc.abstractmethod
-    def filter_exclude_where(self, exclude_where): pass
+    def filter_by_exclude_where(self, exclude_where): pass
 
     @abc.abstractmethod
     def filter_by_query(self, query): pass
 
     @abc.abstractmethod
-    def exclude_by_ambiguous_date(self, ambiguity="any"): pass
+    def filter_by_ambiguous_date(self, ambiguity="any"): pass
 
     @abc.abstractmethod
-    def exclude_by_min_date(self, min_date): pass
+    def filter_by_min_date(self, min_date): pass
 
     @abc.abstractmethod
-    def exclude_by_max_date(self, max_date): pass
+    def filter_by_max_date(self, max_date): pass
 
     @abc.abstractmethod
-    def exclude_by_sequence_index(self): pass
+    def filter_by_sequence_index(self): pass
 
     @abc.abstractmethod
-    def exclude_by_sequence_length(self, min_length=0): pass
+    def filter_by_sequence_length(self, min_length=0): pass
 
     @abc.abstractmethod
-    def exclude_by_non_nucleotide(self): pass
+    def filter_by_non_nucleotide(self): pass
 
     @abc.abstractmethod
     def force_include_strains(self, include_file): pass
@@ -217,12 +217,12 @@ class FilterDB(abc.ABC):
     def force_include_where(self, include_where): pass
 
     def skip_group_by_with_ambiguous_month(self):
-        """Alias to exclude_by_ambiguous_date(ambiguity="month") with a specific function name for filter reason."""
-        return self.exclude_by_ambiguous_date(ambiguity="month")
+        """Alias to filter_by_ambiguous_date(ambiguity="month") with a specific function name for filter reason."""
+        return self.filter_by_ambiguous_date(ambiguity="month")
 
     def skip_group_by_with_ambiguous_year(self):
-        """Alias to exclude_by_ambiguous_date(ambiguity="year") with a specific function name for filter reason."""
-        return self.exclude_by_ambiguous_date(ambiguity="year")
+        """Alias to filter_by_ambiguous_date(ambiguity="year") with a specific function name for filter reason."""
+        return self.filter_by_ambiguous_date(ambiguity="year")
 
     @abc.abstractmethod
     def db_create_filter_reason_table(self, exclude_by:List[str], include_by:List[str]): pass

@@ -92,7 +92,7 @@ class FilterDuckDB(FilterDB):
         """
         return 'False'
 
-    def filter_exclude_strains(self, exclude_file):
+    def filter_by_exclude_strains(self, exclude_file):
         """Exclude the given set of strains from the given metadata.
 
         Parameters
@@ -140,7 +140,7 @@ class FilterDuckDB(FilterDB):
 
         return column, op, value
 
-    def filter_exclude_where(self, exclude_where):
+    def filter_by_exclude_where(self, exclude_where):
         """Exclude all strains from the given metadata that match the given exclusion query.
 
         Unlike pandas query syntax, exclusion queries should follow the pattern of
@@ -162,7 +162,7 @@ class FilterDuckDB(FilterDB):
         op = '=' if op == '!=' else '!=' # negate for exclude
         return f"{column} {op} '{value}'"
 
-    def exclude_by_ambiguous_date(self, ambiguity="any"):
+    def filter_by_ambiguous_date(self, ambiguity="any"):
         """Filter metadata in the given pandas DataFrame where values in the given date
         column have a given level of ambiguity.
 
@@ -198,7 +198,7 @@ class FilterDuckDB(FilterDB):
                 WHERE day IS NOT NULL AND month IS NOT NULL AND year IS NOT NULL
             )"""
 
-    def exclude_by_min_date(self, min_date):
+    def filter_by_min_date(self, min_date):
         """Filter metadata by minimum date.
 
         Parameters
@@ -217,7 +217,7 @@ class FilterDuckDB(FilterDB):
             WHERE date_min >= '{min_date}'
         )"""
 
-    def exclude_by_max_date(self, max_date):
+    def filter_by_max_date(self, max_date):
         """Filter metadata by maximum date.
 
         Parameters
@@ -236,7 +236,7 @@ class FilterDuckDB(FilterDB):
             WHERE date_max <= '{max_date}'
         )"""
 
-    def exclude_by_sequence_index(self):
+    def filter_by_sequence_index(self):
         """Filter metadata by presence of corresponding entries in a given sequence
         index. This filter effectively intersects the strain ids in the metadata and
         sequence index.
@@ -249,7 +249,7 @@ class FilterDuckDB(FilterDB):
         # TODO: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
         return f"{STRAIN_COL} IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
 
-    def exclude_by_sequence_length(self, min_length=0):
+    def filter_by_sequence_length(self, min_length=0):
         """Filter metadata by sequence length from a given sequence index.
 
         Parameters
@@ -268,7 +268,7 @@ class FilterDuckDB(FilterDB):
             WHERE A+C+G+T > {min_length}
         )"""
 
-    def exclude_by_non_nucleotide(self):
+    def filter_by_non_nucleotide(self):
         """Filter metadata for strains with invalid nucleotide content.
 
         Returns
