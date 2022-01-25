@@ -600,6 +600,10 @@ def get_day(date_in:str):
         return None
 
 
+# TODO: DateDisambiguator parity
+# assert_only_less_significant_uncertainty
+# max_date = min(max_date, datetime.date.today())
+
 def get_date_min(date_in:str):
     if not date_in:
         return None
@@ -612,7 +616,7 @@ def get_date_min(date_in:str):
     # TODO: check month/day value boundaries
     # TODO: raise exception for negative ISO dates
     date_parts = date_in.split('-', maxsplit=2)
-    year = int(date_parts[0])
+    year = int(date_parts[0].replace('X', '0'))
     month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
     day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
     return date_to_numeric(date(year, month, day))
@@ -630,7 +634,7 @@ def get_date_max(date_in:str):
     # TODO: check month/day value boundaries
     # TODO: raise exception for negative ISO dates
     date_parts = date_in.split('-', maxsplit=2)
-    year = int(date_parts[0])
+    year = int(date_parts[0].replace('X', '9'))
     month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 12
     if len(date_parts) == 3 and date_parts[2].isnumeric():
         day = int(date_parts[2])
