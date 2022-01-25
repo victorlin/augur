@@ -23,7 +23,7 @@ OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 
 DEFAULT_DATE_COL = 'date'
-FILTER_REASON_COL = 'filter_reason'
+FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
 EXCLUDE_COL = 'exclude'
 INCLUDE_COL = 'force_include'
@@ -504,6 +504,14 @@ class FilterSQLite(FilterDB):
         df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
         df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
         df.to_csv(self.args.output_metadata, sep='\t', index=None)
+
+    def db_output_log(self):
+        df = pd.read_sql_query(f"""
+                SELECT {STRAIN_COL}, {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
+                FROM {METADATA_FILTER_REASON_TABLE_NAME}
+                WHERE {FILTER_REASON_COL} IS NOT NULL
+            """, self.connection)
+        df.to_csv(self.args.output_log, sep='\t', index=None)
 
     def db_get_total_strains_passed(self):
         self.cur.execute(f"""

@@ -43,7 +43,6 @@ class FilterDB(abc.ABC):
         if self.do_subsample:
             self.subsample()
         self.db_create_output_table()
-        # TODO: args.output_log
         # TODO: args.output (sequences)
         self.write_outputs()
         self.write_report()
@@ -281,6 +280,8 @@ class FilterDB(abc.ABC):
             self.db_output_strains()
         if self.args.output_metadata:
             self.db_output_metadata()
+        if self.args.output_log:
+            self.db_output_log()
 
     @abc.abstractmethod
     def db_get_total_strains_passed(self): pass
@@ -352,6 +353,9 @@ class FilterDB(abc.ABC):
 
     @abc.abstractmethod
     def db_output_metadata(self): pass
+
+    @abc.abstractmethod
+    def db_output_log(self): pass
 
     @abc.abstractmethod
     def db_cleanup(self): pass
