@@ -1,5 +1,6 @@
 import re
 from typing import List
+import numpy as np
 import pandas as pd
 import sqlite3
 import argparse
@@ -472,13 +473,15 @@ class FilterSQLite(FilterDB):
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_generate_priorities_table(self, seed:int=None):
-        # TODO: seed... might not be possible https://stackoverflow.com/a/24394275
-        self.cur.execute(f"""
-            CREATE TABLE {PRIORITIES_TABLE_NAME} AS
-            SELECT {STRAIN_COL}, RANDOM() AS {PRIORITY_COL}
-            FROM {METADATA_FILTER_REASON_TABLE_NAME}
-            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
-        """)
+        # use pandas/numpy since random seeding is not possible with SQLite https://stackoverflow.com/a/24394275
+        df_priority = pd.read_sql(f"""
+                SELECT {STRAIN_COL}
+                FROM {METADATA_FILTER_REASON_TABLE_NAME}
+                WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
+            """, self.connection)
+        rng = np.random.default_rng(seed)
+        df_priority[PRIORITY_COL] = rng.random(len(df_priority))
+        df_priority.to_sql(PRIORITIES_TABLE_NAME, self.connection, index=False)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_create_extended_filtered_metadata_view(self):
