@@ -280,19 +280,13 @@ class FilterDB(abc.ABC):
             self.db_output_log()
 
     @abc.abstractmethod
-    def db_get_total_strains_passed(self): pass
+    def db_output_strains(self): pass
 
     @abc.abstractmethod
-    def db_get_num_excluded_by_lack_of_metadata(self): pass
+    def db_output_metadata(self): pass
 
     @abc.abstractmethod
-    def db_get_num_metadata_strains(self): pass
-
-    @abc.abstractmethod
-    def db_get_num_excluded_subsamp(self): pass
-
-    @abc.abstractmethod
-    def db_get_filter_counts(self) -> list: pass
+    def db_output_log(self): pass
 
     def write_report(self):
         total_strains_passed = self.db_get_total_strains_passed()
@@ -345,13 +339,19 @@ class FilterDB(abc.ABC):
         print(f"{total_strains_passed} strains passed all filters")
 
     @abc.abstractmethod
-    def db_output_strains(self): pass
+    def db_get_total_strains_passed(self): pass
 
     @abc.abstractmethod
-    def db_output_metadata(self): pass
+    def db_get_num_excluded_by_lack_of_metadata(self): pass
 
     @abc.abstractmethod
-    def db_output_log(self): pass
+    def db_get_num_metadata_strains(self): pass
+
+    @abc.abstractmethod
+    def db_get_num_excluded_subsamp(self): pass
+
+    @abc.abstractmethod
+    def db_get_filter_counts(self) -> list: pass
 
     @abc.abstractmethod
     def db_cleanup(self): pass
