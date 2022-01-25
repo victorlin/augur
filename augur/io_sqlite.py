@@ -35,4 +35,7 @@ def chunk_to_sql(chunk:pd.DataFrame, table_name:str):
 
 
 def cleanup():
-    os.remove(DEFAULT_DB_FILE)
+    try:
+        os.remove(DEFAULT_DB_FILE)
+    except FileNotFoundError:
+        pass

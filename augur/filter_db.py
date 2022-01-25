@@ -18,6 +18,7 @@ class FilterDB(abc.ABC):
         self.args = args
 
     def run(self):
+        self.db_cleanup()
         self.db_connect()
         self.db_load_metadata()
         self.add_attributes()
