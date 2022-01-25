@@ -1,8 +1,6 @@
 import abc
 import os
 from typing import List
-import numpy as np
-import pandas as pd
 import sys
 from tempfile import NamedTemporaryFile
 import argparse
@@ -12,20 +10,7 @@ from .utils import is_vcf
 from .filter_subsample_helpers import calculate_sequences_per_group, TooManyGroupsError
 
 
-METADATA_TABLE_NAME = 'metadata'
-SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
-PRIORITIES_TABLE_NAME = 'priorities'
-DATE_TABLE_NAME = 'metadata_date_expanded'
-GROUP_SIZES_TABLE_NAME = 'group_sizes'
-OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
-
-EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
-
-DEFAULT_DATE_COL = 'date'
 DUMMY_COL = 'dummy'
-GROUP_SIZE_COL = 'size'
-STRAIN_COL = 'strain'
-PRIORITY_COL = 'priority'
 
 
 class FilterDB(abc.ABC):
@@ -370,59 +355,3 @@ class FilterDB(abc.ABC):
 
     @abc.abstractmethod
     def db_cleanup(self): pass
-
-def populate_date_cols(df:pd.DataFrame):
-    if df.empty:
-        return df  # sometimes duckdb makes empty passes
-    df_date_parts = get_date_parts(df)
-    for col in df_date_parts.columns:
-        df[col] = df_date_parts[col]
-    return df
-
-
-def get_date_parts(df:pd.DataFrame) -> pd.DataFrame:
-    """Expand the date column of a DataFrame to minimum and maximum date (ISO 8601 format) based on potential ambiguity.
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        DataFrame containing date column.
-    Returns
-    -------
-    pandas.DataFrame :
-        The input metadata with expanded date columns.
-    """
-    # TODO: np.where to convert numerical dates
-    # TODO: BC dates
-    # replace date with year/month/day as nullable ints
-    date_cols = ['year', 'month', 'day']
-    df_date_parts = df[DEFAULT_DATE_COL].str.split('-', n=2, expand=True)
-    df_date_parts = df_date_parts.set_axis(date_cols[:len(df_date_parts.columns)], axis=1)
-    missing_date_cols = set(date_cols) - set(df_date_parts.columns)
-    for col in missing_date_cols:
-        df_date_parts[col] = pd.NA
-    for col in date_cols:
-        df_date_parts[col] = pd.to_numeric(df_date_parts[col], errors='coerce').astype(pd.Int64Dtype())
-    year_str = df_date_parts['year'].astype(str)
-    min_month = df_date_parts['month'].fillna(1).astype(str).str.zfill(2)
-    min_day = df_date_parts['day'].fillna(1).astype(str).str.zfill(2)
-    # set max month=12 if missing
-    max_month = df_date_parts['month'].fillna(12)
-    # set max day based on max month
-    max_day_na_fill = np.where(
-        max_month.isin([1,3,5,7,8,10,12]), 31,
-        np.where(
-            max_month.eq(2), 28,
-            30
-        )
-    )
-    max_day = df_date_parts['day'].fillna(pd.Series(max_day_na_fill)).astype(str).str.zfill(2)
-    max_month = max_month.astype(str).str.zfill(2)
-    df_date_parts['date_min'] = np.where(
-        df_date_parts['year'].notna(),
-        year_str.str.cat([min_month, min_day], sep="-"),
-        None)
-    df_date_parts['date_max'] = np.where(
-        df_date_parts['year'].notna(),
-        year_str.str.cat([max_month, max_day], sep="-"),
-        None)
-    return df_date_parts
