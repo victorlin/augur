@@ -350,7 +350,7 @@ Confirm that filtering omits strains without metadata or sequences.
 The input sequences are missing one strain that is in the metadata.
 The metadata are missing one strain that has a sequence.
 The list of strains to include has one strain with no metadata/sequence and one strain with information that would have been filtered by country.
-The query initially filters 3 strains from Colombia, one of which is added back by the include.
+There are 3 strains from Colombia. One is force-included, another is dropped with non-nucleotide characters, and the third is dropped by the exclusion query.
 
   $ ${AUGUR} filter \
   >  --sequence-index filter/sequence_index.tsv \
@@ -363,8 +363,9 @@ The query initially filters 3 strains from Colombia, one of which is added back 
   >  --output-log "$TMP/filtered_log.tsv"
   4 strains were dropped during filtering
   \t1 had no metadata (esc)
+  \t1 of these were dropped because they had non-nucleotide characters (esc)
+  \t1 of these were filtered out by the query: "country != 'Colombia'" (esc)
   \t1 had no sequence data (esc)
-  \t3 of these were filtered out by the query: "country != 'Colombia'" (esc)
   \t1 strains were added back because they were in filter/include.txt (esc)
   9 strains passed all filters
 
