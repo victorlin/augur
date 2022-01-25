@@ -31,7 +31,9 @@ class FilterDB(abc.ABC):
             self.subsample()
         self.db_create_output_table()
         self.write_outputs()
-        self.write_report()
+        exit_code = self.write_report()
+        if exit_code == 1:
+            return 1
         self.db_cleanup()
 
     @abc.abstractmethod

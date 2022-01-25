@@ -162,7 +162,7 @@ def run(args):
         return 1
 
     filter = FilterSQLite(args)
-    filter.run()
+    return filter.run()
 
 
 def _filename_gz(filename):
