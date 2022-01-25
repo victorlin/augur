@@ -3,12 +3,13 @@ import os
 from typing import List
 import numpy as np
 import pandas as pd
+import sys
 from tempfile import NamedTemporaryFile
 import argparse
 from .index import index_sequences, index_vcf
 from .io import print_err
 from .utils import is_vcf
-from .filter_subsample_helpers import calculate_sequences_per_group
+from .filter_subsample_helpers import calculate_sequences_per_group, TooManyGroupsError
 
 
 METADATA_TABLE_NAME = 'metadata'
@@ -239,11 +240,21 @@ class FilterDB(abc.ABC):
                 # might not be needed
                 counts_per_group = [self.db_get_filtered_strains_count()]
 
-            sequences_per_group, probabilistic_used = calculate_sequences_per_group(
-                self.args.subsample_max_sequences,
-                counts_per_group,
-                allow_probabilistic=self.args.probabilistic_sampling
-            )
+            try:
+                sequences_per_group, probabilistic_used = calculate_sequences_per_group(
+                    self.args.subsample_max_sequences,
+                    counts_per_group,
+                    allow_probabilistic=self.args.probabilistic_sampling
+                )
+            except TooManyGroupsError as error:
+                print_err(f"ERROR: {error}")
+                sys.exit(1)
+
+            if (probabilistic_used):
+                print(f"Sampling probabilistically at {sequences_per_group:0.4f} sequences per group, meaning it is possible to have more than the requested maximum of {self.args.subsample_max_sequences} sequences after filtering.")
+            else:
+                print(f"Sampling at {sequences_per_group} per group.")
+
 
         self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
         self.db_update_filter_reason_table_with_subsampling(group_by_cols)
