@@ -5,7 +5,7 @@ import sys
 from tempfile import NamedTemporaryFile
 import argparse
 from .index import index_sequences, index_vcf
-from .io import print_err
+from .io import open_file, print_err, read_sequences, write_sequences, write_vcf
 from .utils import is_vcf
 from .filter_subsample_helpers import calculate_sequences_per_group, TooManyGroupsError
 
@@ -29,7 +29,6 @@ class FilterDB(abc.ABC):
         if self.do_subsample:
             self.subsample()
         self.db_create_output_table()
-        # TODO: args.output (sequences)
         self.write_outputs()
         self.write_report()
         self.db_cleanup()
@@ -85,6 +84,11 @@ class FilterDB(abc.ABC):
             # Remove temporary index file, if it exists.
             if build_sequence_index:
                 os.unlink(sequence_index_path)
+
+            self.sequence_strains = self.db_get_sequence_index_strains()
+
+    @abc.abstractmethod
+    def db_get_sequence_index_strains(self): pass
 
     @abc.abstractmethod
     def db_create_date_table(self): pass
@@ -272,12 +276,60 @@ class FilterDB(abc.ABC):
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float): pass
 
     def write_outputs(self):
+        if self.args.output:
+            self.read_and_output_sequences()
         if self.args.output_strains:
             self.db_output_strains()
         if self.args.output_metadata:
             self.db_output_metadata()
         if self.args.output_log:
             self.db_output_log()
+
+    def read_and_output_sequences(self):
+        valid_strains = self.db_get_strains_passed()
+
+        # Write output starting with sequences, if they've been requested. It is
+        # possible for the input sequences and sequence index to be out of sync
+        # (e.g., the index is a superset of the given sequences input), so we need
+        # to update the set of strains to keep based on which strains are actually
+        # available.
+        if is_vcf(self.args.sequences):
+            if self.args.output:
+                # Get the samples to be deleted, not to keep, for VCF
+                dropped_samps = list(self.sequence_strains - valid_strains)
+                write_vcf(self.args.sequences, self.args.output, dropped_samps)
+        elif self.args.sequences:
+            sequences = read_sequences(self.args.sequences)
+
+            # If the user requested sequence output, stream to disk all sequences
+            # that passed all filters to avoid reading sequences into memory first.
+            # Even if we aren't emitting sequences, we track the observed strain
+            # names in the sequence file as part of the single pass to allow
+            # comparison with the provided sequence index.
+            if self.args.output:
+                observed_sequence_strains = set()
+                with open_file(self.args.output, "wt") as output_handle:
+                    for sequence in sequences:
+                        observed_sequence_strains.add(sequence.id)
+
+                        if sequence.id in valid_strains:
+                            write_sequences(sequence, output_handle, 'fasta')
+            else:
+                observed_sequence_strains = {sequence.id for sequence in sequences}
+
+            if self.use_sequences and self.sequence_strains != observed_sequence_strains:
+                # Warn the user if the expected strains from the sequence index are
+                # not a superset of the observed strains.
+                if self.sequence_strains is not None and observed_sequence_strains > self.sequence_strains:
+                    print_err(
+                        "WARNING: The sequence index is out of sync with the provided sequences.",
+                        "Metadata and strain output may not match sequence output."
+                    )
+
+                # Update the set of available sequence strains.
+                self.sequence_strains = observed_sequence_strains
+
+
 
     @abc.abstractmethod
     def db_output_strains(self): pass
@@ -289,8 +341,8 @@ class FilterDB(abc.ABC):
     def db_output_log(self): pass
 
     def write_report(self):
-        total_strains_passed = self.db_get_total_strains_passed()
-        num_excluded_by_lack_of_metadata = self.db_get_num_excluded_by_lack_of_metadata()
+        total_strains_passed = self.db_get_strains_passed_count()
+        num_excluded_by_lack_of_metadata = self.get_num_excluded_by_lack_of_metadata()
         num_metadata_strains = self.db_get_num_metadata_strains()
         num_excluded_subsamp = self.db_get_num_excluded_subsamp()
         filter_counts = self.db_get_filter_counts()
@@ -339,10 +391,19 @@ class FilterDB(abc.ABC):
         print(f"{total_strains_passed} strains passed all filters")
 
     @abc.abstractmethod
-    def db_get_total_strains_passed(self): pass
+    def db_get_metadata_strains(self): pass
 
     @abc.abstractmethod
-    def db_get_num_excluded_by_lack_of_metadata(self): pass
+    def db_get_strains_passed(self): pass
+
+    @abc.abstractmethod
+    def db_get_strains_passed_count(self): pass
+
+    def get_num_excluded_by_lack_of_metadata(self):
+        metadata_strains = self.db_get_metadata_strains()
+        if self.use_sequences:
+            return len(self.sequence_strains - metadata_strains)
+        return 0
 
     @abc.abstractmethod
     def db_get_num_metadata_strains(self): pass

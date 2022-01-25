@@ -14,8 +14,6 @@ from pkg_resources import resource_stream
 from io import TextIOWrapper
 from .__version__ import __version__
 
-from augur.io import open_file
-
 from augur.util_support.color_parser import ColorParser
 from augur.util_support.date_disambiguator import DateDisambiguator
 from augur.util_support.metadata_file import MetadataFile
@@ -722,6 +720,8 @@ def read_strains(*files, comment_char="#"):
         strain names from the given input files
 
     """
+    from augur.io import open_file
+
     strains = set()
     for input_file in files:
         with open_file(input_file, 'r') as ifile:

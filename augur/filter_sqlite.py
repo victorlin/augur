@@ -58,6 +58,13 @@ class FilterSQLite(FilterDB):
         load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
+    def db_get_sequence_index_strains(self):
+        self.cur.execute(f"""
+            SELECT {STRAIN_COL}
+            FROM {SEQUENCE_INDEX_TABLE_NAME}
+        """)
+        return {row[0] for row in self.cur.fetchall()}
+
     def db_has_date_col(self):
         columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
         return (DEFAULT_DATE_COL in columns)
@@ -513,7 +520,22 @@ class FilterSQLite(FilterDB):
             """, self.connection)
         df.to_csv(self.args.output_log, sep='\t', index=None)
 
-    def db_get_total_strains_passed(self):
+    def db_get_metadata_strains(self):
+        self.cur.execute(f"""
+            SELECT {STRAIN_COL}
+            FROM {METADATA_TABLE_NAME}
+        """)
+        return {row[0] for row in self.cur.fetchall()}
+
+    def db_get_strains_passed(self):
+        self.cur.execute(f"""
+            SELECT {STRAIN_COL}
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
+        """)
+        return {row[0] for row in self.cur.fetchall()}
+
+    def db_get_strains_passed_count(self):
         self.cur.execute(f"""
             SELECT COUNT(*)
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
