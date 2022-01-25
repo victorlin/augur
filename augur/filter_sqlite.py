@@ -438,12 +438,14 @@ class FilterSQLite(FilterDB):
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
             where_conditions.append(f'{col} IS NOT NULL')
+        # `ORDER BY ... NULLS LAST` is unsupported for SQLite <3.30.0 so `CASE ... IS NULL` is a workaround
+        # ref https://stackoverflow.com/a/12503284
         query_for_subsampled_strains = f"""
             SELECT {STRAIN_COL}
             FROM (
                 SELECT {STRAIN_COL}, {','.join(group_by_cols)}, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by_cols)}
-                    ORDER BY {PRIORITY_COL} DESC NULLS LAST
+                    ORDER BY (CASE WHEN {PRIORITY_COL} IS NULL THEN 1 ELSE 0 END), {PRIORITY_COL} DESC
                 ) AS group_i
                 FROM {EXTENDED_VIEW_NAME}
             )
