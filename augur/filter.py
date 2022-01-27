@@ -4,7 +4,7 @@ Filter and subsample a sequence set.
 import os
 import sys
 import treetime.utils
-from augur.filter_sqlite import FilterSQLite
+from augur.filter_support.db.sqlite import FilterSQLite
 
 from .utils import is_vcf, run_shell_command, shquote
 

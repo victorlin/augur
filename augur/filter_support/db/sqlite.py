@@ -6,11 +6,11 @@ import sqlite3
 import argparse
 from datetime import date
 
-from augur.filter_db import FilterDB
-from .io_sqlite import load_tsv, cleanup, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
-from .utils import read_strains
-from .filter_subsample_helpers import get_sizes_per_group
-from .filter_output_helpers import filter_kwargs_to_str
+from augur.io_support.db.sqlite import load_tsv, cleanup, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
+from augur.utils import read_strains
+from .base import FilterBase
+from augur.filter_support.subsample import get_sizes_per_group
+from augur.filter_support.output import filter_kwargs_to_str
 
 
 METADATA_TABLE_NAME = 'metadata'
@@ -37,7 +37,7 @@ SUBSAMPLE_FILTER_REASON = 'subsampling'
 
 N_JOBS = 4
 
-class FilterSQLite(FilterDB):
+class FilterSQLite(FilterBase):
     def __init__(self, args:argparse.Namespace):
         super().__init__(args)
 
