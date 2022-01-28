@@ -53,11 +53,11 @@ class FilterSQLite(FilterBase):
         """)
 
     def db_load_metadata(self):
-        load_tsv(self.connection, self.args.metadata, METADATA_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(self.args.metadata, METADATA_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path):
-        load_tsv(self.connection, path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -470,7 +470,7 @@ class FilterSQLite(FilterBase):
             STRAIN_COL: 'str',
             PRIORITY_COL: 'float'
         }
-        load_tsv(self.connection, self.args.priority, PRIORITIES_TABLE_NAME,
+        load_tsv(self.args.priority, PRIORITIES_TABLE_NAME,
                  header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
                  n_jobs=N_JOBS)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
