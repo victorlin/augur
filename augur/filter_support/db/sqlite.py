@@ -35,6 +35,7 @@ PRIORITY_COL = 'priority'
 
 SUBSAMPLE_FILTER_REASON = 'subsampling'
 
+# TODO: parameterize
 N_JOBS = 4
 
 class FilterSQLite(FilterBase):
