@@ -69,8 +69,7 @@ class FilterBase(abc.ABC):
             print_err("ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.")
             return False
 
-        ### Check users has vcftools. If they don't, a one-blank-line file is created which
-        #   allows next step to run but error very badly.
+        # Confirm that vcftools is installed.
         if is_vcf(self.args.sequences):
             from shutil import which
             if which("vcftools") is None:
