@@ -1,44 +1,17 @@
 """
 Filter and subsample a sequence set.
 """
-import os
 import sys
 import treetime.utils
 from augur.filter_support.db.sqlite import FilterSQLite
 
-from .utils import is_vcf, run_shell_command, shquote
+from .utils import is_vcf
 
 
 SEQUENCE_ONLY_FILTERS = (
     "min_length",
     "non_nucleotide",
 )
-
-
-def write_vcf(input_filename, output_filename, dropped_samps):
-    if _filename_gz(input_filename):
-        input_arg = "--gzvcf"
-    else:
-        input_arg = "--vcf"
-
-    if _filename_gz(output_filename):
-        output_pipe = "| gzip -c"
-    else:
-        output_pipe = ""
-
-    drop_args = ["--remove-indv " + shquote(s) for s in dropped_samps]
-
-    call = ["vcftools"] + drop_args + [input_arg, shquote(input_filename), "--recode --stdout", output_pipe, ">", shquote(output_filename)]
-
-    print("Filtering samples using VCFTools with the call:")
-    print(" ".join(call))
-    run_shell_command(" ".join(call), raise_errors = True)
-    # remove vcftools log file
-    try:
-        os.remove('out.log')
-    except OSError:
-        pass
-
 
 def register_arguments(parser):
     input_group = parser.add_argument_group("inputs", "metadata and sequences to be filtered")
@@ -162,10 +135,6 @@ def run(args):
 
     filter = FilterSQLite(args)
     return filter.run()
-
-
-def _filename_gz(filename):
-    return filename.lower().endswith(".gz")
 
 
 def date_string(date):
