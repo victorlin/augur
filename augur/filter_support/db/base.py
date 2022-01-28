@@ -380,7 +380,6 @@ class FilterBase(abc.ABC):
                 self.sequence_strains = observed_sequence_strains
 
 
-
     @abc.abstractmethod
     def db_output_strains(self): pass
 
