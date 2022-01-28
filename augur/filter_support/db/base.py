@@ -55,24 +55,18 @@ class FilterBase(abc.ABC):
         """
         # Don't allow sequence output when no sequence input is provided.
         if self.args.output and not self.args.sequences:
-            print(
-                "ERROR: You need to provide sequences to output sequences.",
-                file=sys.stderr)
+            print_err("ERROR: You need to provide sequences to output sequences.")
             return False
 
         # Confirm that at least one output was requested.
         if not any((self.args.output, self.args.output_metadata, self.args.output_strains)):
-            print(
-                "ERROR: You need to select at least one output.",
-                file=sys.stderr)
+            print_err("ERROR: You need to select at least one output.")
             return False
 
         # Don't allow filtering on sequence-based information, if no sequences or
         # sequence index is provided.
         if not self.args.sequences and not self.args.sequence_index and any(getattr(self.args, arg) for arg in SEQUENCE_ONLY_FILTERS):
-            print(
-                "ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.",
-                file=sys.stderr)
+            print_err("ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.")
             return False
 
         ### Check users has vcftools. If they don't, a one-blank-line file is created which
@@ -80,17 +74,12 @@ class FilterBase(abc.ABC):
         if is_vcf(self.args.sequences):
             from shutil import which
             if which("vcftools") is None:
-                print("ERROR: 'vcftools' is not installed! This is required for VCF data. "
-                    "Please see the augur install instructions to install it.",
-                    file=sys.stderr)
+                print_err("ERROR: 'vcftools' is not installed! This is required for VCF data. Please see the augur install instructions to install it.")
                 return False
 
         # If user requested grouping, confirm that other required inputs are provided, too.
         if self.args.group_by and not any((self.args.sequences_per_group, self.args.subsample_max_sequences)):
-            print(
-                "ERROR: You must specify a number of sequences per group or maximum sequences to subsample.",
-                file=sys.stderr
-            )
+            print_err("ERROR: You must specify a number of sequences per group or maximum sequences to subsample.")
             return False
 
         return True
