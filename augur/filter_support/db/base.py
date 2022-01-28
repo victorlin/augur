@@ -11,6 +11,10 @@ from augur.filter_support.subsample import calculate_sequences_per_group, TooMan
 
 
 DUMMY_COL = 'dummy'
+SEQUENCE_ONLY_FILTERS = (
+    "min_length",
+    "non_nucleotide",
+)
 
 
 class FilterBase(abc.ABC):
@@ -18,6 +22,9 @@ class FilterBase(abc.ABC):
         self.args = args
 
     def run(self):
+        # Validate arguments before attempting any I/O.
+        if not self.validate_arguments():
+            return 1
         self.db_cleanup()
         self.db_connect()
         self.db_load_metadata()
@@ -35,6 +42,58 @@ class FilterBase(abc.ABC):
         if exit_code == 1:
             return 1
         self.db_cleanup()
+
+    def validate_arguments(self):
+        """Validate arguments and return a boolean representing whether all validation
+        rules succeeded.
+
+        Returns
+        -------
+        bool :
+            Validation succeeded.
+
+        """
+        # Don't allow sequence output when no sequence input is provided.
+        if self.args.output and not self.args.sequences:
+            print(
+                "ERROR: You need to provide sequences to output sequences.",
+                file=sys.stderr)
+            return False
+
+        # Confirm that at least one output was requested.
+        if not any((self.args.output, self.args.output_metadata, self.args.output_strains)):
+            print(
+                "ERROR: You need to select at least one output.",
+                file=sys.stderr)
+            return False
+
+        # Don't allow filtering on sequence-based information, if no sequences or
+        # sequence index is provided.
+        if not self.args.sequences and not self.args.sequence_index and any(getattr(self.args, arg) for arg in SEQUENCE_ONLY_FILTERS):
+            print(
+                "ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.",
+                file=sys.stderr)
+            return False
+
+        ### Check users has vcftools. If they don't, a one-blank-line file is created which
+        #   allows next step to run but error very badly.
+        if is_vcf(self.args.sequences):
+            from shutil import which
+            if which("vcftools") is None:
+                print("ERROR: 'vcftools' is not installed! This is required for VCF data. "
+                    "Please see the augur install instructions to install it.",
+                    file=sys.stderr)
+                return False
+
+        # If user requested grouping, confirm that other required inputs are provided, too.
+        if self.args.group_by and not any((self.args.sequences_per_group, self.args.subsample_max_sequences)):
+            print(
+                "ERROR: You must specify a number of sequences per group or maximum sequences to subsample.",
+                file=sys.stderr
+            )
+            return False
+
+        return True
 
     @abc.abstractmethod
     def db_connect(self): pass
