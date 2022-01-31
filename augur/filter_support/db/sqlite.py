@@ -6,12 +6,14 @@ import sqlite3
 import argparse
 from datetime import date
 
-from augur.io_support.db.sqlite import load_tsv, cleanup, DEFAULT_DB_FILE, ROW_ORDER_COLUMN
+from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
 from .base import FilterBase
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
+
+DEFAULT_DB_FILE = 'test.sqlite3'
 
 METADATA_TABLE_NAME = 'metadata'
 SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
@@ -42,8 +44,8 @@ class FilterSQLite(FilterBase):
     def __init__(self, args:argparse.Namespace):
         super().__init__(args)
 
-    def db_connect(self):
-        self.connection = sqlite3.connect(DEFAULT_DB_FILE)
+    def db_connect(self, database:str=DEFAULT_DB_FILE):
+        self.connection = sqlite3.connect(database)
         self.cur = self.connection.cursor()
 
     def db_create_strain_index(self, table_name:str):
@@ -52,12 +54,12 @@ class FilterSQLite(FilterBase):
             ON {table_name} ({STRAIN_COL})
         """)
 
-    def db_load_metadata(self):
-        load_tsv(self.args.metadata, METADATA_TABLE_NAME, n_jobs=N_JOBS)
+    def db_load_metadata(self, database:str=DEFAULT_DB_FILE):
+        load_tsv(self.args.metadata, database, METADATA_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
-    def db_load_sequence_index(self, path):
-        load_tsv(path, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
+    def db_load_sequence_index(self, path, database:str=DEFAULT_DB_FILE):
+        load_tsv(path, database, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -465,13 +467,13 @@ class FilterSQLite(FilterBase):
         """)
         self.connection.commit()
 
-    def db_load_priorities_table(self):
+    def db_load_priorities_table(self, database:str=DEFAULT_DB_FILE):
         dtype = {
             STRAIN_COL: 'str',
             PRIORITY_COL: 'float'
         }
         try:
-            load_tsv(self.args.priority, PRIORITIES_TABLE_NAME,
+            load_tsv(self.args.priority, database, PRIORITIES_TABLE_NAME,
                     header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
                     n_jobs=N_JOBS)
         except ValueError as e:
@@ -581,8 +583,8 @@ class FilterSQLite(FilterBase):
         """)
         return self.cur.fetchall()
 
-    def db_cleanup(self):
-        cleanup()
+    def db_cleanup(self, database:str=DEFAULT_DB_FILE):
+        cleanup(database)
 
 
 def get_year(date_in:str):
