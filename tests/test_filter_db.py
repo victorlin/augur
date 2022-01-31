@@ -40,6 +40,15 @@ def tmp_db_file(tmpdir):
     return str(tmpdir / "test.sqlite3")
 
 
+def get_init_filter_obj(args:argparse.Namespace):
+    filter_obj = FilterSQLite(args)
+    # remove any old db file
+    filter_obj.db_cleanup()
+    # TODO: parameterize db file
+    filter_obj.db_connect()
+    return filter_obj
+
+
 def db_query_fetchall(query:str):
     con = sqlite3.connect(DEFAULT_DB_FILE)
     cur = con.cursor()
@@ -56,9 +65,7 @@ class TestFilter:
                 ("SEQ_3","nevada","good")]
         meta_fn = write_metadata(tmpdir, data)
         args = argparser(f'--metadata {meta_fn}')
-        filter_obj = FilterSQLite(args)
-        filter_obj.db_cleanup()
-        filter_obj.db_connect() # TODO: parameterize db file
+        filter_obj = get_init_filter_obj(args)
         filter_obj.db_load_metadata()
         table = db_query_fetchall(f"SELECT * FROM {METADATA_TABLE_NAME}")
         assert [row[1:] for row in table] == data[1:]
@@ -69,9 +76,7 @@ class TestFilter:
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = FilterSQLite(args)
-        filter_obj.db_cleanup()
-        filter_obj.db_connect()
+        filter_obj = get_init_filter_obj(args)
         filter_obj.db_load_priorities_table()
         table = db_query_fetchall(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         assert table == [(0, 'strain1', 5.0), (1, 'strain2', 6.0), (2, 'strain3', 8.0)]
@@ -82,9 +87,7 @@ class TestFilter:
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = FilterSQLite(args)
-        filter_obj.db_cleanup()
-        filter_obj.db_connect()
+        filter_obj = get_init_filter_obj(args)
         with pytest.raises(ValueError) as e_info:
             filter_obj.db_load_priorities_table()
         assert str(e_info.value) == "Failed to parse priority file."
@@ -95,9 +98,7 @@ class TestFilter:
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = FilterSQLite(args)
-        filter_obj.db_cleanup()
-        filter_obj.db_connect()
+        filter_obj = get_init_filter_obj(args)
         filter_obj.db_load_priorities_table()
         table = db_query_fetchall(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         assert table == [(0, 'strain 1', 5.0), (1, 'strain 2', 6.0), (2, 'strain 3', 8.0)]
@@ -106,8 +107,6 @@ class TestFilter:
         """Attempt to load a non-existant priority score file raises a FileNotFoundError."""
         invalid_priorities_fn = str(tmpdir / "does/not/exist.txt")
         args = argparser(f'--metadata "" --priority {invalid_priorities_fn}')
-        filter_obj = FilterSQLite(args)
-        filter_obj.db_cleanup()
-        filter_obj.db_connect()
+        filter_obj = get_init_filter_obj(args)
         with pytest.raises(FileNotFoundError):
             filter_obj.db_load_priorities_table()
