@@ -101,3 +101,13 @@ class TestFilter:
         filter_obj.db_load_priorities_table()
         table = db_query_fetchall(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         assert table == [(0, 'strain 1', 5.0), (1, 'strain 2', 6.0), (2, 'strain 3', 8.0)]
+
+    def test_load_priority_scores_does_not_exist(self, tmpdir, argparser):
+        """Attempt to load a non-existant priority score file raises a FileNotFoundError."""
+        invalid_priorities_fn = str(tmpdir / "does/not/exist.txt")
+        args = argparser(f'--metadata "" --priority {invalid_priorities_fn}')
+        filter_obj = FilterSQLite(args)
+        filter_obj.db_cleanup()
+        filter_obj.db_connect()
+        with pytest.raises(FileNotFoundError):
+            filter_obj.db_load_priorities_table()

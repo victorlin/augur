@@ -64,10 +64,6 @@ class TestFilter:
         assert seq_keep[149] == "G22733"
         assert seq_keep == all_seq
 
-    def test_read_priority_scores_does_not_exist(self):
-        with pytest.raises(FileNotFoundError):
-            augur.filter.read_priority_scores("/does/not/exist.txt")
-
     def test_write_vcf_compressed_input(self, mock_run_shell_command):
         augur.filter.write_vcf(
             "tests/builds/tb/data/lee_2015.vcf.gz", "output_file.vcf.gz", []
