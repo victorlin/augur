@@ -554,10 +554,6 @@ class FilterSQLite(FilterBase):
         """)
         return self.cur.fetchone()[0]
 
-    def db_get_num_excluded_by_lack_of_metadata(self):
-        # TODO: implement
-        return 0
-
     def db_get_num_metadata_strains(self):
         self.cur.execute(f"""
             SELECT COUNT(*)
