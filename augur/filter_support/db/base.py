@@ -5,8 +5,8 @@ import sys
 from tempfile import NamedTemporaryFile
 import argparse
 from augur.index import index_sequences, index_vcf
-from augur.io import open_file, print_err, read_sequences, write_sequences, write_vcf
-from augur.utils import is_vcf
+from augur.io import open_file, print_err, read_sequences, write_sequences
+from augur.utils import is_vcf, write_vcf
 from augur.filter_support.subsample import calculate_sequences_per_group, TooManyGroupsError
 
 
