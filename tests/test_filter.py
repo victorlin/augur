@@ -37,18 +37,17 @@ def write_metadata(tmpdir, metadata):
 
 
 @pytest.fixture
-def tmp_db_file(tmpdir):
-    return str(tmpdir / "test.sqlite3")
-
-
-def get_init_filter_obj(args:argparse.Namespace, tmp_db_file):
-    filter_obj = FilterSQLite(args)
-    filter_obj.db_connect(tmp_db_file)
+def get_init_filter_obj(tmpdir):
+    def filter_obj(args:argparse.Namespace):
+        db_file = str(tmpdir / "test.sqlite")
+        obj = FilterSQLite(args, db_file)
+        obj.db_connect()
+        return obj
     return filter_obj
 
 
 class TestFilter:
-    def test_load_metadata(self, tmpdir, argparser, tmp_db_file):
+    def test_load_metadata(self, tmpdir, argparser, get_init_filter_obj):
         """Load a metadata file."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
@@ -56,66 +55,66 @@ class TestFilter:
                 ("SEQ_3","nevada","good")]
         meta_fn = write_metadata(tmpdir, data)
         args = argparser(f'--metadata {meta_fn}')
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.cur.execute(f"SELECT * FROM {METADATA_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
         filter_obj.connection.close()
         filter_obj.db_cleanup()
         assert [row[1:] for row in table] == data[1:]
 
-    def test_load_priority_scores_valid(self, tmpdir, argparser, tmp_db_file):
+    def test_load_priority_scores_valid(self, tmpdir, argparser, get_init_filter_obj):
         """Load a priority score file."""
         content = "strain1\t5\nstrain2\t6\nstrain3\t8\n"
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_priorities_table(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_priorities_table()
         filter_obj.cur.execute(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
         filter_obj.connection.close()
         filter_obj.db_cleanup()
         assert table == [(0, 'strain1', 5.0), (1, 'strain2', 6.0), (2, 'strain3', 8.0)]
 
-    def test_load_priority_scores_malformed(self, tmpdir, argparser, tmp_db_file):
+    def test_load_priority_scores_malformed(self, tmpdir, argparser, get_init_filter_obj):
         """Attempt to load a priority score file with non-float in priority column raises a ValueError."""
         content = "strain1 X\n"
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
         with pytest.raises(ValueError) as e_info:
-            filter_obj.db_load_priorities_table(tmp_db_file)
+            filter_obj.db_load_priorities_table()
         filter_obj.connection.close()
         filter_obj.db_cleanup()
         assert str(e_info.value) == "Failed to parse priority file."
 
-    def test_load_priority_scores_valid_with_spaces_and_tabs(self, tmpdir, argparser, tmp_db_file):
+    def test_load_priority_scores_valid_with_spaces_and_tabs(self, tmpdir, argparser, get_init_filter_obj):
         """Load a priority score file with spaces in strain names."""
         content = "strain 1\t5\nstrain 2\t6\nstrain 3\t8\n"
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_priorities_table(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_priorities_table()
         filter_obj.cur.execute(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
         filter_obj.connection.close()
         filter_obj.db_cleanup()
         assert table == [(0, 'strain 1', 5.0), (1, 'strain 2', 6.0), (2, 'strain 3', 8.0)]
 
-    def test_load_priority_scores_does_not_exist(self, tmpdir, argparser, tmp_db_file):
+    def test_load_priority_scores_does_not_exist(self, tmpdir, argparser, get_init_filter_obj):
         """Attempt to load a non-existant priority score file raises a FileNotFoundError."""
         invalid_priorities_fn = str(tmpdir / "does/not/exist.txt")
         args = argparser(f'--metadata "" --priority {invalid_priorities_fn}')
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
         with pytest.raises(FileNotFoundError):
-            filter_obj.db_load_priorities_table(tmp_db_file)
+            filter_obj.db_load_priorities_table()
         filter_obj.connection.close()
         filter_obj.db_cleanup()
 
-    def test_filter_by_query(self, tmpdir, argparser, tmp_db_file):
+    def test_filter_by_query(self, tmpdir, argparser, get_init_filter_obj):
         """Filter by a query expresssion."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
@@ -123,8 +122,8 @@ class TestFilter:
                 ("SEQ_3","nevada","good")]
         meta_fn = write_metadata(tmpdir, data)
         args = argparser(f'--metadata {meta_fn} --query \'quality=="good"\'')
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
         filter_obj.db_create_filter_reason_table(exclude_by, include_by)
@@ -137,7 +136,7 @@ class TestFilter:
         filter_obj.db_cleanup()
         assert results == [('SEQ_2',)]
 
-    def test_filter_by_query_two_conditions(self, tmpdir, argparser, tmp_db_file):
+    def test_filter_by_query_two_conditions(self, tmpdir, argparser, get_init_filter_obj):
         """Filter by a query expresssion with two conditions."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
@@ -147,8 +146,8 @@ class TestFilter:
         args = argparser(f"""
             --metadata {meta_fn} --query 'quality=="good" AND location=="colorado"'
         """)
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
         filter_obj.db_create_filter_reason_table(exclude_by, include_by)
@@ -161,7 +160,7 @@ class TestFilter:
         filter_obj.db_cleanup()
         assert results == [('SEQ_2',), ('SEQ_3',)]
 
-    def test_filter_by_query_and_include_strains(self, tmpdir, argparser, tmp_db_file):
+    def test_filter_by_query_and_include_strains(self, tmpdir, argparser, get_init_filter_obj):
         """Filter by a query expresssion and force-include a strain."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
@@ -175,8 +174,8 @@ class TestFilter:
             --query 'quality=="good" AND location=="colorado"'
             --include {include_fn}
         """)
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
         filter_obj.db_create_filter_reason_table(exclude_by, include_by)
@@ -190,7 +189,7 @@ class TestFilter:
         filter_obj.db_cleanup()
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
-    def test_filter_by_query_and_include_where(self, tmpdir, argparser, tmp_db_file):
+    def test_filter_by_query_and_include_where(self, tmpdir, argparser, get_init_filter_obj):
         """Filter by a query expresssion and force-include a strain."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
@@ -202,8 +201,8 @@ class TestFilter:
             --query 'quality=="good" AND location=="colorado"'
             --include-where 'location=nevada'
         """)
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
         filter_obj.db_create_filter_reason_table(exclude_by, include_by)
@@ -217,7 +216,7 @@ class TestFilter:
         filter_obj.db_cleanup()
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
-    def test_filter_by_min_date(self, tmpdir, argparser, tmp_db_file):
+    def test_filter_by_min_date(self, tmpdir, argparser, get_init_filter_obj):
         """Filter by min date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-02-XX"),
@@ -228,8 +227,8 @@ class TestFilter:
             --metadata {meta_fn}
             --min-date 2020-02-26
         """)
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         filter_obj.db_create_date_table()
         exclude_by, include_by = filter_obj.construct_filters()
@@ -244,7 +243,7 @@ class TestFilter:
         filter_obj.db_cleanup()
         assert results == [('SEQ_3',)]
 
-    def test_filter_by_max_date(self, tmpdir, argparser, tmp_db_file):
+    def test_filter_by_max_date(self, tmpdir, argparser, get_init_filter_obj):
         """Filter by max date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-03-XX"),
@@ -255,8 +254,8 @@ class TestFilter:
             --metadata {meta_fn}
             --max-date 2020-03-01
         """)
-        filter_obj = get_init_filter_obj(args, tmp_db_file)
-        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj = get_init_filter_obj(args)
+        filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         filter_obj.db_create_date_table()
         exclude_by, include_by = filter_obj.construct_filters()
