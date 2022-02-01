@@ -36,8 +36,9 @@ def write_metadata(tmpdir, metadata):
     return write_file(tmpdir, "metadata.tsv", content)
 
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def filter_obj():
+    """Returns a filter object connected to an in-memory database per function."""
     obj = FilterSQLite(':memory:')
     obj.db_connect()
     return obj
