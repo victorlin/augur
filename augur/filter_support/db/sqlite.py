@@ -213,10 +213,11 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
+        # NOT query to exclude all that do not match
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {METADATA_TABLE_NAME}
-            WHERE NOT {query}
+            WHERE NOT ({query})
         )
         """
 
