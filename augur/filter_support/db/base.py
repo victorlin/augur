@@ -18,7 +18,7 @@ SEQUENCE_ONLY_FILTERS = (
 
 
 class FilterBase(abc.ABC):
-    def __init__(self, args:argparse.Namespace):
+    def set_args(self, args:argparse.Namespace):
         self.args = args
 
     def run(self):

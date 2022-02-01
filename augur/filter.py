@@ -68,7 +68,8 @@ def run(args):
     '''
     filter and subsample a set of sequences into an analysis set
     '''
-    filter = FilterSQLite(args)
+    filter = FilterSQLite()
+    filter.set_args(args)
     return filter.run()
 
 

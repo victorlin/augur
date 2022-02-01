@@ -40,8 +40,7 @@ SUBSAMPLE_FILTER_REASON = 'subsampling'
 N_JOBS = 4
 
 class FilterSQLite(FilterBase):
-    def __init__(self, args:argparse.Namespace, db_file:str=DEFAULT_DB_FILE):
-        super().__init__(args)
+    def __init__(self, db_file:str=DEFAULT_DB_FILE):
         self.db_file = db_file
 
     def db_connect(self):
