@@ -40,12 +40,13 @@ SUBSAMPLE_FILTER_REASON = 'subsampling'
 N_JOBS = 4
 
 class FilterSQLite(FilterBase):
-    def __init__(self, args:argparse.Namespace):
+    def __init__(self, args:argparse.Namespace, db_file:str=DEFAULT_DB_FILE):
         super().__init__(args)
+        self.db_file = db_file
 
-    def db_connect(self, database:str=DEFAULT_DB_FILE):
+    def db_connect(self):
         """Creates a sqlite3 connection and cursor, stored as instance attributes."""
-        self.connection = sqlite3.connect(database)
+        self.connection = sqlite3.connect(self.db_file)
         self.cur = self.connection.cursor()
 
     def db_create_strain_index(self, table_name:str):
@@ -55,20 +56,20 @@ class FilterSQLite(FilterBase):
             ON {table_name} ({STRAIN_COL})
         """)
 
-    def db_load_metadata(self, database:str=DEFAULT_DB_FILE):
+    def db_load_metadata(self):
         """Loads a metadata file into the database.
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(self.args.metadata, database, METADATA_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(self.args.metadata, self.db_file, METADATA_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
-    def db_load_sequence_index(self, path:str, database:str=DEFAULT_DB_FILE):
+    def db_load_sequence_index(self, path:str):
         """Loads a sequence index file into the database.
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(path, database, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(path, self.db_file, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -512,13 +513,13 @@ class FilterSQLite(FilterBase):
         """)
         self.connection.commit()
 
-    def db_load_priorities_table(self, database:str=DEFAULT_DB_FILE):
+    def db_load_priorities_table(self):
         dtype = {
             STRAIN_COL: 'str',
             PRIORITY_COL: 'float'
         }
         try:
-            load_tsv(self.args.priority, database, PRIORITIES_TABLE_NAME,
+            load_tsv(self.args.priority, self.db_file, PRIORITIES_TABLE_NAME,
                     header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
                     n_jobs=N_JOBS)
         except ValueError as e:
@@ -643,8 +644,8 @@ class FilterSQLite(FilterBase):
         """)
         return self.cur.fetchall()
 
-    def db_cleanup(self, database:str=DEFAULT_DB_FILE):
-        cleanup(database)
+    def db_cleanup(self):
+        cleanup(self.db_file)
 
 
 def get_year(date_in:str):

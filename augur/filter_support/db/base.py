@@ -84,7 +84,7 @@ class FilterBase(abc.ABC):
         return True
 
     @abc.abstractmethod
-    def db_connect(self, database:str): pass
+    def db_connect(self): pass
 
     @abc.abstractmethod
     def db_load_metadata(self): pass
