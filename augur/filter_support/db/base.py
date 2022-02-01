@@ -1,6 +1,6 @@
 import abc
 import os
-from typing import List
+from typing import List, Set, Tuple
 import sys
 from tempfile import NamedTemporaryFile
 import argparse
@@ -90,7 +90,7 @@ class FilterBase(abc.ABC):
     def db_load_metadata(self): pass
 
     @abc.abstractmethod
-    def db_load_sequence_index(self, path): pass
+    def db_load_sequence_index(self, path:str): pass
 
     def add_attributes(self):
         """Check if there is a date column and if sequences are used."""
@@ -99,7 +99,7 @@ class FilterBase(abc.ABC):
         self.do_subsample = bool(self.args.group_by or self.args.subsample_max_sequences)
 
     @abc.abstractmethod
-    def db_has_date_col(self): pass
+    def db_has_date_col(self) -> bool: pass
 
     def handle_sequences(self):
         """Load sequence index"""
@@ -299,10 +299,10 @@ class FilterBase(abc.ABC):
         self.db_update_filter_reason_table_with_subsampling(group_by_cols)
 
     @abc.abstractmethod
-    def db_get_counts_per_group(self, group_by_cols:List[str]): pass
+    def db_get_counts_per_group(self, group_by_cols:List[str]) -> List[int]: pass
 
     @abc.abstractmethod
-    def db_get_filtered_strains_count(self): pass
+    def db_get_filtered_strains_count(self) -> int: pass
 
     @abc.abstractmethod
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]): pass
@@ -390,7 +390,7 @@ class FilterBase(abc.ABC):
     def db_output_log(self): pass
 
     def write_report(self):
-        total_strains_passed = self.db_get_strains_passed_count()
+        total_strains_passed = self.db_get_filtered_strains_count()
         num_excluded_by_lack_of_metadata = self.get_num_excluded_by_lack_of_metadata()
         num_metadata_strains = self.db_get_num_metadata_strains()
         num_excluded_subsamp = self.db_get_num_excluded_subsamp()
@@ -441,13 +441,10 @@ class FilterBase(abc.ABC):
         print(f"{total_strains_passed} strains passed all filters")
 
     @abc.abstractmethod
-    def db_get_metadata_strains(self): pass
+    def db_get_metadata_strains(self) -> Set[str]: pass
 
     @abc.abstractmethod
-    def db_get_strains_passed(self): pass
-
-    @abc.abstractmethod
-    def db_get_strains_passed_count(self): pass
+    def db_get_strains_passed(self) -> Set[str]: pass
 
     def get_num_excluded_by_lack_of_metadata(self):
         metadata_strains = self.db_get_metadata_strains()
@@ -456,13 +453,13 @@ class FilterBase(abc.ABC):
         return 0
 
     @abc.abstractmethod
-    def db_get_num_metadata_strains(self): pass
+    def db_get_num_metadata_strains(self) -> int: pass
 
     @abc.abstractmethod
-    def db_get_num_excluded_subsamp(self): pass
+    def db_get_num_excluded_subsamp(self) -> int: pass
 
     @abc.abstractmethod
-    def db_get_filter_counts(self) -> list: pass
+    def db_get_filter_counts(self) -> List[Tuple[str, str, int]]: pass
 
     @abc.abstractmethod
     def db_cleanup(self): pass

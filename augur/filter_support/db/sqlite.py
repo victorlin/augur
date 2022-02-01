@@ -1,5 +1,5 @@
 import re
-from typing import List
+from typing import List, Set, Tuple
 import numpy as np
 import pandas as pd
 import sqlite3
@@ -12,9 +12,9 @@ from .base import FilterBase
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
-
-DEFAULT_DB_FILE = 'test.sqlite3'
-
+# internal database globals
+DEFAULT_DB_FILE = 'augur.sqlite3'
+# table names
 METADATA_TABLE_NAME = 'metadata'
 SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
@@ -22,9 +22,9 @@ DATE_TABLE_NAME = 'metadata_date_expanded'
 METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
-
+# view names
 EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
-
+# column names
 DEFAULT_DATE_COL = 'date'
 FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
@@ -34,7 +34,7 @@ DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
 STRAIN_COL = 'strain'
 PRIORITY_COL = 'priority'
-
+# value for FILTER_REASON_COL with separate logic
 SUBSAMPLE_FILTER_REASON = 'subsampling'
 
 # TODO: parameterize
@@ -45,24 +45,35 @@ class FilterSQLite(FilterBase):
         super().__init__(args)
 
     def db_connect(self, database:str=DEFAULT_DB_FILE):
+        """Creates a sqlite3 connection and cursor, stored as instance attributes."""
         self.connection = sqlite3.connect(database)
         self.cur = self.connection.cursor()
 
     def db_create_strain_index(self, table_name:str):
+        """Creates a unique index on `STRAIN_COL` in a table."""
         self.cur.execute(f"""
             CREATE UNIQUE INDEX idx_{table_name}_{STRAIN_COL}
             ON {table_name} ({STRAIN_COL})
         """)
 
     def db_load_metadata(self, database:str=DEFAULT_DB_FILE):
+        """Loads a metadata file into the database.
+
+        Retrieves the filename from `self.args`.
+        """
         load_tsv(self.args.metadata, database, METADATA_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
-    def db_load_sequence_index(self, path, database:str=DEFAULT_DB_FILE):
+    def db_load_sequence_index(self, path:str, database:str=DEFAULT_DB_FILE):
+        """Loads a sequence index file into the database.
+
+        Retrieves the filename from `self.args`.
+        """
         load_tsv(path, database, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
+        """Returns the set of all strains in the sequence index."""
         self.cur.execute(f"""
             SELECT {STRAIN_COL}
             FROM {SEQUENCE_INDEX_TABLE_NAME}
@@ -70,10 +81,21 @@ class FilterSQLite(FilterBase):
         return {row[0] for row in self.cur.fetchall()}
 
     def db_has_date_col(self):
+        """Returns a boolean indicating whether `DEFAULT_DATE_COL` is in the metadata."""
         columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
         return (DEFAULT_DATE_COL in columns)
 
     def db_create_date_table(self):
+        """Creates an intermediate date table from the metadata table.
+
+        Contains the strain column, original date column, and these computed columns:
+        - `year`: Extracted year (int or `NULL`)
+        - `month`: Extracted month (int or `NULL`)
+        - `day`: Extracted day (int or `NULL`)
+        - `date_min`: Exact date, minimum if ambiguous (`float` numeric date)
+        - `date_max`: Exact date, maximum if ambiguous (`float` numeric date)
+        """
+        # TODO: handle numeric dates for year/month/day
         self.connection.create_function(get_year.__name__, 1, get_year)
         self.connection.create_function(get_month.__name__, 1, get_month)
         self.connection.create_function(get_day.__name__, 1, get_day)
@@ -101,7 +123,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         return 'True'
 
@@ -116,7 +138,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
@@ -169,7 +191,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         column, op, value = self.parse_filter_query(exclude_where)
         return f"""{STRAIN_COL} IN (
@@ -180,6 +202,18 @@ class FilterSQLite(FilterBase):
         """
 
     def filter_by_query(self, query):
+        """Filter by any valid SQL expression on the metadata.
+
+        Parameters
+        ----------
+        query : str
+            SQL query used to exclude strains
+
+        Returns
+        -------
+        str:
+            expression for SQL query `WHERE` clause
+        """
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {METADATA_TABLE_NAME}
@@ -202,7 +236,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         if ambiguity == 'year':
             return f"""{STRAIN_COL} IN (
@@ -234,7 +268,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         min_date = get_date_min(min_date)
         return f"""{STRAIN_COL} IN (
@@ -254,7 +288,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         max_date = get_date_max(max_date)
         return f"""{STRAIN_COL} IN (
@@ -271,7 +305,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         # TODO: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
         return f"{STRAIN_COL} NOT IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
@@ -287,7 +321,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
@@ -301,7 +335,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
@@ -320,7 +354,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         included_strains = read_strains(include_file)
         included_strains = [f"'{strain}'" for strain in included_strains]
@@ -342,7 +376,7 @@ class FilterSQLite(FilterBase):
         Returns
         -------
         str:
-            expression for duckdb.filter
+            expression for SQL query `WHERE` clause
         """
         column, op, value = self.parse_filter_query(include_where)
         return f"""{STRAIN_COL} IN (
@@ -353,19 +387,16 @@ class FilterSQLite(FilterBase):
         """
 
     def db_create_filter_reason_table(self, exclude_by:list, include_by:list):
-        """Apply a list of filters to exclude or force-include records from the given
-        metadata and return the strains to keep, to exclude, and to force include.
+        """Creates an intermediate table for filter reason.
+        
+        Applies exclusion and force-inclusion rules to filter strains from the metadata.
 
         Parameters
         ----------
         exclude_by : list
-            A list of filter expressions for duckdb.filter.
+            A list of filter expressions for SQL query `WHERE` clause
         include_by : list
-            A list of filter expressions for duckdb.filter.
-        Returns
-        -------
-        DuckDBPyRelation
-            relation for filtered metadata
+            A list of filter expressions for SQL query `WHERE` clause
         """
         self.cur.execute(f"""
             CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
@@ -382,6 +413,7 @@ class FilterSQLite(FilterBase):
         self.db_apply_force_inclusions(include_by)
 
     def db_apply_exclusions(self, exclude_by):
+        """Updates the filter reason table with exclusion rules."""
         for exclude_function, kwargs in exclude_by:
             where_filter = exclude_function(**kwargs)
             kwargs_str = filter_kwargs_to_str(kwargs)
@@ -397,6 +429,7 @@ class FilterSQLite(FilterBase):
             self.connection.commit()
 
     def db_apply_force_inclusions(self, include_by):
+        """Updates the filter reason table with force-inclusion rules."""
         for include_function, kwargs in include_by:
             where_filter = include_function(**kwargs)
             kwargs_str = filter_kwargs_to_str(kwargs)
@@ -412,6 +445,13 @@ class FilterSQLite(FilterBase):
             self.connection.commit()
 
     def db_create_output_table(self):
+        """Creates a final intermediate table to be used for output.
+
+        The table is a subset of the original metadata table containing rows that pass all:
+        1. exclusion rules
+        2. force-inclusion rules
+        3. subsampling
+        """
         self.cur.execute(f"""
             CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
             SELECT m.* FROM {METADATA_TABLE_NAME} m
@@ -420,7 +460,13 @@ class FilterSQLite(FilterBase):
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
 
-    def db_get_counts_per_group(self, group_by_cols:List[str]):
+    def db_get_counts_per_group(self, group_by_cols:List[str]) -> List[int]:
+        """
+        Returns
+        -------
+        list[int]
+            List of counts per group.
+        """
         self.cur.execute(f"""
             SELECT {','.join(group_by_cols)}, COUNT(*)
             FROM {EXTENDED_VIEW_NAME}
@@ -428,7 +474,11 @@ class FilterSQLite(FilterBase):
         """)
         return [row[-1] for row in self.cur.fetchall()]
 
-    def db_get_filtered_strains_count(self):
+    def db_get_filtered_strains_count(self) -> int:
+        """Returns the number of metadata strains that pass all filter rules.
+
+        Note: this can return a different number before and after subsampling.
+        """
         self.cur.execute(f"""
             SELECT COUNT(*)
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
@@ -437,6 +487,7 @@ class FilterSQLite(FilterBase):
         return self.cur.fetchone()[0]
 
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]):
+        """Subsamples filtered metadata and updates the filter reason table."""
         # create a SQL query for strains to subsample for
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
         for col in group_by_cols:
@@ -493,7 +544,13 @@ class FilterSQLite(FilterBase):
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_create_extended_filtered_metadata_view(self):
-        # create new view that extends strain with year/month/day, priority, dummy
+        """Creates a new view with rows as filtered metadata, with the following columns:
+        
+        1. All columns from metadata
+        2. Computed date columns (`year`, `month`, `day`)
+        3. `priority`
+        4. `dummy` containing the same value in all rows, used when no groupby columns are provided
+        """
         self.cur.execute(f"DROP VIEW IF EXISTS {EXTENDED_VIEW_NAME}")
         self.cur.execute(f"""
         CREATE VIEW {EXTENDED_VIEW_NAME} AS
@@ -531,14 +588,14 @@ class FilterSQLite(FilterBase):
             """, self.connection)
         df.to_csv(self.args.output_log, sep='\t', index=None)
 
-    def db_get_metadata_strains(self):
+    def db_get_metadata_strains(self) -> Set[str]:
         self.cur.execute(f"""
             SELECT {STRAIN_COL}
             FROM {METADATA_TABLE_NAME}
         """)
         return {row[0] for row in self.cur.fetchall()}
 
-    def db_get_strains_passed(self):
+    def db_get_strains_passed(self) -> Set[str]:
         self.cur.execute(f"""
             SELECT {STRAIN_COL}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
@@ -546,22 +603,14 @@ class FilterSQLite(FilterBase):
         """)
         return {row[0] for row in self.cur.fetchall()}
 
-    def db_get_strains_passed_count(self):
-        self.cur.execute(f"""
-            SELECT COUNT(*)
-            FROM {METADATA_FILTER_REASON_TABLE_NAME}
-            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
-        """)
-        return self.cur.fetchone()[0]
-
-    def db_get_num_metadata_strains(self):
+    def db_get_num_metadata_strains(self) -> int:
         self.cur.execute(f"""
             SELECT COUNT(*)
             FROM {METADATA_TABLE_NAME}
         """)
         return self.cur.fetchone()[0]
 
-    def db_get_num_excluded_subsamp(self):
+    def db_get_num_excluded_subsamp(self) -> int:
         self.cur.execute(f"""
             SELECT COUNT(*)
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
@@ -569,7 +618,7 @@ class FilterSQLite(FilterBase):
         """)
         return self.cur.fetchone()[0]
 
-    def db_get_filter_counts(self):
+    def db_get_filter_counts(self) -> List[Tuple[str, str, int]]:
         self.cur.execute(f"""
             SELECT {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}, COUNT(*)
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
