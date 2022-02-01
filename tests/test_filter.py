@@ -61,6 +61,7 @@ class TestFilter:
         filter_obj.cur.execute(f"SELECT * FROM {METADATA_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert [row[1:] for row in table] == data[1:]
 
     def test_load_priority_scores_valid(self, tmpdir, argparser, tmp_db_file):
@@ -74,6 +75,7 @@ class TestFilter:
         filter_obj.cur.execute(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert table == [(0, 'strain1', 5.0), (1, 'strain2', 6.0), (2, 'strain3', 8.0)]
 
     def test_load_priority_scores_malformed(self, tmpdir, argparser, tmp_db_file):
@@ -86,6 +88,7 @@ class TestFilter:
         with pytest.raises(ValueError) as e_info:
             filter_obj.db_load_priorities_table(tmp_db_file)
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert str(e_info.value) == "Failed to parse priority file."
 
     def test_load_priority_scores_valid_with_spaces_and_tabs(self, tmpdir, argparser, tmp_db_file):
@@ -99,6 +102,7 @@ class TestFilter:
         filter_obj.cur.execute(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert table == [(0, 'strain 1', 5.0), (1, 'strain 2', 6.0), (2, 'strain 3', 8.0)]
 
     def test_load_priority_scores_does_not_exist(self, tmpdir, argparser, tmp_db_file):
@@ -109,6 +113,7 @@ class TestFilter:
         with pytest.raises(FileNotFoundError):
             filter_obj.db_load_priorities_table(tmp_db_file)
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
 
     def test_filter_by_query(self, tmpdir, argparser, tmp_db_file):
         """Filter by a query expresssion."""
@@ -129,6 +134,7 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert results == [('SEQ_2',)]
 
     def test_filter_by_query_two_conditions(self, tmpdir, argparser, tmp_db_file):
@@ -152,6 +158,7 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert results == [('SEQ_2',), ('SEQ_3',)]
 
     def test_filter_by_query_and_include_strains(self, tmpdir, argparser, tmp_db_file):
@@ -180,6 +187,7 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
     def test_filter_by_query_and_include_where(self, tmpdir, argparser, tmp_db_file):
@@ -206,6 +214,7 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
     def test_filter_by_min_date(self, tmpdir, argparser, tmp_db_file):
@@ -232,6 +241,7 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert results == [('SEQ_3',)]
 
     def test_filter_by_max_date(self, tmpdir, argparser, tmp_db_file):
@@ -258,4 +268,5 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         filter_obj.connection.close()
+        filter_obj.db_cleanup()
         assert results == [('SEQ_3',)]
