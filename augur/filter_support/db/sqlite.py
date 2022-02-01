@@ -20,10 +20,9 @@ SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
 METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
+EXTENDED_FILTERED_TABLE_NAME = 'metadata_filtered_extended'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
-# view names
-EXTENDED_VIEW_NAME = 'metadata_filtered_extended'
 # column names
 DEFAULT_DATE_COL = 'date'
 FILTER_REASON_COL = 'filter'
@@ -469,7 +468,7 @@ class FilterSQLite(FilterBase):
         """
         self.cur.execute(f"""
             SELECT {','.join(group_by_cols)}, COUNT(*)
-            FROM {EXTENDED_VIEW_NAME}
+            FROM {EXTENDED_FILTERED_TABLE_NAME}
             GROUP BY {','.join(group_by_cols)}
         """)
         return [row[-1] for row in self.cur.fetchall()]
@@ -501,7 +500,7 @@ class FilterSQLite(FilterBase):
                     PARTITION BY {','.join(group_by_cols)}
                     ORDER BY (CASE WHEN {PRIORITY_COL} IS NULL THEN 1 ELSE 0 END), {PRIORITY_COL} DESC
                 ) AS group_i
-                FROM {EXTENDED_VIEW_NAME}
+                FROM {EXTENDED_FILTERED_TABLE_NAME}
             )
             JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
@@ -543,18 +542,39 @@ class FilterSQLite(FilterBase):
         df_priority.to_sql(PRIORITIES_TABLE_NAME, self.connection, index=False)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
-    def db_create_extended_filtered_metadata_view(self):
-        """Creates a new view with rows as filtered metadata, with the following columns:
-        
-        1. All columns from metadata
+    def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]):
+        """Creates a new table with rows as filtered metadata, with the following columns:
+
+        1. Strain
+        2. Group-by columns
         2. Computed date columns (`year`, `month`, `day`)
         3. `priority`
-        4. `dummy` containing the same value in all rows, used when no groupby columns are provided
+        4. `dummy` containing the same value in all rows, used when no group-by columns are provided
         """
-        self.cur.execute(f"DROP VIEW IF EXISTS {EXTENDED_VIEW_NAME}")
-        self.cur.execute(f"""
-        CREATE VIEW {EXTENDED_VIEW_NAME} AS
-            SELECT m.*, d.year, d.month, d.day, p.{PRIORITY_COL}, TRUE AS {DUMMY_COL}
+        group_by_cols_for_select = ''
+        if group_by_cols:
+            # copy to avoid modifying original list
+            group_by_cols_copy = list(group_by_cols)
+            # ignore computed date columns, those are added directly from the date table
+            # TODO: call out that these columns will be ignored from original metadata if present
+            if 'year' in group_by_cols:
+                group_by_cols_copy.remove('year')
+            if 'month' in group_by_cols:
+                group_by_cols_copy.remove('month')
+            if 'day' in group_by_cols:
+                group_by_cols_copy.remove('day')
+            if group_by_cols_copy:
+                # prefix columns with m. as metadata table alias
+                # add an extra comma for valid SQL
+                group_by_cols_for_select = ','.join(f'm.{col}' for col in group_by_cols_copy) + ','
+        # left outer join priorities table to prevent dropping strains without a priority
+        self.cur.execute(f"""CREATE TABLE {EXTENDED_FILTERED_TABLE_NAME} AS
+            SELECT
+                m.{STRAIN_COL},
+                {group_by_cols_for_select}
+                d.year, d.month, d.day,
+                p.{PRIORITY_COL},
+                TRUE AS {DUMMY_COL}
             FROM {METADATA_TABLE_NAME} m
             JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m.{STRAIN_COL} = f.{STRAIN_COL})
                 AND (NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL})
@@ -565,7 +585,7 @@ class FilterSQLite(FilterBase):
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
         df_groups = pd.read_sql_query(f"""
                 SELECT {','.join(group_by)}
-                FROM {EXTENDED_VIEW_NAME}
+                FROM {EXTENDED_FILTERED_TABLE_NAME}
                 GROUP BY {','.join(group_by)}
             """, self.connection)
         df_sizes = get_sizes_per_group(df_groups, GROUP_SIZE_COL, sequences_per_group, random_seed=self.args.subsample_seed)

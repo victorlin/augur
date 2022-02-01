@@ -266,10 +266,9 @@ class FilterBase(abc.ABC):
 
     def subsample(self):
         self.create_priorities_table()
-        self.db_create_extended_filtered_metadata_view()
 
         group_by_cols = self.args.group_by
-        sequences_per_group = self.args.sequences_per_group
+        self.db_create_extended_filtered_metadata_table(group_by_cols)
 
         if self.args.subsample_max_sequences:
             if self.args.group_by:
@@ -293,7 +292,8 @@ class FilterBase(abc.ABC):
                 print(f"Sampling probabilistically at {sequences_per_group:0.4f} sequences per group, meaning it is possible to have more than the requested maximum of {self.args.subsample_max_sequences} sequences after filtering.")
             else:
                 print(f"Sampling at {sequences_per_group} per group.")
-
+        else:
+            sequences_per_group = self.args.sequences_per_group
 
         self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
         self.db_update_filter_reason_table_with_subsampling(group_by_cols)
@@ -320,7 +320,7 @@ class FilterBase(abc.ABC):
     def db_generate_priorities_table(self, seed:int=None): pass
 
     @abc.abstractmethod
-    def db_create_extended_filtered_metadata_view(self): pass
+    def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]): pass
 
     @abc.abstractmethod
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float): pass
