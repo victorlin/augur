@@ -274,7 +274,7 @@ class FilterSQLite(FilterBase):
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
-            WHERE date_min < {min_date} OR date_min IS NULL
+            WHERE date_max < {min_date} OR date_min IS NULL
         )"""
 
     def filter_by_max_date(self, max_date):
@@ -294,7 +294,7 @@ class FilterSQLite(FilterBase):
         return f"""{STRAIN_COL} IN (
             SELECT {STRAIN_COL}
             FROM {DATE_TABLE_NAME}
-            WHERE date_max > {max_date} OR date_max IS NULL
+            WHERE date_min > {max_date} OR date_max IS NULL
         )"""
 
     def filter_by_sequence_index(self):
