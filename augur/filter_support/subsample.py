@@ -103,7 +103,7 @@ def _calculate_sequences_per_group(
     >>> _calculate_sequences_per_group(1, [4, 2])
     Traceback (most recent call last):
         ...
-    augur.filter.TooManyGroupsError: Asked to provide at most 1 sequences, but there are 2 groups.
+    augur.filter_support.subsample.TooManyGroupsError: Asked to provide at most 1 sequences, but there are 2 groups.
     """
 
     if len(sequence_lengths) > target_max_value:
