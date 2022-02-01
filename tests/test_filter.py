@@ -37,8 +37,8 @@ def write_metadata(tmpdir, metadata):
 
 
 @pytest.fixture
-def get_init_filter_obj(tmpdir):
-    def filter_obj(args:argparse.Namespace):
+def get_init_filter_obj():
+    def filter_obj(args:argparse.Namespace, tmpdir):
         db_file = str(tmpdir / "test.sqlite")
         obj = FilterSQLite(args, db_file)
         obj.db_connect()
@@ -55,7 +55,7 @@ class TestFilter:
                 ("SEQ_3","nevada","good")]
         meta_fn = write_metadata(tmpdir, data)
         args = argparser(f'--metadata {meta_fn}')
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.cur.execute(f"SELECT * FROM {METADATA_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
@@ -69,7 +69,7 @@ class TestFilter:
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_priorities_table()
         filter_obj.cur.execute(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
@@ -83,7 +83,7 @@ class TestFilter:
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         with pytest.raises(ValueError) as e_info:
             filter_obj.db_load_priorities_table()
         filter_obj.connection.close()
@@ -96,7 +96,7 @@ class TestFilter:
         priorities_fn = write_file(tmpdir, "priorities.txt", content)
         # --metadata is required but we don't need it
         args = argparser(f'--metadata "" --priority {priorities_fn}')
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_priorities_table()
         filter_obj.cur.execute(f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
         table = filter_obj.cur.fetchall()
@@ -108,7 +108,7 @@ class TestFilter:
         """Attempt to load a non-existant priority score file raises a FileNotFoundError."""
         invalid_priorities_fn = str(tmpdir / "does/not/exist.txt")
         args = argparser(f'--metadata "" --priority {invalid_priorities_fn}')
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         with pytest.raises(FileNotFoundError):
             filter_obj.db_load_priorities_table()
         filter_obj.connection.close()
@@ -122,7 +122,7 @@ class TestFilter:
                 ("SEQ_3","nevada","good")]
         meta_fn = write_metadata(tmpdir, data)
         args = argparser(f'--metadata {meta_fn} --query \'quality=="good"\'')
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
@@ -146,7 +146,7 @@ class TestFilter:
         args = argparser(f"""
             --metadata {meta_fn} --query 'quality=="good" AND location=="colorado"'
         """)
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
@@ -174,7 +174,7 @@ class TestFilter:
             --query 'quality=="good" AND location=="colorado"'
             --include {include_fn}
         """)
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
@@ -201,7 +201,7 @@ class TestFilter:
             --query 'quality=="good" AND location=="colorado"'
             --include-where 'location=nevada'
         """)
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         exclude_by, include_by = filter_obj.construct_filters()
@@ -227,7 +227,7 @@ class TestFilter:
             --metadata {meta_fn}
             --min-date 2020-02-26
         """)
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         filter_obj.db_create_date_table()
@@ -254,7 +254,7 @@ class TestFilter:
             --metadata {meta_fn}
             --max-date 2020-03-01
         """)
-        filter_obj = get_init_filter_obj(args)
+        filter_obj = get_init_filter_obj(args, tmpdir)
         filter_obj.db_load_metadata()
         filter_obj.add_attributes()
         filter_obj.db_create_date_table()
