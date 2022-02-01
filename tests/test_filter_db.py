@@ -198,3 +198,53 @@ class TestFilter:
         """)
         results = filter_obj.cur.fetchall()
         assert results == [('SEQ_1',), ('SEQ_3',)]
+
+    def test_filter_by_min_date(self, tmpdir, argparser, tmp_db_file):
+        """Filter by min date, inclusive."""
+        data = [("strain","date"),
+                ("SEQ_1","2020-02-XX"),
+                ("SEQ_2","2020-02-26"),
+                ("SEQ_3","2020-02-25")]
+        meta_fn = write_metadata(tmpdir, data)
+        args = argparser(f"""
+            --metadata {meta_fn}
+            --min-date 2020-02-26
+        """)
+        filter_obj = get_init_filter_obj(args, tmp_db_file)
+        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj.add_attributes()
+        filter_obj.db_create_date_table()
+        exclude_by, include_by = filter_obj.construct_filters()
+        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
+        filter_obj.cur.execute(f"""
+            SELECT {STRAIN_COL}
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
+        """)
+        results = filter_obj.cur.fetchall()
+        assert results == [('SEQ_3',)]
+
+    def test_filter_by_max_date(self, tmpdir, argparser, tmp_db_file):
+        """Filter by max date, inclusive."""
+        data = [("strain","date"),
+                ("SEQ_1","2020-03-XX"),
+                ("SEQ_2","2020-03-01"),
+                ("SEQ_3","2020-03-02")]
+        meta_fn = write_metadata(tmpdir, data)
+        args = argparser(f"""
+            --metadata {meta_fn}
+            --max-date 2020-03-01
+        """)
+        filter_obj = get_init_filter_obj(args, tmp_db_file)
+        filter_obj.db_load_metadata(tmp_db_file)
+        filter_obj.add_attributes()
+        filter_obj.db_create_date_table()
+        exclude_by, include_by = filter_obj.construct_filters()
+        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
+        filter_obj.cur.execute(f"""
+            SELECT {STRAIN_COL}
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_max_date'
+        """)
+        results = filter_obj.cur.fetchall()
+        assert results == [('SEQ_3',)]
