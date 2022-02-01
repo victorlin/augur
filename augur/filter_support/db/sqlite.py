@@ -8,7 +8,7 @@ from datetime import date
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
-from .base import FilterBase
+from augur.filter_support.db.base import FilterBase
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
