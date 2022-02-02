@@ -10,13 +10,13 @@ def date_type(date_in:str):
 
 def valid_date(date_in:str):
     # ISO 8601 date
-    if re.match('^\d{4}-\d{2}-\d{2}$', date_in):
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_in):
         return True
     # int, negative ok
-    if re.match('^-*\d+$', date_in):
+    if re.match(r'^-*\d+$', date_in):
         return True
     # float, negative ok
-    if re.match('^-*\d+\.\d+$', date_in):
+    if re.match(r'^-*\d+\.\d+$', date_in):
         return True
     return False
 
@@ -49,7 +49,7 @@ def get_day(date_in:str):
 def get_date_min(date_in:str):
     if not date_in:
         return None
-    if re.match('^-*\d+\.\d+$', date_in):
+    if re.match(r'^-*\d+\.\d+$', date_in):
         # date is a numeric date
         # can be negative
         # year-only is ambiguous
@@ -67,7 +67,7 @@ def get_date_min(date_in:str):
 def get_date_max(date_in:str):
     if not date_in:
         return None
-    if re.match('^-*\d+\.\d+$', date_in):
+    if re.match(r'^-*\d+\.\d+$', date_in):
         # date is a numeric date
         # can be negative
         # year-only is ambiguous
