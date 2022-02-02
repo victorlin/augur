@@ -128,7 +128,6 @@ class FilterBase(abc.ABC):
                 index_sequences(self.args.sequences, sequence_index_path)
 
         if self.use_sequences:
-            # TODO: verify VCF
             self.db_load_sequence_index(sequence_index_path)
 
             # Remove temporary index file, if it exists.
