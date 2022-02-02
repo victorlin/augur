@@ -268,6 +268,7 @@ class FilterBase(abc.ABC):
         self.create_priorities_table()
 
         group_by_cols = self.args.group_by
+        self.db_validate_group_by_cols(group_by_cols)
         self.db_create_extended_filtered_metadata_table(group_by_cols)
 
         if self.args.subsample_max_sequences:
@@ -318,6 +319,9 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_generate_priorities_table(self, seed:int=None): pass
+
+    @abc.abstractmethod
+    def db_validate_group_by_cols(self, group_by_cols:List[str]): pass
 
     @abc.abstractmethod
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]): pass
@@ -463,3 +467,9 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_cleanup(self): pass
+
+
+class FilterException(Exception):
+    """Representation of an error that occurred during filtering.
+    """
+    pass
