@@ -3,12 +3,11 @@ from typing import List, Set, Tuple
 import numpy as np
 import pandas as pd
 import sqlite3
-import argparse
-from datetime import date
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
 from augur.filter_support.db.base import FilterBase
+from augur.filter_support.date_parsing import get_year, get_month, get_day, get_date_min, get_date_max
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
@@ -645,84 +644,3 @@ class FilterSQLite(FilterBase):
 
     def db_cleanup(self):
         cleanup(self.db_file)
-
-
-def get_year(date_in:str):
-    try:
-        return int(date_in.split('-')[0])
-    except:
-        return None
-
-
-def get_month(date_in:str):
-    try:
-        return int(date_in.split('-')[1])
-    except:
-        return None
-
-
-def get_day(date_in:str):
-    try:
-        return int(date_in.split('-')[2])
-    except:
-        return None
-
-
-# TODO: DateDisambiguator parity
-# assert_only_less_significant_uncertainty
-# max_date = min(max_date, datetime.date.today())
-
-def get_date_min(date_in:str):
-    if not date_in:
-        return None
-    if date_in.lstrip('-').isnumeric() and '.' in date_in:
-        # date is a numeric date
-        # can be negative
-        # year-only is ambiguous
-        return float(date_in)
-    # convert to numeric
-    # TODO: check month/day value boundaries
-    # TODO: raise exception for negative ISO dates
-    date_parts = date_in.split('-', maxsplit=2)
-    year = int(date_parts[0].replace('X', '0'))
-    month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
-    day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
-    return date_to_numeric(date(year, month, day))
-
-
-def get_date_max(date_in:str):
-    if not date_in:
-        return None
-    if date_in.lstrip('-').isnumeric() and '.' in date_in:
-        # date is a numeric date
-        # can be negative
-        # year-only is ambiguous
-        return float(date_in)
-    # convert to numeric
-    # TODO: check month/day value boundaries
-    # TODO: raise exception for negative ISO dates
-    date_parts = date_in.split('-', maxsplit=2)
-    year = int(date_parts[0].replace('X', '9'))
-    month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 12
-    if len(date_parts) == 3 and date_parts[2].isnumeric():
-        day = int(date_parts[2])
-    else:
-        if month in {1,3,5,7,8,10,12}:
-            day = 31
-        elif month == 2:
-            day = 28
-        else:
-            day = 30
-    return date_to_numeric(date(year, month, day))
-
-
-# copied from treetime.utils.numeric_date
-# simplified+cached for speed
-from calendar import isleap
-date_to_numeric_cache = dict()
-def date_to_numeric(d:date):
-    if d not in date_to_numeric_cache:
-        days_in_year = 366 if isleap(d.year) else 365
-        numeric_date = d.year + (d.timetuple().tm_yday-0.5) / days_in_year
-        date_to_numeric_cache[d] = numeric_date
-    return date_to_numeric_cache[d]
