@@ -268,7 +268,11 @@ class FilterBase(abc.ABC):
         self.create_priorities_table()
 
         group_by_cols = self.args.group_by
-        self.db_validate_group_by_cols(group_by_cols)
+        try:
+            self.db_validate_group_by_cols(group_by_cols)
+        except FilterException as e:
+            print_err(f'ERROR: {e}')
+            sys.exit(1)
         self.db_create_extended_filtered_metadata_table(group_by_cols)
 
         if self.args.subsample_max_sequences:
