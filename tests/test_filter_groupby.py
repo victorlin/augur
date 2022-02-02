@@ -66,3 +66,24 @@ class TestFilterGroupBy:
         """)
         results = filter_obj_with_metadata.cur.fetchall()
         assert results == [('SEQ_2',)]
+
+    def test_filter_groupby_skip_missing_month(self, filter_obj_with_metadata:FilterSQLite):
+        # modify SEQ_2 to have year only
+        filter_obj_with_metadata.cur.execute(f"""
+            UPDATE {METADATA_TABLE_NAME}
+            SET {DEFAULT_DATE_COL} = '2020'
+            WHERE {STRAIN_COL} = 'SEQ_2'
+        """)
+        filter_obj_with_metadata.connection.commit()
+        # add arguments for subsampling
+        filter_obj_with_metadata.args.group_by = ['country', 'year', 'month']
+        # set up database
+        filter_obj_with_metadata.db_create_date_table()
+        filter_obj_with_metadata.include_exclude_filter()
+        # check filter reasons
+        filter_obj_with_metadata.cur.execute(f"""
+            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
+        """)
+        results = filter_obj_with_metadata.cur.fetchall()
+        assert results == [('SEQ_2',)]
