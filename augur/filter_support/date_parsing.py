@@ -49,7 +49,7 @@ def get_day(date_in:str):
 def get_date_min(date_in:str):
     if not date_in:
         return None
-    if date_in.lstrip('-').isnumeric() and '.' in date_in:
+    if re.match('^-*\d+\.\d+$', date_in):
         # date is a numeric date
         # can be negative
         # year-only is ambiguous
@@ -67,7 +67,7 @@ def get_date_min(date_in:str):
 def get_date_max(date_in:str):
     if not date_in:
         return None
-    if date_in.lstrip('-').isnumeric() and '.' in date_in:
+    if re.match('^-*\d+\.\d+$', date_in):
         # date is a numeric date
         # can be negative
         # year-only is ambiguous
