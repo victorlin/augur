@@ -1,4 +1,25 @@
+import re
 from datetime import date
+
+
+def date_type(date_in:str):
+    if not valid_date(date_in):
+        raise ValueError(f'Invalid date format: {date_in}')
+    return date_in
+
+
+def valid_date(date_in:str):
+    # ISO 8601 date
+    if re.match('^\d{4}-\d{2}-\d{2}$', date_in):
+        return True
+    # int, negative ok
+    if re.match('^-*\d+$', date_in):
+        return True
+    # float, negative ok
+    if re.match('^-*\d+\.\d+$', date_in):
+        return True
+    return False
+
 
 def get_year(date_in:str):
     try:
