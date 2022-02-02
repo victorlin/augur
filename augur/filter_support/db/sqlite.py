@@ -45,7 +45,7 @@ class FilterSQLite(FilterBase):
 
     def db_connect(self):
         """Creates a sqlite3 connection and cursor, stored as instance attributes."""
-        self.connection = sqlite3.connect(self.db_file)
+        self.connection = sqlite3.connect(self.db_file, timeout=15) # to reduce OperationalError: database is locked
         self.cur = self.connection.cursor()
 
     def db_create_strain_index(self, table_name:str):
@@ -60,7 +60,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(self.args.metadata, self.db_file, METADATA_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(self.args.metadata, self.connection, METADATA_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path:str):
@@ -68,7 +68,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(path, self.db_file, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(path, self.connection, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -518,7 +518,7 @@ class FilterSQLite(FilterBase):
             PRIORITY_COL: 'float'
         }
         try:
-            load_tsv(self.args.priority, self.db_file, PRIORITIES_TABLE_NAME,
+            load_tsv(self.args.priority, self.connection, PRIORITIES_TABLE_NAME,
                     header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
                     n_jobs=N_JOBS)
         except ValueError as e:
