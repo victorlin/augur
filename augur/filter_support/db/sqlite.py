@@ -306,7 +306,6 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        # TODO: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
         return f"{STRAIN_COL} NOT IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
 
     def filter_by_sequence_length(self, min_length=0):
@@ -408,6 +407,7 @@ class FilterSQLite(FilterBase):
             FROM {METADATA_TABLE_NAME}
         """)
         self.db_create_strain_index(METADATA_FILTER_REASON_TABLE_NAME)
+        # note: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
         self.db_apply_exclusions(exclude_by)
         self.db_apply_force_inclusions(include_by)
 
