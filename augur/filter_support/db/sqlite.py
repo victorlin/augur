@@ -159,6 +159,12 @@ class FilterSQLite(FilterBase):
             Operator function to test equality or non-equality of values
         str :
             Value of column to query
+
+        >>> FilterSQLite.parse_filter_query(FilterSQLite, "property=value")
+        ('property', '=', 'value')
+        >>> FilterSQLite.parse_filter_query(FilterSQLite, "property!=value")
+        ('property', '!=', 'value')
+
         """
         column, value = re.split(r'!?=', query)
         op = '='
