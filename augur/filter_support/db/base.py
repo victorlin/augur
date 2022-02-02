@@ -267,7 +267,7 @@ class FilterBase(abc.ABC):
 
         group_by_cols = self.args.group_by
         try:
-            group_by_cols = self.validate_group_by_cols(group_by_cols)
+            group_by_cols = self.get_valid_group_by_cols(group_by_cols)
         except FilterException as e:
             print_err(f'ERROR: {e}')
             self.graceful_exit()
@@ -325,7 +325,7 @@ class FilterBase(abc.ABC):
     @abc.abstractmethod
     def db_get_metadata_cols(self): pass
 
-    def validate_group_by_cols(self, group_by_cols:List[str]):
+    def get_valid_group_by_cols(self, group_by_cols:List[str]):
         metadata_cols = self.db_get_metadata_cols()
         group_by_set = set(group_by_cols)
         if 'date' not in metadata_cols and group_by_set <= {'year', 'month'}:
