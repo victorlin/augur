@@ -32,8 +32,7 @@ class FilterBase(abc.ABC):
         self.handle_sequences()
         if self.has_date_col:
             self.db_create_date_table()
-        exclude_by, include_by = self.construct_filters()
-        self.db_create_filter_reason_table(exclude_by, include_by)
+        self.include_exclude_filter()
         if self.do_subsample:
             self.subsample()
         self.db_create_output_table()
@@ -139,6 +138,10 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_create_date_table(self): pass
+
+    def include_exclude_filter(self):
+        exclude_by, include_by = self.construct_filters()
+        self.db_create_filter_reason_table(exclude_by, include_by)
 
     def construct_filters(self):
         exclude_by = []
