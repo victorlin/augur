@@ -561,8 +561,6 @@ class FilterSQLite(FilterBase):
                 group_by_cols_copy.remove('year')
             if 'month' in group_by_cols:
                 group_by_cols_copy.remove('month')
-            if 'day' in group_by_cols:
-                group_by_cols_copy.remove('day')
             if group_by_cols_copy:
                 # prefix columns with m. as metadata table alias
                 # add an extra comma for valid SQL
@@ -572,7 +570,7 @@ class FilterSQLite(FilterBase):
             SELECT
                 m.{STRAIN_COL},
                 {group_by_cols_for_select}
-                d.year, d.month, d.day,
+                d.year, d.month,
                 p.{PRIORITY_COL},
                 TRUE AS {DUMMY_COL}
             FROM {METADATA_TABLE_NAME} m
