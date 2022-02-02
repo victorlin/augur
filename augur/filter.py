@@ -5,11 +5,6 @@ import treetime.utils
 from augur.filter_support.db.sqlite import FilterSQLite
 
 
-SEQUENCE_ONLY_FILTERS = (
-    "min_length",
-    "non_nucleotide",
-)
-
 def register_arguments(parser):
     input_group = parser.add_argument_group("inputs", "metadata and sequences to be filtered")
     input_group.add_argument('--metadata', required=True, metavar="FILE", help="sequence metadata, as CSV or TSV")
