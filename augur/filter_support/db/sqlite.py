@@ -6,7 +6,7 @@ import sqlite3
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
-from augur.filter_support.db.base import FilterBase, FilterException
+from augur.filter_support.db.base import FilterBase
 from augur.filter_support.date_parsing import get_year, get_month, get_day, get_date_min, get_date_max
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
@@ -542,13 +542,8 @@ class FilterSQLite(FilterBase):
         df_priority.to_sql(PRIORITIES_TABLE_NAME, self.connection, index=False)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
-    def db_validate_group_by_cols(self, group_by_cols:List[str]):
-        metadata_cols = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
-        group_by_set = set(group_by_cols)
-        if 'date' not in metadata_cols and group_by_set <= {'year', 'month'}:
-            raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done. Note that using 'year' or 'year month' requires a column called 'date'.")
-        if not group_by_set & (metadata_cols | {'year', 'month'}):
-            raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done.")
+    def db_get_metadata_cols(self):
+        return {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
 
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]):
         """Creates a new table with rows as filtered metadata, with the following columns:

@@ -267,7 +267,7 @@ class FilterBase(abc.ABC):
 
         group_by_cols = self.args.group_by
         try:
-            self.db_validate_group_by_cols(group_by_cols)
+            self.validate_group_by_cols(group_by_cols)
         except FilterException as e:
             print_err(f'ERROR: {e}')
             self.graceful_exit()
@@ -323,7 +323,15 @@ class FilterBase(abc.ABC):
     def db_generate_priorities_table(self, seed:int=None): pass
 
     @abc.abstractmethod
-    def db_validate_group_by_cols(self, group_by_cols:List[str]): pass
+    def db_get_metadata_cols(self): pass
+
+    def validate_group_by_cols(self, group_by_cols:List[str]):
+        metadata_cols = self.db_get_metadata_cols()
+        group_by_set = set(group_by_cols)
+        if 'date' not in metadata_cols and group_by_set <= {'year', 'month'}:
+            raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done. Note that using 'year' or 'year month' requires a column called 'date'.")
+        if not group_by_set & (metadata_cols | {'year', 'month'}):
+            raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done.")
 
     @abc.abstractmethod
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]): pass
