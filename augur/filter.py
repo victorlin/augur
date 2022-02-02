@@ -1,7 +1,6 @@
 """
 Filter and subsample a sequence set.
 """
-import treetime.utils
 from augur.filter_support.db.sqlite import FilterSQLite
 
 
@@ -20,8 +19,8 @@ def register_arguments(parser):
         Uses Pandas Dataframe querying, see https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#indexing-query for syntax.
         (e.g., --query "country == 'Colombia'" or --query "(country == 'USA' & (division == 'Washington'))")"""
     )
-    metadata_filter_group.add_argument('--min-date', type=date_string, help="minimal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
-    metadata_filter_group.add_argument('--max-date', type=date_string, help="maximal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
+    metadata_filter_group.add_argument('--min-date', type=str, help="minimal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
+    metadata_filter_group.add_argument('--max-date', type=str, help="maximal cutoff for date, the cutoff date is inclusive; may be specified as an Augur-style numeric date (with the year as the integer part) or YYYY-MM-DD")
     metadata_filter_group.add_argument('--exclude-ambiguous-dates-by', choices=['any', 'day', 'month', 'year'],
                                 help='Exclude ambiguous dates by day (e.g., 2020-09-XX), month (e.g., 2020-XX-XX), year (e.g., 200X-10-01), or any date fields. An ambiguous year makes the corresponding month and day ambiguous, too, even if those fields have unambiguous values (e.g., "201X-10-01"). Similarly, an ambiguous month makes the corresponding day ambiguous (e.g., "2010-XX-01").')
     metadata_filter_group.add_argument('--exclude', type=str, nargs="+", help="file(s) with list of strains to exclude")
@@ -66,13 +65,3 @@ def run(args):
     filter = FilterSQLite()
     filter.set_args(args)
     return filter.run()
-
-
-def date_string(date):
-    """
-    Converts the given *date* to a :py:class:`string` in the YYYY-MM-DD (ISO 8601) syntax.
-    """
-    if type(date) is float or type(date) is int:
-        return treetime.utils.datestring_from_numeric(date)
-    if type(date) is str:
-        return date # TODO: verify
