@@ -200,6 +200,7 @@ class FilterBase(abc.ABC):
                 exclude_by.append((self.filter_by_sequence_length, {'min_length': self.args.min_length}))
 
         if self.args.group_by:
+            # Ambiguous year exclusions must be evaluated after month since month will capture ambiguous years as well
             if "month" in self.args.group_by:
                 exclude_by.append((self.skip_group_by_with_ambiguous_month, {}))
             if "year" in self.args.group_by:
