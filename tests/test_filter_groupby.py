@@ -1,6 +1,13 @@
 import pytest
 from augur.filter_support.db.base import FilterException
-from augur.filter_support.db.sqlite import FilterSQLite
+from augur.filter_support.db.sqlite import (
+    DEFAULT_DATE_COL,
+    FILTER_REASON_COL,
+    METADATA_FILTER_REASON_TABLE_NAME,
+    METADATA_TABLE_NAME,
+    STRAIN_COL,
+    FilterSQLite
+)
 from test_filter import argparser, write_metadata
 
 
@@ -10,7 +17,7 @@ def filter_obj_with_metadata(tmpdir, argparser):
     obj = FilterSQLite(':memory:')
     obj.db_connect()
     data = [
-        ('strain','date','country'),
+        (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
         ("SEQ_1","2020-01-XX","A"),
         ("SEQ_2","2020-02-01","A"),
         ("SEQ_3","2020-03-01","B"),
@@ -21,6 +28,7 @@ def filter_obj_with_metadata(tmpdir, argparser):
     args = argparser(f'--metadata {meta_fn}')
     obj.set_args(args)
     obj.db_load_metadata()
+    obj.add_attributes()
     return obj
 
 
@@ -37,3 +45,24 @@ class TestFilterGroupBy:
         assert valid_group_by_cols == ['country', 'year', 'month']
         captured = capsys.readouterr()
         assert captured.err == "WARNING: Some of the specified group-by categories couldn't be found: invalid\nFiltering by group may behave differently than expected!\n"
+
+    def test_filter_groupby_skip_ambiguous_month(self, filter_obj_with_metadata:FilterSQLite):
+        # modify SEQ_2 to have ambiguous month
+        filter_obj_with_metadata.cur.execute(f"""
+            UPDATE {METADATA_TABLE_NAME}
+            SET {DEFAULT_DATE_COL} = '2020-XX-01'
+            WHERE {STRAIN_COL} = 'SEQ_2'
+        """)
+        filter_obj_with_metadata.connection.commit()
+        # add arguments for subsampling
+        filter_obj_with_metadata.args.group_by = ['country', 'year', 'month']
+        # set up database
+        filter_obj_with_metadata.db_create_date_table()
+        filter_obj_with_metadata.include_exclude_filter()
+        # check filter reasons
+        filter_obj_with_metadata.cur.execute(f"""
+            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
+        """)
+        results = filter_obj_with_metadata.cur.fetchall()
+        assert results == [('SEQ_2',)]
