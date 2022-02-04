@@ -24,7 +24,7 @@ class FilterBase(abc.ABC):
     def run(self, cleanup=True):
         # Validate arguments before attempting any I/O.
         if not self.validate_arguments():
-            return 1
+            self.graceful_exit()
         self.db_connect()
         self.db_load_metadata()
         self.add_attributes()
