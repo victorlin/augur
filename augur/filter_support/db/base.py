@@ -21,11 +21,10 @@ class FilterBase(abc.ABC):
     def set_args(self, args:argparse.Namespace):
         self.args = args
 
-    def run(self):
+    def run(self, cleanup=True):
         # Validate arguments before attempting any I/O.
         if not self.validate_arguments():
             return 1
-        self.db_cleanup()
         self.db_connect()
         self.db_load_metadata()
         self.add_attributes()
@@ -38,7 +37,8 @@ class FilterBase(abc.ABC):
         self.db_create_output_table()
         self.write_outputs()
         self.write_report()
-        self.db_cleanup()
+        if cleanup:
+            self.db_cleanup()
 
     def validate_arguments(self):
         """Validate arguments and return a boolean representing whether all validation
