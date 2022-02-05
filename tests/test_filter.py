@@ -1,5 +1,6 @@
 import argparse
 import shlex
+from xml.etree.ElementInclude import include
 import pytest
 import augur.filter
 
@@ -42,6 +43,25 @@ def filter_obj():
     obj = FilterSQLite(':memory:')
     obj.db_connect()
     return obj
+
+
+def get_filter_obj_run(args:argparse.Namespace):
+    """Returns a filter object connected to an in-memory database."""
+    obj = FilterSQLite(':memory:')
+    obj.set_args(args)
+    obj.run(cleanup=False)
+    return obj
+
+
+def get_valid_args(data, tmpdir, argparser):
+    """Returns an argparse.Namespace with metadata and output_strains"""
+    meta_fn = write_metadata(tmpdir, data)
+    return argparser(f'--metadata {meta_fn} --output-strains {tmpdir / "strains.txt"}')
+
+
+def query_fetchall(filter_obj:FilterSQLite, query:str):
+    filter_obj.cur.execute(query)
+    return filter_obj.cur.fetchall()
 
 
 class TestFilter:
@@ -102,146 +122,102 @@ class TestFilter:
         with pytest.raises(FileNotFoundError):
             filter_obj.db_load_priorities_table()
 
-    def test_filter_by_query(self, tmpdir, argparser, filter_obj:FilterSQLite):
+    def test_filter_by_query(self, tmpdir, argparser):
         """Filter by a query expresssion."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        meta_fn = write_metadata(tmpdir, data)
-        args = argparser(f'--metadata {meta_fn} --query \'quality=="good"\'')
-        filter_obj.set_args(args)
-        filter_obj.db_load_metadata()
-        filter_obj.add_attributes()
-        exclude_by, include_by = filter_obj.construct_filters()
-        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
-        filter_obj.cur.execute(f"""
+        args = get_valid_args(data, tmpdir, argparser)
+        args.query = 'quality=="good"'
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_query'
         """)
-        results = filter_obj.cur.fetchall()
         assert results == [('SEQ_2',)]
 
-    def test_filter_by_query_two_conditions(self, tmpdir, argparser, filter_obj:FilterSQLite):
+    def test_filter_by_query_two_conditions(self, tmpdir, argparser):
         """Filter by a query expresssion with two conditions."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        meta_fn = write_metadata(tmpdir, data)
-        args = argparser(f"""
-            --metadata {meta_fn} --query 'quality=="good" AND location=="colorado"'
-        """)
-        filter_obj.set_args(args)
-        filter_obj.db_load_metadata()
-        filter_obj.add_attributes()
-        exclude_by, include_by = filter_obj.construct_filters()
-        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
-        filter_obj.cur.execute(f"""
+        args = get_valid_args(data, tmpdir, argparser)
+        args.query = 'quality=="good" AND location=="colorado"'
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_query'
         """)
-        results = filter_obj.cur.fetchall()
         assert results == [('SEQ_2',), ('SEQ_3',)]
 
-    def test_filter_by_query_and_include_strains(self, tmpdir, argparser, filter_obj:FilterSQLite):
+    def test_filter_by_query_and_include_strains(self, tmpdir, argparser):
         """Filter by a query expresssion and force-include a strain."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        meta_fn = write_metadata(tmpdir, data)
         include_fn = str(tmpdir / "include.txt")
         open(include_fn, "w").write("SEQ_3")
-        args = argparser(f"""
-            --metadata {meta_fn}
-            --query 'quality=="good" AND location=="colorado"'
-            --include {include_fn}
-        """)
-        filter_obj.set_args(args)
-        filter_obj.db_load_metadata()
-        filter_obj.add_attributes()
-        exclude_by, include_by = filter_obj.construct_filters()
-        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
-        filter_obj.cur.execute(f"""
+        args = get_valid_args(data, tmpdir, argparser)
+        args.query = 'quality=="good" AND location=="colorado"'
+        args.include = [include_fn]
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
-        results = filter_obj.cur.fetchall()
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
-    def test_filter_by_query_and_include_where(self, tmpdir, argparser, filter_obj:FilterSQLite):
+    def test_filter_by_query_and_include_where(self, tmpdir, argparser):
         """Filter by a query expresssion and force-include a strain."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        meta_fn = write_metadata(tmpdir, data)
-        args = argparser(f"""
-            --metadata {meta_fn}
-            --query 'quality=="good" AND location=="colorado"'
-            --include-where 'location=nevada'
-        """)
-        filter_obj.set_args(args)
-        filter_obj.db_load_metadata()
-        filter_obj.add_attributes()
-        exclude_by, include_by = filter_obj.construct_filters()
-        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
-        filter_obj.cur.execute(f"""
+        include_fn = str(tmpdir / "include.txt")
+        open(include_fn, "w").write("SEQ_3")
+        args = get_valid_args(data, tmpdir, argparser)
+        args.query = 'quality=="good" AND location=="colorado"'
+        args.include_where = ['location=nevada']
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
-        results = filter_obj.cur.fetchall()
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
-    def test_filter_by_min_date(self, tmpdir, argparser, filter_obj:FilterSQLite):
+    def test_filter_by_min_date(self, tmpdir, argparser):
         """Filter by min date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-02-XX"),
                 ("SEQ_2","2020-02-26"),
                 ("SEQ_3","2020-02-25")]
-        meta_fn = write_metadata(tmpdir, data)
-        args = argparser(f"""
-            --metadata {meta_fn}
-            --min-date 2020-02-26
-        """)
-        filter_obj.set_args(args)
-        filter_obj.db_load_metadata()
-        filter_obj.add_attributes()
-        filter_obj.db_create_date_table()
-        exclude_by, include_by = filter_obj.construct_filters()
-        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
-        filter_obj.cur.execute(f"""
+        args = get_valid_args(data, tmpdir, argparser)
+        args.min_date = '2020-02-26'
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
         """)
-        results = filter_obj.cur.fetchall()
         assert results == [('SEQ_3',)]
 
-    def test_filter_by_max_date(self, tmpdir, argparser, filter_obj:FilterSQLite):
+    def test_filter_by_max_date(self, tmpdir, argparser):
         """Filter by max date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-03-XX"),
                 ("SEQ_2","2020-03-01"),
                 ("SEQ_3","2020-03-02")]
-        meta_fn = write_metadata(tmpdir, data)
-        args = argparser(f"""
-            --metadata {meta_fn}
-            --max-date 2020-03-01
-        """)
-        filter_obj.set_args(args)
-        filter_obj.db_load_metadata()
-        filter_obj.add_attributes()
-        filter_obj.db_create_date_table()
-        exclude_by, include_by = filter_obj.construct_filters()
-        filter_obj.db_create_filter_reason_table(exclude_by, include_by)
-        filter_obj.cur.execute(f"""
+        args = get_valid_args(data, tmpdir, argparser)
+        args.max_date = '2020-03-01'
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_max_date'
         """)
-        results = filter_obj.cur.fetchall()
         assert results == [('SEQ_3',)]
