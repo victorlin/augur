@@ -1,9 +1,7 @@
 import argparse
 import shlex
-import pytest
-import augur.filter
 
-from augur.filter_support.db.sqlite import FilterSQLite
+import augur.filter
 
 
 def parse_args(args:str):
@@ -22,11 +20,3 @@ def write_file(tmpdir, filename:str, content:str):
 def write_metadata(tmpdir, metadata):
     content = "\n".join(("\t".join(md) for md in metadata))
     return write_file(tmpdir, "metadata.tsv", content)
-
-
-@pytest.fixture(scope='function')
-def filter_obj():
-    """Returns a filter object connected to an in-memory database per function."""
-    obj = FilterSQLite(':memory:')
-    obj.db_connect()
-    return obj

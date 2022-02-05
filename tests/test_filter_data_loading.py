@@ -1,8 +1,5 @@
-import argparse
-import shlex
 import pytest
 
-import augur.filter
 from augur.filter_support.db.sqlite import (
     METADATA_TABLE_NAME,
     PRIORITIES_TABLE_NAME,
