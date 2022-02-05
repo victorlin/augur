@@ -9,7 +9,7 @@ from augur.filter_support.db.sqlite import (
     FilterSQLite
 )
 
-from test_filter import argparser, write_metadata
+from test_filter import parse_args, write_metadata
 
 
 def get_filter_obj_run(args:argparse.Namespace):
@@ -20,10 +20,10 @@ def get_filter_obj_run(args:argparse.Namespace):
     return obj
 
 
-def get_valid_args(data, tmpdir, argparser):
+def get_valid_args(data, tmpdir):
     """Returns an argparse.Namespace with metadata and output_strains"""
     meta_fn = write_metadata(tmpdir, data)
-    return argparser(f'--metadata {meta_fn} --output-strains {tmpdir / "strains.txt"}')
+    return parse_args(f'--metadata {meta_fn} --output-strains {tmpdir / "strains.txt"}')
 
 
 def query_fetchall(filter_obj:FilterSQLite, query:str):
@@ -32,13 +32,13 @@ def query_fetchall(filter_obj:FilterSQLite, query:str):
 
 
 class TestFiltering:
-    def test_filter_by_query(self, tmpdir, argparser):
+    def test_filter_by_query(self, tmpdir):
         """Filter by a query expresssion."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        args = get_valid_args(data, tmpdir, argparser)
+        args = get_valid_args(data, tmpdir)
         args.query = 'quality=="good"'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
@@ -47,13 +47,13 @@ class TestFiltering:
         """)
         assert results == [('SEQ_2',)]
 
-    def test_filter_by_query_two_conditions(self, tmpdir, argparser):
+    def test_filter_by_query_two_conditions(self, tmpdir):
         """Filter by a query expresssion with two conditions."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        args = get_valid_args(data, tmpdir, argparser)
+        args = get_valid_args(data, tmpdir)
         args.query = 'quality=="good" AND location=="colorado"'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
@@ -62,7 +62,7 @@ class TestFiltering:
         """)
         assert results == [('SEQ_2',), ('SEQ_3',)]
 
-    def test_filter_by_query_and_include_strains(self, tmpdir, argparser):
+    def test_filter_by_query_and_include_strains(self, tmpdir):
         """Filter by a query expresssion and force-include a strain."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
@@ -70,7 +70,7 @@ class TestFiltering:
                 ("SEQ_3","nevada","good")]
         include_fn = str(tmpdir / "include.txt")
         open(include_fn, "w").write("SEQ_3")
-        args = get_valid_args(data, tmpdir, argparser)
+        args = get_valid_args(data, tmpdir)
         args.query = 'quality=="good" AND location=="colorado"'
         args.include = [include_fn]
         filter_obj = get_filter_obj_run(args)
@@ -81,13 +81,13 @@ class TestFiltering:
         """)
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
-    def test_filter_by_query_and_include_where(self, tmpdir, argparser):
+    def test_filter_by_query_and_include_where(self, tmpdir):
         """Filter by a query expresssion and force-include a strain."""
         data = [("strain","location","quality"),
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        args = get_valid_args(data, tmpdir, argparser)
+        args = get_valid_args(data, tmpdir)
         args.query = 'quality=="good" AND location=="colorado"'
         args.include_where = ['location=nevada']
         filter_obj = get_filter_obj_run(args)
@@ -98,13 +98,13 @@ class TestFiltering:
         """)
         assert results == [('SEQ_1',), ('SEQ_3',)]
 
-    def test_filter_by_min_date(self, tmpdir, argparser):
+    def test_filter_by_min_date(self, tmpdir):
         """Filter by min date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-02-XX"),
                 ("SEQ_2","2020-02-26"),
                 ("SEQ_3","2020-02-25")]
-        args = get_valid_args(data, tmpdir, argparser)
+        args = get_valid_args(data, tmpdir)
         args.min_date = '2020-02-26'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
@@ -114,13 +114,13 @@ class TestFiltering:
         """)
         assert results == [('SEQ_3',)]
 
-    def test_filter_by_max_date(self, tmpdir, argparser):
+    def test_filter_by_max_date(self, tmpdir):
         """Filter by max date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-03-XX"),
                 ("SEQ_2","2020-03-01"),
                 ("SEQ_3","2020-03-02")]
-        args = get_valid_args(data, tmpdir, argparser)
+        args = get_valid_args(data, tmpdir)
         args.max_date = '2020-03-01'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""

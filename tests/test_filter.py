@@ -6,13 +6,10 @@ import augur.filter
 from augur.filter_support.db.sqlite import FilterSQLite
 
 
-@pytest.fixture
-def argparser():
+def parse_args(args:str):
     parser = argparse.ArgumentParser()
     augur.filter.register_arguments(parser)
-    def parse(args):
-        return parser.parse_args(shlex.split(args))
-    return parse
+    return parser.parse_args(shlex.split(args))
 
 
 def write_file(tmpdir, filename:str, content:str):

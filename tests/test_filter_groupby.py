@@ -8,11 +8,11 @@ from augur.filter_support.db.sqlite import (
     STRAIN_COL,
     FilterSQLite
 )
-from test_filter import argparser, write_metadata
+from test_filter import parse_args, write_metadata
 
 
 @pytest.fixture(scope='function')
-def filter_obj_with_metadata(tmpdir, argparser):
+def filter_obj_with_metadata(tmpdir):
     """Returns a filter object connected to an in-memory database per function."""
     obj = FilterSQLite(':memory:')
     obj.db_connect()
@@ -25,7 +25,7 @@ def filter_obj_with_metadata(tmpdir, argparser):
         ("SEQ_5","2020-05-01","B")
     ]
     meta_fn = write_metadata(tmpdir, data)
-    args = argparser(f'--metadata {meta_fn}')
+    args = parse_args(f'--metadata {meta_fn}')
     obj.set_args(args)
     obj.db_load_metadata()
     obj.add_attributes()
