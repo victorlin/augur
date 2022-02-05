@@ -87,8 +87,6 @@ class TestFiltering:
                 ("SEQ_1","colorado","good"),
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
-        include_fn = str(tmpdir / "include.txt")
-        open(include_fn, "w").write("SEQ_3")
         args = get_valid_args(data, tmpdir, argparser)
         args.query = 'quality=="good" AND location=="colorado"'
         args.include_where = ['location=nevada']
