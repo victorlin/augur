@@ -27,7 +27,7 @@ Please see the [project board](https://github.com/orgs/nextstrain/projects/6) fo
 
 ## Contributing code
 
-We currently target compatibility with Python 3.6 and higher. As Python releases new versions,
+We currently target compatibility with Python 3.7 and higher. As Python releases new versions,
 the minimum target compatibility may be increased in the future.
 
 Versions for this project, Augur, from 3.0.0 onwards aim to follow the
@@ -45,7 +45,7 @@ To to test your local changes (without installing them to your system), run the 
 
 Note that the `./bin/augur` convenience script is not installing `augur` system-wide with pip.
 
-As an alternative to using the convenience script, you can install augur from source
+As an alternative to using the convenience script and to install the dev dependencies, you can install augur from source
 as an **editable package** so that your global `augur` command always uses your
 local source code copy:
 
@@ -143,6 +143,12 @@ For example, the following command only runs unit tests related to augur mask.
 
 ```bash
 ./run_tests.sh -k test_mask
+```
+
+To run a specific integration test with cram, you can use the following command:
+
+```bash
+cram --shell=/bin/bash tests/functional/clades.t
 ```
 
 Troubleshooting tip: As tests run on the development code in the augur repository, your environment should not have an existing augur installation that could cause a conflict in pytest.

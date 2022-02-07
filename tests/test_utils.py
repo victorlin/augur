@@ -6,6 +6,7 @@ import pytest
 from freezegun import freeze_time
 
 from augur import utils
+from test_filter import write_metadata
 
 @pytest.fixture
 def mock_run_shell_command(mocker):
@@ -120,6 +121,21 @@ class TestUtils:
         strains = utils.read_strains(strains1, strains2)
         assert len(strains) == 3
         assert "strain1" in strains
+
+    def test_read_metadata(self, tmpdir):
+        meta_fn = write_metadata(tmpdir, (("strain","location","quality"),
+                                          ("SEQ_1","colorado","good"),
+                                          ("SEQ_2","colorado","bad"),
+                                          ("SEQ_3","nevada","good")))
+        utils.read_metadata(meta_fn, as_data_frame=True)
+        # duplicates SEQ_1 raises ValueError
+        meta_fn = write_metadata(tmpdir, (("strain","location","quality"),
+                                          ("SEQ_1","colorado","good"),
+                                          ("SEQ_1","colorado","bad"),
+                                          ("SEQ_3","nevada","good")))
+        with pytest.raises(ValueError) as e_info:
+            utils.read_metadata(meta_fn, as_data_frame=True)
+        assert str(e_info.value) == "Duplicated strain in metadata: SEQ_1"
 
     def test_read_vcf_compressed(self):
         seq_keep, all_seq = utils.read_vcf(
