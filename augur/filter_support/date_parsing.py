@@ -61,7 +61,10 @@ def get_date_min(date_in:str):
     year = int(date_parts[0].replace('X', '0'))
     month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
     day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
-    return date_to_numeric(date(year, month, day))
+    try:
+        return date_to_numeric(date(year, month, day))
+    except ValueError:
+        return None
 
 
 def get_date_max(date_in:str):
@@ -87,7 +90,10 @@ def get_date_max(date_in:str):
             day = 28
         else:
             day = 30
-    return date_to_numeric(date(year, month, day))
+    try:
+        return date_to_numeric(date(year, month, day))
+    except ValueError:
+        return None
 
 
 # copied from treetime.utils.numeric_date
