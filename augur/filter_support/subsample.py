@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
-from typing import Collection
+from typing import Collection, List, Set
+
+from augur.filter_support.exceptions import FilterException
+from augur.io import print_err
+
 
 def calculate_sequences_per_group(target_max_value, counts_per_group, allow_probabilistic=True):
     """Calculate the number of sequences per group for a given maximum number of
@@ -220,3 +224,20 @@ def get_sizes_per_group(df_groups:pd.DataFrame, size_col:str, max_size, max_atte
 
     # TODO: raise error if total_max_size is still 0
     return df_groups
+
+
+def get_valid_group_by_cols(group_by_cols:List[str], metadata_cols: Set[str]):
+    group_by_set = set(group_by_cols)
+    if 'date' not in metadata_cols and group_by_set <= {'year', 'month'}:
+        raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done. Note that using 'year' or 'year month' requires a column called 'date'.")
+    if not group_by_set & (metadata_cols | {'year', 'month'}):
+        raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done.")
+    unknown_cols = group_by_set - metadata_cols - {'year', 'month'}
+    if unknown_cols:
+        print_err(f"WARNING: Some of the specified group-by categories couldn't be found: {', '.join(unknown_cols)}")
+        print_err("Filtering by group may behave differently than expected!")
+        valid_group_by_cols = list(group_by_cols)
+        for col in unknown_cols:
+            valid_group_by_cols.remove(col)
+        return valid_group_by_cols
+    return group_by_cols

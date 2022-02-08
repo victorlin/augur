@@ -7,7 +7,8 @@ import argparse
 from augur.index import index_sequences, index_vcf
 from augur.io import open_file, print_err, read_sequences, write_sequences
 from augur.utils import is_vcf, write_vcf
-from augur.filter_support.subsample import calculate_sequences_per_group, TooManyGroupsError
+from augur.filter_support.exceptions import FilterException
+from augur.filter_support.subsample import calculate_sequences_per_group, TooManyGroupsError, get_valid_group_by_cols
 
 
 DUMMY_COL = 'dummy'
@@ -269,7 +270,8 @@ class FilterBase(abc.ABC):
 
         group_by_cols = self.args.group_by
         if self.args.group_by:
-            group_by_cols = self.get_valid_group_by_cols(group_by_cols)
+            metadata_cols = self.db_get_metadata_cols()
+            group_by_cols = get_valid_group_by_cols(group_by_cols, metadata_cols)
         self.db_create_extended_filtered_metadata_table(group_by_cols)
 
         if self.args.subsample_max_sequences:
@@ -322,24 +324,7 @@ class FilterBase(abc.ABC):
     def db_generate_priorities_table(self, seed:int=None): pass
 
     @abc.abstractmethod
-    def db_get_metadata_cols(self): pass
-
-    def get_valid_group_by_cols(self, group_by_cols:List[str]):
-        metadata_cols = self.db_get_metadata_cols()
-        group_by_set = set(group_by_cols)
-        if 'date' not in metadata_cols and group_by_set <= {'year', 'month'}:
-            raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done. Note that using 'year' or 'year month' requires a column called 'date'.")
-        if not group_by_set & (metadata_cols | {'year', 'month'}):
-            raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done.")
-        unknown_cols = group_by_set - metadata_cols - {'year', 'month'}
-        if unknown_cols:
-            print_err(f"WARNING: Some of the specified group-by categories couldn't be found: {', '.join(unknown_cols)}")
-            print_err("Filtering by group may behave differently than expected!")
-            valid_group_by_cols = list(group_by_cols)
-            for col in unknown_cols:
-                valid_group_by_cols.remove(col)
-            return valid_group_by_cols
-        return group_by_cols
+    def db_get_metadata_cols(self) -> Set[str]: pass
 
     @abc.abstractmethod
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]): pass
@@ -490,9 +475,3 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_cleanup(self): pass
-
-
-class FilterException(Exception):
-    """Representation of an error that occurred during filtering.
-    """
-    pass

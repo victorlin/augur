@@ -542,7 +542,7 @@ class FilterSQLite(FilterBase):
         df_priority.to_sql(PRIORITIES_TABLE_NAME, self.connection, index=False)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
-    def db_get_metadata_cols(self):
+    def db_get_metadata_cols(self) -> Set[str]:
         return {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
 
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]):
