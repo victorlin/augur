@@ -23,11 +23,13 @@ class FilterBase(abc.ABC):
         self.args = args
 
     def try_run(self):
+        """Try running filter. If there is an error, remove the database file and exit."""
         try:
             self.run()
         except FilterException as e:
             print_err(f'ERROR: {e}')
-            self.graceful_exit()
+            self.db_cleanup()
+            sys.exit(1)
 
     def run(self, cleanup=True):
         # Validate arguments before attempting any I/O.
@@ -289,8 +291,7 @@ class FilterBase(abc.ABC):
                     allow_probabilistic=self.args.probabilistic_sampling
                 )
             except TooManyGroupsError as error:
-                print_err(f"ERROR: {error}")
-                self.graceful_exit()
+                raise FilterException(str(error)) from error
 
             if (probabilistic_used):
                 print(f"Sampling probabilistically at {sequences_per_group:0.4f} sequences per group, meaning it is possible to have more than the requested maximum of {self.args.subsample_max_sequences} sequences after filtering.")
@@ -442,8 +443,7 @@ class FilterBase(abc.ABC):
             print("\t%i of these were dropped because of subsampling criteria%s" % (num_excluded_subsamp, seed_txt))
 
         if total_strains_passed == 0:
-            print_err("ERROR: All samples have been dropped! Check filter rules and metadata file format.")
-            self.graceful_exit()
+            raise FilterException("All samples have been dropped! Check filter rules and metadata file format.")
 
         print(f"{total_strains_passed} strains passed all filters")
 
@@ -467,11 +467,6 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_get_filter_counts(self) -> List[Tuple[str, str, int]]: pass
-
-    def graceful_exit(self):
-        """Remove database file and exit immediately."""
-        self.db_cleanup()
-        sys.exit(1)
 
     @abc.abstractmethod
     def db_cleanup(self): pass
