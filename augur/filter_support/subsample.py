@@ -232,7 +232,14 @@ def get_valid_group_by_cols(group_by_cols:List[str], metadata_cols: Set[str]):
         raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done. Note that using 'year' or 'year month' requires a column called 'date'.")
     if not group_by_set & (metadata_cols | {'year', 'month'}):
         raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done.")
-    unknown_cols = group_by_set - metadata_cols - {'year', 'month'}
+    unknown_cols = list(group_by_set - metadata_cols - {'year', 'month'})
+    if 'date' not in metadata_cols:
+        if "year" in group_by_set:
+            print_err("WARNING: A 'date' column could not be found to group-by year.")
+            unknown_cols.append("year")
+        if "month" in group_by_set:
+            print_err("WARNING: A 'date' column could not be found to group-by month.")
+            unknown_cols.append("month")
     if unknown_cols:
         print_err(f"WARNING: Some of the specified group-by categories couldn't be found: {', '.join(unknown_cols)}")
         print_err("Filtering by group may behave differently than expected!")
