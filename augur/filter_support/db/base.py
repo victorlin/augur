@@ -21,10 +21,16 @@ class FilterBase(abc.ABC):
     def set_args(self, args:argparse.Namespace):
         self.args = args
 
+    def try_run(self):
+        try:
+            self.run()
+        except FilterException as e:
+            print_err(f'ERROR: {e}')
+            self.graceful_exit()
+
     def run(self, cleanup=True):
         # Validate arguments before attempting any I/O.
-        if not self.validate_arguments():
-            self.graceful_exit()
+        self.validate_arguments()
         self.db_connect()
         self.db_load_metadata()
         self.add_attributes()
@@ -52,33 +58,26 @@ class FilterBase(abc.ABC):
         """
         # Don't allow sequence output when no sequence input is provided.
         if self.args.output and not self.args.sequences:
-            print_err("ERROR: You need to provide sequences to output sequences.")
-            return False
+            raise FilterException("You need to provide sequences to output sequences.")
 
         # Confirm that at least one output was requested.
         if not any((self.args.output, self.args.output_metadata, self.args.output_strains)):
-            print_err("ERROR: You need to select at least one output.")
-            return False
+            raise FilterException("You need to select at least one output.")
 
         # Don't allow filtering on sequence-based information, if no sequences or
         # sequence index is provided.
         if not self.args.sequences and not self.args.sequence_index and any(getattr(self.args, arg) for arg in SEQUENCE_ONLY_FILTERS):
-            print_err("ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.")
-            return False
+            raise FilterException("You need to provide a sequence index or sequences to filter on sequence-specific information.")
 
         # Confirm that vcftools is installed.
         if is_vcf(self.args.sequences):
             from shutil import which
             if which("vcftools") is None:
-                print_err("ERROR: 'vcftools' is not installed! This is required for VCF data. Please see the augur install instructions to install it.")
-                return False
+                raise FilterException("'vcftools' is not installed! This is required for VCF data. Please see the augur install instructions to install it.")
 
         # If user requested grouping, confirm that other required inputs are provided, too.
         if self.args.group_by and not any((self.args.sequences_per_group, self.args.subsample_max_sequences)):
-            print_err("ERROR: You must specify a number of sequences per group or maximum sequences to subsample.")
-            return False
-
-        return True
+            raise FilterException("You must specify a number of sequences per group or maximum sequences to subsample.")
 
     @abc.abstractmethod
     def db_connect(self): pass
@@ -270,11 +269,7 @@ class FilterBase(abc.ABC):
 
         group_by_cols = self.args.group_by
         if self.args.group_by:
-            try:
-                group_by_cols = self.get_valid_group_by_cols(group_by_cols)
-            except FilterException as e:
-                print_err(f'ERROR: {e}')
-                self.graceful_exit()
+            group_by_cols = self.get_valid_group_by_cols(group_by_cols)
         self.db_create_extended_filtered_metadata_table(group_by_cols)
 
         if self.args.subsample_max_sequences:

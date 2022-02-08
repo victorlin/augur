@@ -64,4 +64,4 @@ def run(args):
     '''
     filter = FilterSQLite()
     filter.set_args(args)
-    filter.run()
+    filter.try_run()
