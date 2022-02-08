@@ -1,34 +1,16 @@
-import argparse
-
 from augur.filter_support.db.sqlite import (
     EXCLUDE_COL,
     FILTER_REASON_COL,
     INCLUDE_COL,
     METADATA_FILTER_REASON_TABLE_NAME,
     STRAIN_COL,
-    FilterSQLite
 )
 
-from test_filter import parse_args, write_metadata
-
-
-def get_filter_obj_run(args:argparse.Namespace):
-    """Returns a filter object connected to an in-memory database with run() invoked."""
-    obj = FilterSQLite(':memory:')
-    obj.set_args(args)
-    obj.run(cleanup=False)
-    return obj
-
-
-def get_valid_args(data, tmpdir):
-    """Returns an argparse.Namespace with metadata and output_strains"""
-    meta_fn = write_metadata(tmpdir, data)
-    return parse_args(f'--metadata {meta_fn} --output-strains {tmpdir / "strains.txt"}')
-
-
-def query_fetchall(filter_obj:FilterSQLite, query:str):
-    filter_obj.cur.execute(query)
-    return filter_obj.cur.fetchall()
+from test_filter import (
+    get_filter_obj_run,
+    get_valid_args,
+    query_fetchall,
+)
 
 
 class TestFiltering:

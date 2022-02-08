@@ -4,11 +4,16 @@ from augur.filter_support.db.sqlite import (
     DEFAULT_DATE_COL,
     FILTER_REASON_COL,
     METADATA_FILTER_REASON_TABLE_NAME,
-    METADATA_TABLE_NAME,
     STRAIN_COL,
     FilterSQLite
 )
-from test_filter import parse_args, write_metadata
+from test_filter import (
+    parse_args,
+    write_metadata,
+    get_filter_obj_run,
+    get_valid_args,
+    query_fetchall,
+)
 
 
 @pytest.fixture(scope='function')
@@ -46,44 +51,40 @@ class TestFilterGroupBy:
         captured = capsys.readouterr()
         assert captured.err == "WARNING: Some of the specified group-by categories couldn't be found: invalid\nFiltering by group may behave differently than expected!\n"
 
-    def test_filter_groupby_skip_ambiguous_month(self, filter_obj_with_metadata:FilterSQLite):
-        # modify SEQ_2 to have ambiguous month
-        filter_obj_with_metadata.cur.execute(f"""
-            UPDATE {METADATA_TABLE_NAME}
-            SET {DEFAULT_DATE_COL} = '2020-XX-01'
-            WHERE {STRAIN_COL} = 'SEQ_2'
-        """)
-        filter_obj_with_metadata.connection.commit()
-        # add arguments for subsampling
-        filter_obj_with_metadata.args.group_by = ['country', 'year', 'month']
-        # set up database
-        filter_obj_with_metadata.db_create_date_table()
-        filter_obj_with_metadata.include_exclude_filter()
-        # check filter reasons
-        filter_obj_with_metadata.cur.execute(f"""
+    def test_filter_groupby_skip_ambiguous_month(self, tmpdir):
+        data = [
+            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ("SEQ_1","2020-01-XX","A"),
+            ("SEQ_2","2020-XX-01","A"),
+            ("SEQ_3","2020-03-01","B"),
+            ("SEQ_4","2020-04-01","B"),
+            ("SEQ_5","2020-05-01","B")
+        ]
+        args = get_valid_args(data, tmpdir)
+        args.group_by = ['country', 'year', 'month']
+        args.sequences_per_group = 1
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
         """)
-        results = filter_obj_with_metadata.cur.fetchall()
         assert results == [('SEQ_2',)]
 
-    def test_filter_groupby_skip_missing_month(self, filter_obj_with_metadata:FilterSQLite):
-        # modify SEQ_2 to have year only
-        filter_obj_with_metadata.cur.execute(f"""
-            UPDATE {METADATA_TABLE_NAME}
-            SET {DEFAULT_DATE_COL} = '2020'
-            WHERE {STRAIN_COL} = 'SEQ_2'
-        """)
-        filter_obj_with_metadata.connection.commit()
-        # add arguments for subsampling
-        filter_obj_with_metadata.args.group_by = ['country', 'year', 'month']
-        # set up database
-        filter_obj_with_metadata.db_create_date_table()
-        filter_obj_with_metadata.include_exclude_filter()
-        # check filter reasons
-        filter_obj_with_metadata.cur.execute(f"""
+    def test_filter_groupby_skip_missing_month(self, tmpdir):
+        data = [
+            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ("SEQ_1","2020-01-XX","A"),
+            ("SEQ_2","2020","A"),
+            ("SEQ_3","2020-03-01","B"),
+            ("SEQ_4","2020-04-01","B"),
+            ("SEQ_5","2020-05-01","B")
+        ]
+        args = get_valid_args(data, tmpdir)
+        args.group_by = ['country', 'year', 'month']
+        args.sequences_per_group = 1
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
             SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
         """)
-        results = filter_obj_with_metadata.cur.fetchall()
         assert results == [('SEQ_2',)]
