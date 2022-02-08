@@ -38,8 +38,7 @@ class FilterBase(abc.ABC):
         self.db_load_metadata()
         self.add_attributes()
         self.handle_sequences()
-        if self.has_date_col:
-            self.db_create_date_table()
+        self.db_create_date_table()
         self.include_exclude_filter()
         if self.do_subsample:
             self.subsample()

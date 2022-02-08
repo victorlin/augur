@@ -93,23 +93,36 @@ class FilterSQLite(FilterBase):
         - `date_min`: Exact date, minimum if ambiguous (`float` numeric date)
         - `date_max`: Exact date, maximum if ambiguous (`float` numeric date)
         """
-        # TODO: handle numeric dates for year/month/day
-        self.connection.create_function(get_year.__name__, 1, get_year)
-        self.connection.create_function(get_month.__name__, 1, get_month)
-        self.connection.create_function(get_day.__name__, 1, get_day)
-        self.connection.create_function(get_date_min.__name__, 1, get_date_min)
-        self.connection.create_function(get_date_max.__name__, 1, get_date_max)
-        self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
-            SELECT
-                {STRAIN_COL},
-                {DEFAULT_DATE_COL},
-                {get_year.__name__}({DEFAULT_DATE_COL}) as year,
-                {get_month.__name__}({DEFAULT_DATE_COL}) as month,
-                {get_day.__name__}({DEFAULT_DATE_COL}) as day,
-                {get_date_min.__name__}({DEFAULT_DATE_COL}) as date_min,
-                {get_date_max.__name__}({DEFAULT_DATE_COL}) as date_max
-            FROM {METADATA_TABLE_NAME}
-        """)
+        if self.has_date_col:
+            # TODO: handle numeric dates for year/month/day
+            self.connection.create_function(get_year.__name__, 1, get_year)
+            self.connection.create_function(get_month.__name__, 1, get_month)
+            self.connection.create_function(get_day.__name__, 1, get_day)
+            self.connection.create_function(get_date_min.__name__, 1, get_date_min)
+            self.connection.create_function(get_date_max.__name__, 1, get_date_max)
+            self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
+                SELECT
+                    {STRAIN_COL},
+                    {DEFAULT_DATE_COL},
+                    {get_year.__name__}({DEFAULT_DATE_COL}) as year,
+                    {get_month.__name__}({DEFAULT_DATE_COL}) as month,
+                    {get_day.__name__}({DEFAULT_DATE_COL}) as day,
+                    {get_date_min.__name__}({DEFAULT_DATE_COL}) as date_min,
+                    {get_date_max.__name__}({DEFAULT_DATE_COL}) as date_max
+                FROM {METADATA_TABLE_NAME}
+            """)
+        else:
+            # create placeholder table for later JOINs
+            self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
+                SELECT
+                    {STRAIN_COL},
+                    '' as year,
+                    '' as month,
+                    '' as day,
+                    '' as date_min,
+                    '' as date_max
+                FROM {METADATA_TABLE_NAME}
+            """)
         self.db_create_strain_index(DATE_TABLE_NAME)
 
     def filter_by_exclude_all(self):
