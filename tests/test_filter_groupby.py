@@ -3,11 +3,9 @@ from textwrap import dedent
 from augur.filter_support.exceptions import FilterException
 from augur.filter_support.subsample import get_valid_group_by_cols
 from augur.filter_support.db.sqlite import (
-    DEFAULT_DATE_COL,
     FILTER_REASON_COL,
     GROUP_SIZES_TABLE_NAME,
     METADATA_FILTER_REASON_TABLE_NAME,
-    STRAIN_COL,
 )
 from test_filter import (
     get_filter_obj_run,
@@ -37,7 +35,7 @@ class TestFilterGroupBy:
 
     def test_filter_groupby_skip_ambiguous_year(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01-XX","A"),
             ("SEQ_2","XXXX","A"),
             ("SEQ_3","2020-03-01","B"),
@@ -49,14 +47,14 @@ class TestFilterGroupBy:
         args.sequences_per_group = 1
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_year'
         """)
         assert results == [('SEQ_2',)]
 
     def test_filter_groupby_skip_missing_date(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01-XX","A"),
             ("SEQ_2","","A"),
             ("SEQ_3","2020-03-01","B"),
@@ -68,14 +66,14 @@ class TestFilterGroupBy:
         args.sequences_per_group = 1
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_year'
         """)
         assert results == [('SEQ_2',)]
 
     def test_filter_groupby_skip_ambiguous_month(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01-XX","A"),
             ("SEQ_2","2020-XX-01","A"),
             ("SEQ_3","2020-03-01","B"),
@@ -87,14 +85,14 @@ class TestFilterGroupBy:
         args.sequences_per_group = 1
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
         """)
         assert results == [('SEQ_2',)]
 
     def test_filter_groupby_skip_missing_month(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01-XX","A"),
             ("SEQ_2","2020","A"),
             ("SEQ_3","2020-03-01","B"),
@@ -106,7 +104,7 @@ class TestFilterGroupBy:
         args.sequences_per_group = 1
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
         """)
         assert results == [('SEQ_2',)]
@@ -147,7 +145,7 @@ class TestFilterGroupBy:
 
     def test_filter_groupby_only_year_provided(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01-XX","A"),
             ("SEQ_2","2020","B"),
             ("SEQ_3","2020-03-01","C"),
@@ -169,7 +167,7 @@ class TestFilterGroupBy:
 
     def test_filter_groupby_month_with_only_year_provided(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01-XX","A"),
             ("SEQ_2","2020","B"),
             ("SEQ_3","2020-03-01","C"),
@@ -190,14 +188,14 @@ class TestFilterGroupBy:
             ('C', 2020, 5)
         ]
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'skip_group_by_with_ambiguous_month'
         """)
         assert results == [('SEQ_2',)]
 
     def test_filter_groupby_only_year_month_provided(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020-01","A"),
             ("SEQ_2","2020-02","B"),
             ("SEQ_3","2020-03","C"),
@@ -219,14 +217,14 @@ class TestFilterGroupBy:
             ('E', 2020, 5)
         ]
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} IS NULL
         """)
         assert results == [('SEQ_1',), ('SEQ_2',), ('SEQ_3',), ('SEQ_4',), ('SEQ_5',)]
 
     def test_all_samples_dropped(self, tmpdir):
         data = [
-            (STRAIN_COL, DEFAULT_DATE_COL, 'country'),
+            ('strain','date','country'),
             ("SEQ_1","2020","A"),
             ("SEQ_2","2020","B"),
             ("SEQ_3","2020","C"),

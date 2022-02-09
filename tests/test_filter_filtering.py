@@ -3,7 +3,6 @@ from augur.filter_support.db.sqlite import (
     FILTER_REASON_COL,
     INCLUDE_COL,
     METADATA_FILTER_REASON_TABLE_NAME,
-    STRAIN_COL,
 )
 
 from test_filter import (
@@ -24,7 +23,7 @@ class TestFiltering:
         args.query = 'quality=="good"'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_query'
         """)
         assert results == [('SEQ_2',)]
@@ -39,7 +38,7 @@ class TestFiltering:
         args.query = 'quality=="good" AND location=="colorado"'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL} FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_query'
         """)
         assert results == [('SEQ_2',), ('SEQ_3',)]
@@ -57,7 +56,7 @@ class TestFiltering:
         args.include = [include_fn]
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL}
+            SELECT strain
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
@@ -74,7 +73,7 @@ class TestFiltering:
         args.include_where = ['location=nevada']
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL}
+            SELECT strain
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
@@ -90,7 +89,7 @@ class TestFiltering:
         args.min_date = '2020-02-26'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL}
+            SELECT strain
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
         """)
@@ -106,7 +105,7 @@ class TestFiltering:
         args.max_date = '2020-03-01'
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
-            SELECT {STRAIN_COL}
+            SELECT strain
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_max_date'
         """)
