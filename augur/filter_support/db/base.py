@@ -280,7 +280,6 @@ class FilterBase(abc.ABC):
                 counts_per_group = self.db_get_counts_per_group(group_by_cols)
             else:
                 group_by_cols = [DUMMY_COL]
-                # might not be needed
                 counts_per_group = [self.db_get_filtered_strains_count()]
 
             try:
