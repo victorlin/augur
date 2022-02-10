@@ -32,6 +32,7 @@ def get_metadata_id_column(metadata_file:str, id_columns:List[str]):
 
 def load_tsv(tsv_file:str, db_file:str, connection:sqlite3.Connection, table_name:str,
         header=True, names=[], dtype='string', n_jobs=1):
+    """Reads tabular data from a file."""
     read_csv_kwargs = {
         "sep": '\t',
         "engine": "c",
@@ -54,15 +55,18 @@ def load_tsv(tsv_file:str, db_file:str, connection:sqlite3.Connection, table_nam
             chunk.to_sql(table_name, connection, if_exists='append', index=True, index_label=ROW_ORDER_COLUMN)
     else:
         with Pool(processes=n_jobs) as pool:
-            pool.starmap(chunk_to_sql, zip(df_chunks, repeat(db_file), repeat(table_name)))
+            pool.starmap(_chunk_to_sql, zip(df_chunks, repeat(db_file), repeat(table_name)))
 
 
-def chunk_to_sql(chunk:pd.DataFrame, db_file:str, table_name:str):
+def _chunk_to_sql(chunk:pd.DataFrame, db_file:str, table_name:str):
+    """Adds DataFrame contents to a table in a database file."""
+    # connection not passed as param because it is not thread safe (at least by default)
     connection = sqlite3.connect(db_file, timeout=15) # to reduce OperationalError: database is locked
     chunk.to_sql(table_name, connection, if_exists='append', index=True, index_label=ROW_ORDER_COLUMN)
 
 
 def cleanup(database:str):
+    """Removes the database file if present."""
     try:
         os.remove(database)
     except FileNotFoundError:
