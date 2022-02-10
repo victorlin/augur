@@ -36,7 +36,7 @@ class FilterBase(abc.ABC):
         # Validate arguments before attempting any I/O.
         self.validate_arguments()
         self.db_connect()
-        self.detect_metadata_id_column()
+        self.set_metadata_columns()
         self.db_load_metadata()
         self.add_attributes()
         self.handle_sequences()
@@ -86,8 +86,9 @@ class FilterBase(abc.ABC):
     @abc.abstractmethod
     def db_connect(self): pass
 
-    def detect_metadata_id_column(self):
+    def set_metadata_columns(self):
         self.metadata_id_column = get_metadata_id_column(self.args.metadata, self.args.metadata_id_columns)
+        self.date_column = 'date'
 
     @abc.abstractmethod
     def db_load_metadata(self): pass

@@ -23,7 +23,6 @@ EXTENDED_FILTERED_TABLE_NAME = 'metadata_filtered_extended'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 # column names
-DEFAULT_DATE_COL = 'date'
 FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
 EXCLUDE_COL = 'exclude'
@@ -78,9 +77,9 @@ class FilterSQLite(FilterBase):
         return {row[0] for row in self.cur.fetchall()}
 
     def db_has_date_col(self):
-        """Returns a boolean indicating whether `DEFAULT_DATE_COL` is in the metadata."""
+        """Returns a boolean indicating whether `self.date_column` is in the metadata."""
         columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
-        return (DEFAULT_DATE_COL in columns)
+        return (self.date_column in columns)
 
     def db_create_date_table(self):
         """Creates an intermediate date table from the metadata table.
@@ -102,12 +101,12 @@ class FilterSQLite(FilterBase):
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
                     "{self.metadata_id_column}",
-                    {DEFAULT_DATE_COL},
-                    {get_year.__name__}({DEFAULT_DATE_COL}) as year,
-                    {get_month.__name__}({DEFAULT_DATE_COL}) as month,
-                    {get_day.__name__}({DEFAULT_DATE_COL}) as day,
-                    {get_date_min.__name__}({DEFAULT_DATE_COL}) as date_min,
-                    {get_date_max.__name__}({DEFAULT_DATE_COL}) as date_max
+                    "{self.date_column}",
+                    {get_year.__name__}("{self.date_column}") as year,
+                    {get_month.__name__}("{self.date_column}") as month,
+                    {get_day.__name__}("{self.date_column}") as day,
+                    {get_date_min.__name__}("{self.date_column}") as date_min,
+                    {get_date_max.__name__}("{self.date_column}") as date_max
                 FROM {METADATA_TABLE_NAME}
             """)
         else:
