@@ -57,7 +57,11 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(self.args.metadata, self.db_file, self.connection, METADATA_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(self.args.metadata,
+            self.db_file, self.connection,
+            METADATA_TABLE_NAME,
+            n_jobs=N_JOBS,
+            chunk_size=self.args.metadata_chunk_size)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path:str):

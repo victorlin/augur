@@ -31,7 +31,7 @@ def get_metadata_id_column(metadata_file:str, id_columns:List[str]):
 
 
 def load_tsv(tsv_file:str, db_file:str, connection:sqlite3.Connection, table_name:str,
-        header=True, names=[], dtype='string', n_jobs=1):
+        header=True, names=[], dtype='string', n_jobs=1, chunk_size=100000):
     """Reads tabular data from a file."""
     read_csv_kwargs = {
         "sep": '\t',
@@ -39,7 +39,7 @@ def load_tsv(tsv_file:str, db_file:str, connection:sqlite3.Connection, table_nam
         "skipinitialspace": True,
         "dtype": dtype,
         "na_filter": False,
-        "chunksize": 100000,
+        "chunksize": chunk_size,
     }
     if not header and not names:
         raise ValueError()
