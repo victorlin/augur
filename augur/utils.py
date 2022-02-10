@@ -82,10 +82,13 @@ def write_vcf(input_filename, output_filename, dropped_samps):
 def _filename_gz(filename):
     return filename.lower().endswith(".gz")
 
-def myopen(fname, mode):
+def myopen(fname, mode='r'):
     if fname.endswith('.gz'):
         import gzip
-        return gzip.open(fname, mode, encoding='utf-8')
+        return gzip.open(fname, f'{mode}t', encoding='utf-8')
+    if fname.endswith('.xz'):
+        import lzma
+        return lzma.open(fname, f'{mode}t', encoding='utf-8')
     else:
         return open(fname, mode, encoding='utf-8')
 

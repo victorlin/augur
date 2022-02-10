@@ -55,11 +55,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(self.args.metadata,
-            self.db_file, self.connection,
-            METADATA_TABLE_NAME,
-            n_jobs=self.args.cpus,
-            chunk_size=self.args.metadata_chunk_size)
+        load_tsv(self.args.metadata, self.connection, METADATA_TABLE_NAME)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path:str):
@@ -67,7 +63,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(path, self.db_file, self.connection, SEQUENCE_INDEX_TABLE_NAME, n_jobs=self.args.cpus)
+        load_tsv(path, self.connection, SEQUENCE_INDEX_TABLE_NAME)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -559,14 +555,13 @@ class FilterSQLite(FilterBase):
         self.connection.commit()
 
     def db_load_priorities_table(self):
-        dtype = {
-            self.metadata_id_column: 'str',
-            PRIORITY_COL: 'float'
+        dtypes = {
+            self.metadata_id_column: 'TEXT',
+            PRIORITY_COL: 'NUMERIC'
         }
         try:
-            load_tsv(self.args.priority, self.db_file, self.connection, PRIORITIES_TABLE_NAME,
-                    header=False, names=[self.metadata_id_column, PRIORITY_COL], dtype=dtype,
-                    n_jobs=self.args.cpus)
+            load_tsv(self.args.priority, self.connection, PRIORITIES_TABLE_NAME,
+                    header=False, names=[self.metadata_id_column, PRIORITY_COL], dtypes=dtypes)
         except ValueError as e:
             raise ValueError("Failed to parse priority file.") from e
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
