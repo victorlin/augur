@@ -33,8 +33,6 @@ PRIORITY_COL = 'priority'
 # value for FILTER_REASON_COL with separate logic
 SUBSAMPLE_FILTER_REASON = 'subsampling'
 
-# TODO: parameterize
-N_JOBS = 4
 
 class FilterSQLite(FilterBase):
     def __init__(self, db_file:str=DEFAULT_DB_FILE):
@@ -60,7 +58,7 @@ class FilterSQLite(FilterBase):
         load_tsv(self.args.metadata,
             self.db_file, self.connection,
             METADATA_TABLE_NAME,
-            n_jobs=N_JOBS,
+            n_jobs=self.args.cpus,
             chunk_size=self.args.metadata_chunk_size)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
@@ -69,7 +67,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(path, self.db_file, self.connection, SEQUENCE_INDEX_TABLE_NAME, n_jobs=N_JOBS)
+        load_tsv(path, self.db_file, self.connection, SEQUENCE_INDEX_TABLE_NAME, n_jobs=self.args.cpus)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -568,7 +566,7 @@ class FilterSQLite(FilterBase):
         try:
             load_tsv(self.args.priority, self.db_file, self.connection, PRIORITIES_TABLE_NAME,
                     header=False, names=[self.metadata_id_column, PRIORITY_COL], dtype=dtype,
-                    n_jobs=N_JOBS)
+                    n_jobs=self.args.cpus)
         except ValueError as e:
             raise ValueError("Failed to parse priority file.") from e
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
