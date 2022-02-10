@@ -30,7 +30,6 @@ EXCLUDE_COL = 'exclude'
 INCLUDE_COL = 'force_include'
 DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
-STRAIN_COL = 'strain'
 PRIORITY_COL = 'priority'
 # value for FILTER_REASON_COL with separate logic
 SUBSAMPLE_FILTER_REASON = 'subsampling'
@@ -48,10 +47,10 @@ class FilterSQLite(FilterBase):
         self.cur = self.connection.cursor()
 
     def db_create_strain_index(self, table_name:str):
-        """Creates a unique index on `STRAIN_COL` in a table."""
+        """Creates a unique index on `metadata_id_column` in a table."""
         self.cur.execute(f"""
-            CREATE UNIQUE INDEX idx_{table_name}_{STRAIN_COL}
-            ON {table_name} ({STRAIN_COL})
+            CREATE UNIQUE INDEX idx_{table_name}_strain_col
+            ON {table_name} ("{self.metadata_id_column}")
         """)
 
     def db_load_metadata(self):
@@ -73,7 +72,7 @@ class FilterSQLite(FilterBase):
     def db_get_sequence_index_strains(self):
         """Returns the set of all strains in the sequence index."""
         self.cur.execute(f"""
-            SELECT {STRAIN_COL}
+            SELECT "{self.metadata_id_column}"
             FROM {SEQUENCE_INDEX_TABLE_NAME}
         """)
         return {row[0] for row in self.cur.fetchall()}
@@ -102,7 +101,7 @@ class FilterSQLite(FilterBase):
             self.connection.create_function(get_date_max.__name__, 1, get_date_max)
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
-                    {STRAIN_COL},
+                    "{self.metadata_id_column}",
                     {DEFAULT_DATE_COL},
                     {get_year.__name__}({DEFAULT_DATE_COL}) as year,
                     {get_month.__name__}({DEFAULT_DATE_COL}) as month,
@@ -115,7 +114,7 @@ class FilterSQLite(FilterBase):
             # create placeholder table for later JOINs
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
-                    {STRAIN_COL},
+                    "{self.metadata_id_column}",
                     '' as year,
                     '' as month,
                     '' as day,
@@ -153,7 +152,9 @@ class FilterSQLite(FilterBase):
         """
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
-        return f"{STRAIN_COL} IN ({','.join(excluded_strains)})"
+        return f"""
+            "{self.metadata_id_column}" IN ({','.join(excluded_strains)})
+        """
 
     def parse_filter_query(self, query):
         """Parse an augur filter-style query and return the corresponding column,
@@ -205,11 +206,12 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         column, op, value = self.parse_filter_query(exclude_where)
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {METADATA_TABLE_NAME}
-            WHERE {column} {op} '{value}'
-        )
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {METADATA_TABLE_NAME}
+                WHERE {column} {op} '{value}'
+            )
         """
 
     def filter_by_query(self, query):
@@ -226,11 +228,12 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         # NOT query to exclude all that do not match
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {METADATA_TABLE_NAME}
-            WHERE NOT ({query})
-        )
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {METADATA_TABLE_NAME}
+                WHERE NOT ({query})
+            )
         """
 
     def filter_by_ambiguous_date(self, ambiguity="any"):
@@ -251,23 +254,29 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         if ambiguity == 'year':
-            return f"""{STRAIN_COL} IN (
-                SELECT {STRAIN_COL}
-                FROM {DATE_TABLE_NAME}
-                WHERE year IS NULL
-            )"""
+            return f"""
+                "{self.metadata_id_column}" IN (
+                    SELECT "{self.metadata_id_column}"
+                    FROM {DATE_TABLE_NAME}
+                    WHERE year IS NULL
+                )
+            """
         if ambiguity == 'month':
-            return f"""{STRAIN_COL} IN (
-                SELECT {STRAIN_COL}
-                FROM {DATE_TABLE_NAME}
-                WHERE month IS NULL OR year IS NULL
-            )"""
+            return f"""
+                "{self.metadata_id_column}" IN (
+                    SELECT "{self.metadata_id_column}"
+                    FROM {DATE_TABLE_NAME}
+                    WHERE month IS NULL OR year IS NULL
+                )
+            """
         if ambiguity == 'day' or ambiguity == 'any':
-            return f"""{STRAIN_COL} IN (
-                SELECT {STRAIN_COL}
-                FROM {DATE_TABLE_NAME}
-                WHERE day IS NULL OR month IS NULL OR year IS NULL
-            )"""
+            return f"""
+                "{self.metadata_id_column}" IN (
+                    SELECT "{self.metadata_id_column}"
+                    FROM {DATE_TABLE_NAME}
+                    WHERE day IS NULL OR month IS NULL OR year IS NULL
+                )
+            """
 
     def filter_by_min_date(self, min_date):
         """Filter metadata by minimum date.
@@ -283,11 +292,13 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         min_date = get_date_min(min_date)
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {DATE_TABLE_NAME}
-            WHERE date_max < {min_date} OR date_min IS NULL
-        )"""
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {DATE_TABLE_NAME}
+                WHERE date_max < {min_date} OR date_min IS NULL
+            )
+        """
 
     def filter_by_max_date(self, max_date):
         """Filter metadata by maximum date.
@@ -303,11 +314,13 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         max_date = get_date_max(max_date)
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {DATE_TABLE_NAME}
-            WHERE date_min > {max_date} OR date_max IS NULL
-        )"""
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {DATE_TABLE_NAME}
+                WHERE date_min > {max_date} OR date_max IS NULL
+            )
+        """
 
     def filter_by_sequence_index(self):
         """Filter metadata by presence of corresponding entries in a given sequence
@@ -319,7 +332,12 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        return f"{STRAIN_COL} NOT IN (SELECT {STRAIN_COL} FROM {SEQUENCE_INDEX_TABLE_NAME})"
+        return f"""
+            "{self.metadata_id_column}" NOT IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {SEQUENCE_INDEX_TABLE_NAME}
+            )
+        """
 
     def filter_by_sequence_length(self, min_length=0):
         """Filter metadata by sequence length from a given sequence index.
@@ -334,11 +352,13 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {SEQUENCE_INDEX_TABLE_NAME}
-            WHERE A+C+G+T < {min_length}
-        )"""
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {SEQUENCE_INDEX_TABLE_NAME}
+                WHERE A+C+G+T < {min_length}
+            )
+        """
 
     def filter_by_non_nucleotide(self):
         """Filter metadata for strains with invalid nucleotide content.
@@ -348,11 +368,13 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {SEQUENCE_INDEX_TABLE_NAME}
-            WHERE invalid_nucleotides != 0
-        )"""
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {SEQUENCE_INDEX_TABLE_NAME}
+                WHERE invalid_nucleotides != 0
+            )
+        """
 
     def force_include_strains(self, include_file):
         """Include strains in the given text file from the given metadata.
@@ -369,7 +391,9 @@ class FilterSQLite(FilterBase):
         """
         included_strains = read_strains(include_file)
         included_strains = [f"'{strain}'" for strain in included_strains]
-        return f"{STRAIN_COL} IN ({','.join(included_strains)})"
+        return f"""
+            "{self.metadata_id_column}" IN ({','.join(included_strains)})
+        """
 
     def force_include_where(self, include_where):
         """Include all strains from the given metadata that match the given query.
@@ -390,11 +414,12 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         column, op, value = self.parse_filter_query(include_where)
-        return f"""{STRAIN_COL} IN (
-            SELECT {STRAIN_COL}
-            FROM {METADATA_TABLE_NAME}
-            WHERE {column} {op} '{value}'
-        )
+        return f"""
+            "{self.metadata_id_column}" IN (
+                SELECT "{self.metadata_id_column}"
+                FROM {METADATA_TABLE_NAME}
+                WHERE {column} {op} '{value}'
+            )
         """
 
     def db_create_filter_reason_table(self, exclude_by:list, include_by:list):
@@ -412,7 +437,7 @@ class FilterSQLite(FilterBase):
         self.cur.execute(f"""
             CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
             SELECT
-                {STRAIN_COL},
+                "{self.metadata_id_column}",
                 FALSE as {EXCLUDE_COL},
                 FALSE as {INCLUDE_COL},
                 NULL as {FILTER_REASON_COL},
@@ -468,7 +493,7 @@ class FilterSQLite(FilterBase):
             CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
             SELECT m.* FROM {METADATA_TABLE_NAME} m
             JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
-                USING ({STRAIN_COL})
+                USING ("{self.metadata_id_column}")
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
 
@@ -507,9 +532,9 @@ class FilterSQLite(FilterBase):
         # `ORDER BY ... NULLS LAST` is unsupported for SQLite <3.30.0 so `CASE ... IS NULL` is a workaround
         # ref https://stackoverflow.com/a/12503284
         query_for_subsampled_strains = f"""
-            SELECT {STRAIN_COL}
+            SELECT "{self.metadata_id_column}"
             FROM (
-                SELECT {STRAIN_COL}, {','.join(group_by_cols)}, ROW_NUMBER() OVER (
+                SELECT "{self.metadata_id_column}", {','.join(group_by_cols)}, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by_cols)}
                     ORDER BY (CASE WHEN {PRIORITY_COL} IS NULL THEN 1 ELSE 0 END), {PRIORITY_COL} DESC
                 ) AS group_i
@@ -524,7 +549,7 @@ class FilterSQLite(FilterBase):
             SET
                 {EXCLUDE_COL} = TRUE,
                 {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
-            WHERE NOT {EXCLUDE_COL} AND {STRAIN_COL} NOT IN (
+            WHERE NOT {EXCLUDE_COL} AND "{self.metadata_id_column}" NOT IN (
                 {query_for_subsampled_strains}
             )
         """)
@@ -532,12 +557,12 @@ class FilterSQLite(FilterBase):
 
     def db_load_priorities_table(self):
         dtype = {
-            STRAIN_COL: 'str',
+            self.metadata_id_column: 'str',
             PRIORITY_COL: 'float'
         }
         try:
             load_tsv(self.args.priority, self.db_file, self.connection, PRIORITIES_TABLE_NAME,
-                    header=False, names=[STRAIN_COL, PRIORITY_COL], dtype=dtype,
+                    header=False, names=[self.metadata_id_column, PRIORITY_COL], dtype=dtype,
                     n_jobs=N_JOBS)
         except ValueError as e:
             raise ValueError("Failed to parse priority file.") from e
@@ -546,7 +571,7 @@ class FilterSQLite(FilterBase):
     def db_generate_priorities_table(self, seed:int=None):
         # use pandas/numpy since random seeding is not possible with SQLite https://stackoverflow.com/a/24394275
         df_priority = pd.read_sql(f"""
-                SELECT {STRAIN_COL}
+                SELECT "{self.metadata_id_column}"
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
             """, self.connection)
@@ -584,16 +609,16 @@ class FilterSQLite(FilterBase):
         # left outer join priorities table to prevent dropping strains without a priority
         self.cur.execute(f"""CREATE TABLE {EXTENDED_FILTERED_TABLE_NAME} AS
             SELECT
-                m.{STRAIN_COL},
+                m."{self.metadata_id_column}",
                 {group_by_cols_for_select}
                 d.year, d.month,
                 p.{PRIORITY_COL},
                 TRUE AS {DUMMY_COL}
             FROM {METADATA_TABLE_NAME} m
-            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m.{STRAIN_COL} = f.{STRAIN_COL})
+            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m."{self.metadata_id_column}" = f."{self.metadata_id_column}")
                 AND (NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL})
-            JOIN {DATE_TABLE_NAME} d USING ({STRAIN_COL})
-            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ({STRAIN_COL})
+            JOIN {DATE_TABLE_NAME} d USING ("{self.metadata_id_column}")
+            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ("{self.metadata_id_column}")
         """)
 
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
@@ -606,7 +631,9 @@ class FilterSQLite(FilterBase):
         df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.connection)
 
     def db_output_strains(self):
-        df = pd.read_sql_query(f"SELECT {STRAIN_COL} FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
+        df = pd.read_sql_query(f"""
+                SELECT "{self.metadata_id_column}" FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}
+            """, self.connection)
         df.to_csv(self.args.output_strains, index=None, header=False)
 
     def db_output_metadata(self):
@@ -616,7 +643,7 @@ class FilterSQLite(FilterBase):
 
     def db_output_log(self):
         df = pd.read_sql_query(f"""
-                SELECT {STRAIN_COL}, {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
+                SELECT "{self.metadata_id_column}", {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE {FILTER_REASON_COL} IS NOT NULL
             """, self.connection)
@@ -624,14 +651,14 @@ class FilterSQLite(FilterBase):
 
     def db_get_metadata_strains(self) -> Set[str]:
         self.cur.execute(f"""
-            SELECT {STRAIN_COL}
+            SELECT "{self.metadata_id_column}"
             FROM {METADATA_TABLE_NAME}
         """)
         return {row[0] for row in self.cur.fetchall()}
 
     def db_get_strains_passed(self) -> Set[str]:
         self.cur.execute(f"""
-            SELECT {STRAIN_COL}
+            SELECT "{self.metadata_id_column}"
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)

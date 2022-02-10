@@ -6,6 +6,7 @@ from tempfile import NamedTemporaryFile
 import argparse
 from augur.index import index_sequences, index_vcf
 from augur.io import open_file, print_err, read_sequences, write_sequences
+from augur.io_support.db.sqlite import get_metadata_id_column
 from augur.utils import is_vcf, write_vcf
 from augur.filter_support.exceptions import FilterException
 from augur.filter_support.subsample import calculate_sequences_per_group, TooManyGroupsError, get_valid_group_by_cols
@@ -35,6 +36,7 @@ class FilterBase(abc.ABC):
         # Validate arguments before attempting any I/O.
         self.validate_arguments()
         self.db_connect()
+        self.detect_metadata_id_column()
         self.db_load_metadata()
         self.add_attributes()
         self.handle_sequences()
@@ -83,6 +85,9 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_connect(self): pass
+
+    def detect_metadata_id_column(self):
+        self.metadata_id_column = get_metadata_id_column(self.args.metadata, self.args.metadata_id_columns)
 
     @abc.abstractmethod
     def db_load_metadata(self): pass

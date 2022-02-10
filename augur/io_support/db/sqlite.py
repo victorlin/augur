@@ -3,8 +3,31 @@ import pandas as pd
 import sqlite3
 from itertools import repeat
 from multiprocessing import Pool
+from typing import List
 
 ROW_ORDER_COLUMN = '_sqlite_id' # for preserving row order, otherwise unused
+
+
+def get_metadata_id_column(metadata_file:str, id_columns:List[str]):
+    """Returns the first column in `id_columns` that is present in the metadata.
+
+    Raises a `ValueError` when none of `id_columns` are found.
+    """
+    read_csv_kwargs = {
+        "sep": '\t',
+        "engine": "c",
+        "skipinitialspace": True,
+        "dtype": 'string',
+    }
+    row = pd.read_csv(
+        metadata_file,
+        nrows=1,
+        **read_csv_kwargs,
+    )
+    for col in id_columns:
+        if col in row.columns:
+            return col
+    raise ValueError(f"None of the possible id columns ({id_columns!r}) were found in the metadata's columns {tuple(row.columns)!r}")
 
 
 def load_tsv(tsv_file:str, db_file:str, connection:sqlite3.Connection, table_name:str,
