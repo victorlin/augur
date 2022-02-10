@@ -66,3 +66,39 @@ class TestDataLoading:
         filter_obj = get_filter_obj_run(args)
         with pytest.raises(FileNotFoundError):
             filter_obj.db_load_priorities_table()
+
+    def test_load_invalid_id_column(self, tmpdir):
+        data = [
+            ('invalid_name','date','country'),
+            ("SEQ_1","2020-01-XX","A"),
+        ]
+        args = get_valid_args(data, tmpdir)
+        with pytest.raises(ValueError) as e_info:
+            get_filter_obj_run(args)
+        assert str(e_info.value) == "None of the possible id columns (['strain', 'name']) were found in the metadata's columns ('invalid_name', 'date', 'country')"
+
+    def test_load_custom_id_column(self, tmpdir):
+        data = [
+            ('custom_id_col','date','country'),
+            ("SEQ_1","2020-01-XX","A"),
+        ]
+        args = get_valid_args(data, tmpdir)
+        args.metadata_id_columns = ['custom_id_col']
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT custom_id_col FROM {METADATA_TABLE_NAME}
+        """)
+        assert results == [('SEQ_1',)]
+
+    def test_load_custom_id_column_with_spaces(self, tmpdir):
+        data = [
+            ('strain name with spaces','date','country'),
+            ("SEQ_1","2020-01-XX","A"),
+        ]
+        args = get_valid_args(data, tmpdir)
+        args.metadata_id_columns = ['strain name with spaces']
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT "strain name with spaces" FROM {METADATA_TABLE_NAME}
+        """)
+        assert results == [('SEQ_1',)]
