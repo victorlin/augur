@@ -220,10 +220,12 @@ class FilterSQLite(FilterBase):
     def filter_by_query(self, query):
         """Filter by any valid SQL expression on the metadata.
 
+        Strains that do *not* match the query will be excluded.
+
         Parameters
         ----------
         query : str
-            SQL query used to exclude strains
+            SQL expression used to exclude strains
 
         Returns
         -------
