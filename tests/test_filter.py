@@ -1,5 +1,6 @@
 import argparse
 import shlex
+import sqlite3
 
 import augur.filter
 from augur.filter_support.db.sqlite import FilterSQLite
@@ -41,3 +42,10 @@ def get_valid_args(data, tmpdir):
 def query_fetchall(filter_obj:FilterSQLite, query:str):
     filter_obj.cur.execute(query)
     return filter_obj.cur.fetchall()
+
+
+def query_fetchall_dict(filter_obj:FilterSQLite, query:str):
+    filter_obj.connection.row_factory = sqlite3.Row
+    cur = filter_obj.connection.cursor()
+    cur.execute(query)
+    return [dict(row) for row in cur.fetchall()]
