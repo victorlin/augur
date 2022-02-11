@@ -561,7 +561,7 @@ class FilterSQLite(FilterBase):
         }
         try:
             load_tsv(self.args.priority, self.connection, PRIORITIES_TABLE_NAME,
-                    header=False, names=[self.metadata_id_column, PRIORITY_COL], dtypes=dtypes)
+                    header=False, names=[self.metadata_id_column, PRIORITY_COL])
         except ValueError as e:
             raise ValueError(f"Failed to parse priority file {self.args.priority}.") from e
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)

@@ -21,28 +21,32 @@ def get_metadata_id_column(metadata_file:str, id_columns:List[str]):
     raise ValueError(f"None of the possible id columns ({id_columns!r}) were found in the metadata's columns {tuple(metadata_columns)!r}")
 
 
-def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str,
-        header=True, names=[], dtypes:Dict[str,str]=None):
+def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header=True, names=[]):
     """Loads tabular data from a file."""
-    cur = connection.cursor()
-    if not header:
-        if not names:
-            raise ValueError()
-        column_names = names
-    else:
-        column_names = _get_column_names(tsv_file)
-    column_names = [ROW_ORDER_COLUMN] + column_names
-    if dtypes:
-        dtypes[ROW_ORDER_COLUMN] = 'INTEGER'
-        cur.execute(f"""
-            CREATE TABLE {table_name} ({','.join([f'"{col}" {dtypes[col]}' for col in column_names])})
-        """)
-        # TODO: STRICT typing https://www.sqlite.org/stricttables.html
-    else:
-        cur.execute(f"""
-            CREATE TABLE {table_name} ({','.join([f'"{col}"' for col in column_names])})
-        """)
+    read_csv_kwargs = {
+        "sep": '\t',
+        "engine": "c",
+        "skipinitialspace": True,
+    }
+    if not header and not names:
+        raise ValueError()
+    if not header and names:
+        read_csv_kwargs['header'] = None
+        read_csv_kwargs['names'] = names
+    # infer data types from first 100 rows using pandas
+    df = pd.read_csv(
+        tsv_file,
+        nrows=100,
+        **read_csv_kwargs,
+    )
+    df.insert(0, ROW_ORDER_COLUMN, 1)
 
+    cur = connection.cursor()
+    create_table_statement = pd.io.sql.get_schema(df, table_name, con=connection)
+    cur.execute(create_table_statement)
+
+    # don't use pandas to_sql since it keeps data in memory
+    # and using parallelized chunks does not work well with SQLite limited concurrency
     try:
         with myopen(tsv_file) as f:
             reader = csv.reader(f, delimiter='\t')  # TODO: detect delimiter
@@ -52,7 +56,7 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str,
                 indexed_row = [i] + row
                 cur.executemany(f"""
                     INSERT INTO {table_name}
-                    VALUES ({','.join(['?' for _ in column_names])})
+                    VALUES ({','.join(['?' for _ in df.columns])})
                 """, [indexed_row])
     except sqlite3.ProgrammingError as e:
         raise ValueError(f'Failed to load {tsv_file}.') from e
