@@ -46,7 +46,7 @@ class TestDataLoading:
         filter_obj = get_filter_obj_with_priority_loaded(tmpdir, content)
         with pytest.raises(ValueError) as e_info:
             filter_obj.db_load_priorities_table()
-        assert str(e_info.value) == "Failed to parse priority file."
+        assert str(e_info.value) == f"Failed to parse priority file {filter_obj.args.priority}."
 
     def test_load_priority_scores_valid_with_spaces_and_tabs(self, tmpdir):
         """Load a priority score file with spaces in strain names."""
