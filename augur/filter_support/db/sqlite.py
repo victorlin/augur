@@ -23,6 +23,11 @@ EXTENDED_FILTERED_TABLE_NAME = 'metadata_filtered_extended'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 # column names
+DATE_YEAR_COL = 'year'
+DATE_MONTH_COL = 'month'
+DATE_DAY_COL = 'day'
+DATE_MIN_COL = 'date_min'
+DATE_MAX_COL = 'date_max'
 FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
 EXCLUDE_COL = 'exclude'
@@ -83,11 +88,11 @@ class FilterSQLite(FilterBase):
         """Creates an intermediate date table from the metadata table.
 
         Contains the strain column, original date column, and these computed columns:
-        - `year`: Extracted year (int or `NULL`)
-        - `month`: Extracted month (int or `NULL`)
-        - `day`: Extracted day (int or `NULL`)
-        - `date_min`: Exact date, minimum if ambiguous (`float` numeric date)
-        - `date_max`: Exact date, maximum if ambiguous (`float` numeric date)
+        - `DATE_YEAR_COL`: Extracted year (int or `NULL`)
+        - `DATE_MONTH_COL`: Extracted month (int or `NULL`)
+        - `DATE_DAY_COL`: Extracted day (int or `NULL`)
+        - `DATE_MIN_COL`: Exact date, minimum if ambiguous (`float` numeric date)
+        - `DATE_MAX_COL`: Exact date, maximum if ambiguous (`float` numeric date)
         """
         if self.has_date_col:
             # TODO: handle numeric dates for year/month/day
@@ -100,11 +105,11 @@ class FilterSQLite(FilterBase):
                 SELECT
                     "{self.metadata_id_column}",
                     "{self.date_column}",
-                    {get_year.__name__}("{self.date_column}") as year,
-                    {get_month.__name__}("{self.date_column}") as month,
-                    {get_day.__name__}("{self.date_column}") as day,
-                    {get_date_min.__name__}("{self.date_column}") as date_min,
-                    {get_date_max.__name__}("{self.date_column}") as date_max
+                    {get_year.__name__}("{self.date_column}") as {DATE_YEAR_COL},
+                    {get_month.__name__}("{self.date_column}") as {DATE_MONTH_COL},
+                    {get_day.__name__}("{self.date_column}") as {DATE_DAY_COL},
+                    {get_date_min.__name__}("{self.date_column}") as {DATE_MIN_COL},
+                    {get_date_max.__name__}("{self.date_column}") as {DATE_MAX_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
             self._validate_date_table()
@@ -113,11 +118,11 @@ class FilterSQLite(FilterBase):
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
                     "{self.metadata_id_column}",
-                    '' as year,
-                    '' as month,
-                    '' as day,
-                    '' as date_min,
-                    '' as date_max
+                    '' as {DATE_YEAR_COL},
+                    '' as {DATE_MONTH_COL},
+                    '' as {DATE_DAY_COL},
+                    '' as {DATE_MIN_COL},
+                    '' as {DATE_MAX_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
         self.db_create_strain_index(DATE_TABLE_NAME)
@@ -128,7 +133,7 @@ class FilterSQLite(FilterBase):
             SELECT "{self.date_column}"
             FROM {DATE_TABLE_NAME}
             WHERE NOT ("{self.date_column}" IS NULL OR "{self.date_column}" = '')
-                AND (date_min IS NULL OR date_max IS NULL)
+                AND ({DATE_MIN_COL} IS NULL OR {DATE_MAX_COL} IS NULL)
             LIMIT {max_results}
         """)
         invalid_dates = [repr(row[0]) for row in self.cur.fetchall()]
@@ -271,7 +276,7 @@ class FilterSQLite(FilterBase):
                 "{self.metadata_id_column}" IN (
                     SELECT "{self.metadata_id_column}"
                     FROM {DATE_TABLE_NAME}
-                    WHERE year IS NULL
+                    WHERE {DATE_YEAR_COL} IS NULL
                 )
             """
         if ambiguity == 'month':
@@ -279,7 +284,7 @@ class FilterSQLite(FilterBase):
                 "{self.metadata_id_column}" IN (
                     SELECT "{self.metadata_id_column}"
                     FROM {DATE_TABLE_NAME}
-                    WHERE month IS NULL OR year IS NULL
+                    WHERE {DATE_MONTH_COL} IS NULL OR {DATE_YEAR_COL} IS NULL
                 )
             """
         if ambiguity == 'day' or ambiguity == 'any':
@@ -287,7 +292,7 @@ class FilterSQLite(FilterBase):
                 "{self.metadata_id_column}" IN (
                     SELECT "{self.metadata_id_column}"
                     FROM {DATE_TABLE_NAME}
-                    WHERE day IS NULL OR month IS NULL OR year IS NULL
+                    WHERE {DATE_DAY_COL} IS NULL OR {DATE_MONTH_COL} IS NULL OR {DATE_YEAR_COL} IS NULL
                 )
             """
 
@@ -309,7 +314,7 @@ class FilterSQLite(FilterBase):
             "{self.metadata_id_column}" IN (
                 SELECT "{self.metadata_id_column}"
                 FROM {DATE_TABLE_NAME}
-                WHERE date_max < {min_date} OR date_min IS NULL
+                WHERE {DATE_MAX_COL} < {min_date} OR {DATE_MIN_COL} IS NULL
             )
         """
 
@@ -331,7 +336,7 @@ class FilterSQLite(FilterBase):
             "{self.metadata_id_column}" IN (
                 SELECT "{self.metadata_id_column}"
                 FROM {DATE_TABLE_NAME}
-                WHERE date_min > {max_date} OR date_max IS NULL
+                WHERE {DATE_MIN_COL} > {max_date} OR {DATE_MAX_COL} IS NULL
             )
         """
 
@@ -600,8 +605,8 @@ class FilterSQLite(FilterBase):
 
         1. Strain
         2. Group-by columns
-        2. Computed date columns (`year`, `month`, `day`)
-        3. `priority`
+        2. Computed date columns (`DATE_YEAR_COL`, `DATE_MONTH_COL`, `DATE_DAY_COL`)
+        3. `PRIORITY_COL`
         4. `dummy` containing the same value in all rows, used when no group-by columns are provided
         """
         group_by_cols_for_select = ''
@@ -610,10 +615,10 @@ class FilterSQLite(FilterBase):
             group_by_cols_copy = list(group_by_cols)
             # ignore computed date columns, those are added directly from the date table
             # TODO: call out that these columns will be ignored from original metadata if present
-            if 'year' in group_by_cols:
-                group_by_cols_copy.remove('year')
-            if 'month' in group_by_cols:
-                group_by_cols_copy.remove('month')
+            if DATE_YEAR_COL in group_by_cols:
+                group_by_cols_copy.remove(DATE_YEAR_COL)
+            if DATE_MONTH_COL in group_by_cols:
+                group_by_cols_copy.remove(DATE_MONTH_COL)
             if group_by_cols_copy:
                 # prefix columns with m. as metadata table alias
                 # add an extra comma for valid SQL
@@ -623,7 +628,7 @@ class FilterSQLite(FilterBase):
             SELECT
                 m."{self.metadata_id_column}",
                 {group_by_cols_for_select}
-                d.year, d.month,
+                d.{DATE_YEAR_COL}, d.{DATE_MONTH_COL},
                 p.{PRIORITY_COL},
                 TRUE AS {DUMMY_COL}
             FROM {METADATA_TABLE_NAME} m
