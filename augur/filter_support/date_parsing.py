@@ -2,13 +2,15 @@ import re
 from datetime import date
 
 
-def date_type(date_in:str):
+def date_type(date_in):
+    date_in = str(date_in)
     if not valid_date(date_in):
         raise ValueError(f'Invalid date format: {date_in}')
     return date_in
 
 
-def valid_date(date_in:str):
+def valid_date(date_in):
+    date_in = str(date_in)
     # ISO 8601 date
     if re.match(r'^\d{4}-\d{2}-\d{2}$', date_in):
         return True
@@ -21,21 +23,24 @@ def valid_date(date_in:str):
     return False
 
 
-def get_year(date_in:str):
+def get_year(date_in):
+    date_in = str(date_in)
     try:
         return int(date_in.split('-')[0])
     except:
         return None
 
 
-def get_month(date_in:str):
+def get_month(date_in):
+    date_in = str(date_in)
     try:
         return int(date_in.split('-')[1])
     except:
         return None
 
 
-def get_day(date_in:str):
+def get_day(date_in):
+    date_in = str(date_in)
     try:
         return int(date_in.split('-')[2])
     except:
@@ -46,7 +51,8 @@ def get_day(date_in:str):
 # assert_only_less_significant_uncertainty
 # max_date = min(max_date, datetime.date.today())
 
-def get_date_min(date_in:str):
+def get_date_min(date_in):
+    date_in = str(date_in)
     if not date_in:
         return None
     if re.match(r'^-*\d+\.\d+$', date_in):
@@ -67,7 +73,8 @@ def get_date_min(date_in:str):
         return None
 
 
-def get_date_max(date_in:str):
+def get_date_max(date_in):
+    date_in = str(date_in)
     if not date_in:
         return None
     if re.match(r'^-*\d+\.\d+$', date_in):
