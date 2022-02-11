@@ -103,3 +103,19 @@ class TestDataLoading:
             SELECT "strain name with spaces" FROM {METADATA_TABLE_NAME}
         """)
         assert results == [('SEQ_1',)]
+
+    def test_load_priority_scores_extra_column(self, tmpdir):
+        """Attempt to load a priority score file with an extra column raises a ValueError."""
+        content = "strain1\t5\tbad_col\n"
+        filter_obj = get_filter_obj_with_priority_loaded(tmpdir, content)
+        with pytest.raises(ValueError) as e_info:
+            filter_obj.db_load_priorities_table()
+        assert str(e_info.value) == f"Failed to parse priority file {filter_obj.args.priority}."
+
+    def test_load_priority_scores_missing_column(self, tmpdir):
+        """Attempt to load a priority score file with a missing column raises a ValueError."""
+        content = "strain1\n"
+        filter_obj = get_filter_obj_with_priority_loaded(tmpdir, content)
+        with pytest.raises(ValueError) as e_info:
+            filter_obj.db_load_priorities_table()
+        assert str(e_info.value) == f"Failed to parse priority file {filter_obj.args.priority}."
