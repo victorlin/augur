@@ -43,16 +43,20 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str,
             CREATE TABLE {table_name} ({','.join([f'"{col}"' for col in column_names])})
         """)
 
-    with myopen(tsv_file) as f:
-        reader = csv.reader(f, delimiter='\t')  # TODO: detect delimiter
-        if header:
-            next(reader)
-        for i, row in enumerate(reader):
-            indexed_row = [i] + row
-            cur.executemany(f"""
-                INSERT INTO {table_name}
-                VALUES ({','.join(['?' for _ in column_names])})
-            """, [indexed_row])
+    try:
+        with myopen(tsv_file) as f:
+            reader = csv.reader(f, delimiter='\t')  # TODO: detect delimiter
+            if header:
+                next(reader)
+            for i, row in enumerate(reader):
+                indexed_row = [i] + row
+                cur.executemany(f"""
+                    INSERT INTO {table_name}
+                    VALUES ({','.join(['?' for _ in column_names])})
+                """, [indexed_row])
+    except sqlite3.ProgrammingError as e:
+        raise ValueError(f'Failed to load {tsv_file}.') from e
+
 
 
 def cleanup(database:str):

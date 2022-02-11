@@ -563,7 +563,7 @@ class FilterSQLite(FilterBase):
             load_tsv(self.args.priority, self.connection, PRIORITIES_TABLE_NAME,
                     header=False, names=[self.metadata_id_column, PRIORITY_COL], dtypes=dtypes)
         except ValueError as e:
-            raise ValueError("Failed to parse priority file.") from e
+            raise ValueError(f"Failed to parse priority file {self.args.priority}.") from e
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_generate_priorities_table(self, seed:int=None):
