@@ -7,7 +7,7 @@ import sqlite3
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
 from augur.filter_support.db.base import FilterBase
-from augur.filter_support.date_parsing import get_year, get_month, get_day, get_date_min, get_date_max
+from augur.filter_support.date_parsing import InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
@@ -107,6 +107,7 @@ class FilterSQLite(FilterBase):
                     {get_date_max.__name__}("{self.date_column}") as date_max
                 FROM {METADATA_TABLE_NAME}
             """)
+            self._validate_date_table()
         else:
             # create placeholder table for later JOINs
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
@@ -120,6 +121,19 @@ class FilterSQLite(FilterBase):
                 FROM {METADATA_TABLE_NAME}
             """)
         self.db_create_strain_index(DATE_TABLE_NAME)
+
+    def _validate_date_table(self):
+        max_results = 3
+        self.cur.execute(f"""
+            SELECT "{self.date_column}"
+            FROM {DATE_TABLE_NAME}
+            WHERE NOT ("{self.date_column}" IS NULL OR "{self.date_column}" = '')
+                AND (date_min IS NULL OR date_max IS NULL)
+            LIMIT {max_results}
+        """)
+        invalid_dates = [repr(row[0]) for row in self.cur.fetchall()]
+        if invalid_dates:
+            raise InvalidDateFormat(f"Some dates have an invalid format (showing at most {max_results}): {','.join(invalid_dates)}")
 
     def filter_by_exclude_all(self):
         """Exclude all strains regardless of the given metadata content.

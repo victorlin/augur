@@ -2,10 +2,14 @@ import re
 from datetime import date
 
 
+class InvalidDateFormat(ValueError):
+    pass
+
+
 def date_type(date_in):
     date_in = str(date_in)
     if not valid_date(date_in):
-        raise ValueError(f'Invalid date format: {date_in}')
+        raise InvalidDateFormat(f'Invalid date format: {date_in}')
     return date_in
 
 
@@ -64,10 +68,10 @@ def get_date_min(date_in):
     # TODO: check month/day value boundaries
     # TODO: raise exception for negative ISO dates
     date_parts = date_in.split('-', maxsplit=2)
-    year = int(date_parts[0].replace('X', '0'))
-    month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
-    day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
     try:
+        year = int(date_parts[0].replace('X', '0'))
+        month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
+        day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
         return date_to_numeric(date(year, month, day))
     except ValueError:
         return None
@@ -86,18 +90,18 @@ def get_date_max(date_in):
     # TODO: check month/day value boundaries
     # TODO: raise exception for negative ISO dates
     date_parts = date_in.split('-', maxsplit=2)
-    year = int(date_parts[0].replace('X', '9'))
-    month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 12
-    if len(date_parts) == 3 and date_parts[2].isnumeric():
-        day = int(date_parts[2])
-    else:
-        if month in {1,3,5,7,8,10,12}:
-            day = 31
-        elif month == 2:
-            day = 28
-        else:
-            day = 30
     try:
+        year = int(date_parts[0].replace('X', '9'))
+        month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 12
+        if len(date_parts) == 3 and date_parts[2].isnumeric():
+            day = int(date_parts[2])
+        else:
+            if month in {1,3,5,7,8,10,12}:
+                day = 31
+            elif month == 2:
+                day = 28
+            else:
+                day = 30
         return date_to_numeric(date(year, month, day))
     except ValueError:
         return None
