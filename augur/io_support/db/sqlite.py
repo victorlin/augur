@@ -53,6 +53,8 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
             if header:
                 next(reader)
             for i, row in enumerate(reader):
+                if not row:
+                    continue
                 indexed_row = [i] + row
                 cur.executemany(f"""
                     INSERT INTO {table_name}
