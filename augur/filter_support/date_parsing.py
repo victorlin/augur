@@ -69,8 +69,6 @@ def get_date_min(date_in):
         # year-only is ambiguous
         return float(date_in)
     # convert to numeric
-    # TODO: check month/day value boundaries
-    # TODO: raise exception for negative ISO dates
     date_parts = date_in.split('-', maxsplit=2)
     try:
         year = int(date_parts[0].replace('X', '0'))
@@ -92,8 +90,6 @@ def get_date_max(date_in):
         # year-only is ambiguous
         return float(date_in)
     # convert to numeric
-    # TODO: check month/day value boundaries
-    # TODO: raise exception for negative ISO dates
     date_parts = date_in.split('-', maxsplit=2)
     try:
         year = int(date_parts[0].replace('X', '9'))
