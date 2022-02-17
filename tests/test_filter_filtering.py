@@ -26,7 +26,7 @@ class TestFiltering:
             SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_query'
         """)
-        assert results == [('SEQ_2',)]
+        assert results == [("SEQ_2",)]
 
     def test_filter_by_query_two_conditions(self, tmpdir):
         """Filter by a query expresssion with two conditions."""
@@ -41,7 +41,7 @@ class TestFiltering:
             SELECT strain FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_query'
         """)
-        assert results == [('SEQ_2',), ('SEQ_3',)]
+        assert results == [("SEQ_2",), ("SEQ_3",)]
 
     def test_filter_by_query_and_include_strains(self, tmpdir):
         """Filter by a query expresssion and force-include a strain."""
@@ -60,7 +60,7 @@ class TestFiltering:
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
-        assert results == [('SEQ_1',), ('SEQ_3',)]
+        assert results == [("SEQ_1",), ("SEQ_3",)]
 
     def test_filter_by_query_and_include_where(self, tmpdir):
         """Filter by a query expresssion and force-include a strain."""
@@ -77,7 +77,7 @@ class TestFiltering:
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)
-        assert results == [('SEQ_1',), ('SEQ_3',)]
+        assert results == [("SEQ_1",), ("SEQ_3",)]
 
     def test_filter_by_min_date(self, tmpdir):
         """Filter by min date, inclusive."""
@@ -93,7 +93,7 @@ class TestFiltering:
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
         """)
-        assert results == [('SEQ_3',)]
+        assert results == [("SEQ_3",)]
 
     def test_filter_by_max_date(self, tmpdir):
         """Filter by max date, inclusive."""
@@ -109,4 +109,4 @@ class TestFiltering:
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_max_date'
         """)
-        assert results == [('SEQ_3',)]
+        assert results == [("SEQ_3",)]
