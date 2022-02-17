@@ -37,7 +37,7 @@ class TestDataLoading:
         filter_obj = get_filter_obj_with_priority_loaded(tmpdir, content)
         filter_obj.db_load_priorities_table()
         results = query_fetchall(filter_obj, f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
-        assert results == [(0, 'strain1', 5.0), (1, 'strain2', 6.0), (2, 'strain3', 8.0)]
+        assert results == [(0, "strain1", 5.0), (1, "strain2", 6.0), (2, "strain3", 8.0)]
 
     @pytest.mark.skip(reason="this isn't trivial with SQLite's flexible typing rules")
     def test_load_priority_scores_malformed(self, tmpdir):
@@ -54,7 +54,7 @@ class TestDataLoading:
         filter_obj = get_filter_obj_with_priority_loaded(tmpdir, content)
         filter_obj.db_load_priorities_table()
         results = query_fetchall(filter_obj, f"SELECT * FROM {PRIORITIES_TABLE_NAME}")
-        assert results == [(0, 'strain 1', 5.0), (1, 'strain 2', 6.0), (2, 'strain 3', 8.0)]
+        assert results == [(0, "strain 1", 5.0), (1, "strain 2", 6.0), (2, "strain 3", 8.0)]
 
     def test_load_priority_scores_does_not_exist(self, tmpdir):
         """Attempt to load a non-existant priority score file raises a FileNotFoundError."""
