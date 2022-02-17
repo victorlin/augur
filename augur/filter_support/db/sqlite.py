@@ -130,7 +130,7 @@ class FilterSQLite(FilterBase):
     def _validate_date_table(self):
         max_results = 3
         self.cur.execute(f"""
-            SELECT "{self.date_column}"
+            SELECT cast("{self.date_column}" as text)
             FROM {DATE_TABLE_NAME}
             WHERE NOT ("{self.date_column}" IS NULL OR "{self.date_column}" = '')
                 AND ({DATE_MIN_COL} IS NULL OR {DATE_MAX_COL} IS NULL)
