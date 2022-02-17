@@ -56,7 +56,6 @@ def get_day(date_in):
 
 # TODO: DateDisambiguator parity
 # assert_only_less_significant_uncertainty
-# max_date = min(max_date, datetime.date.today())
 
 def get_date_min(date_in):
     """Get the minimum date from a potentially ambiguous date."""
@@ -74,7 +73,7 @@ def get_date_min(date_in):
         year = int(date_parts[0].replace('X', '0'))
         month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
         day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
-        return date_to_numeric(date(year, month, day))
+        return date_to_numeric_cached(date(year, month, day))
     except ValueError:
         return None
 
@@ -103,19 +102,27 @@ def get_date_max(date_in):
                 day = 28
             else:
                 day = 30
-        return date_to_numeric(date(year, month, day))
+        return date_to_numeric_cached(date(year, month, day))
     except ValueError:
         return None
 
 
+### date_to_numeric logic ###
 # copied from treetime.utils.numeric_date
 # simplified+cached for speed
+
 from calendar import isleap
-date_to_numeric_cache = dict()
 def date_to_numeric(d:date):
+    days_in_year = 366 if isleap(d.year) else 365
+    return d.year + (d.timetuple().tm_yday-0.5) / days_in_year
+
+today_numeric = date_to_numeric(date.today())
+
+cache = dict()
+def date_to_numeric_cached(d:date):
     """Return the numeric date representation of a datetime.date."""
-    if d not in date_to_numeric_cache:
-        days_in_year = 366 if isleap(d.year) else 365
-        numeric_date = d.year + (d.timetuple().tm_yday-0.5) / days_in_year
-        date_to_numeric_cache[d] = numeric_date
-    return date_to_numeric_cache[d]
+    if d not in cache:
+        cache[d] = date_to_numeric(d)
+    if cache[d] > today_numeric:
+        cache[d] = today_numeric
+    return cache[d]
