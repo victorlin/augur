@@ -1,9 +1,11 @@
+import pytest
 from augur.filter_support.db.sqlite import (
     EXCLUDE_COL,
     FILTER_REASON_COL,
     INCLUDE_COL,
     METADATA_FILTER_REASON_TABLE_NAME,
 )
+from augur.filter_support.exceptions import FilterException
 
 from test_filter import (
     get_filter_obj_run,
@@ -110,3 +112,31 @@ class TestFiltering:
             WHERE {FILTER_REASON_COL} = 'filter_by_max_date'
         """)
         assert results == [("SEQ_3",)]
+
+    def test_filter_by_exclude_where(self, tmpdir):
+        """Filter by max date, inclusive."""
+        data = [("strain","location","quality"),
+                ("SEQ_1","colorado","good"),
+                ("SEQ_2","colorado","bad"),
+                ("SEQ_3","nevada","good")]
+        args = get_valid_args(data, tmpdir)
+        args.exclude_where = ["location=colorado"]
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT strain
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_exclude_where'
+        """)
+        assert results == [("SEQ_1",), ("SEQ_2",)]
+
+    def test_filter_by_exclude_where_missing_column_error(self, tmpdir):
+        """Filter by max date, inclusive."""
+        data = [("strain","location","quality"),
+                ("SEQ_1","colorado","good"),
+                ("SEQ_2","colorado","bad"),
+                ("SEQ_3","nevada","good")]
+        args = get_valid_args(data, tmpdir)
+        args.exclude_where = ["invalid=colorado"]
+        with pytest.raises(FilterException) as e_info:
+            get_filter_obj_run(args)
+        assert str(e_info.value) == 'no such column: invalid'
