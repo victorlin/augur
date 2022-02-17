@@ -39,7 +39,8 @@ class FilterBase(abc.ABC):
         self.set_metadata_columns()
         self.db_load_metadata()
         self.add_attributes()
-        self.handle_sequences()
+        if self.use_sequences:
+            self.create_sequence_index_table()
         self.db_create_date_table()
         self.include_exclude_filter()
         if self.do_subsample:
@@ -87,6 +88,7 @@ class FilterBase(abc.ABC):
     def db_connect(self): pass
 
     def set_metadata_columns(self):
+        """Set column names for strain and date, to be used for metadata and intermediate database tables."""
         self.metadata_id_column = get_metadata_id_column(self.args.metadata, self.args.metadata_id_columns)
         self.date_column = 'date'
 
@@ -105,12 +107,12 @@ class FilterBase(abc.ABC):
     @abc.abstractmethod
     def db_has_date_col(self) -> bool: pass
 
-    def handle_sequences(self):
-        """Load sequence index"""
+    def create_sequence_index_table(self):
+        """Load sequence index into table, generating if necessary."""
         sequence_index_path = self.args.sequence_index
         build_sequence_index = False
 
-        if sequence_index_path is None and self.use_sequences:
+        if sequence_index_path is None:
             build_sequence_index = True
 
         if build_sequence_index:
@@ -131,14 +133,13 @@ class FilterBase(abc.ABC):
             else:
                 index_sequences(self.args.sequences, sequence_index_path)
 
-        if self.use_sequences:
-            self.db_load_sequence_index(sequence_index_path)
+        self.db_load_sequence_index(sequence_index_path)
 
-            # Remove temporary index file, if it exists.
-            if build_sequence_index:
-                os.unlink(sequence_index_path)
+        # Remove temporary index file, if it exists.
+        if build_sequence_index:
+            os.unlink(sequence_index_path)
 
-            self.sequence_strains = self.db_get_sequence_index_strains()
+        self.sequence_strains = self.db_get_sequence_index_strains()
 
     @abc.abstractmethod
     def db_get_sequence_index_strains(self): pass
@@ -147,10 +148,12 @@ class FilterBase(abc.ABC):
     def db_create_date_table(self): pass
 
     def include_exclude_filter(self):
+        """Construct and apply filters to create intermediate filter reason table."""
         exclude_by, include_by = self.construct_filters()
         self.db_create_filter_reason_table(exclude_by, include_by)
 
     def construct_filters(self):
+        """Construct lists of exclude and force-include filter expressions."""
         exclude_by = []
         include_by = []
 
@@ -273,6 +276,7 @@ class FilterBase(abc.ABC):
     def db_create_output_table(self, input_table:str): pass
 
     def subsample(self):
+        """Apply subsampling to update filter reason table."""
         self.create_priorities_table()
 
         group_by_cols = self.args.group_by
@@ -317,6 +321,7 @@ class FilterBase(abc.ABC):
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]): pass
 
     def create_priorities_table(self):
+        """Load or generate priorities table."""
         if self.args.priority:
             self.db_load_priorities_table()
         else:
@@ -338,6 +343,7 @@ class FilterBase(abc.ABC):
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float): pass
 
     def write_outputs(self):
+        """Write various outputs."""
         if self.args.output:
             self.read_and_output_sequences()
         if self.args.output_strains:
@@ -348,6 +354,7 @@ class FilterBase(abc.ABC):
             self.db_output_log()
 
     def read_and_output_sequences(self):
+        """Read sequences and output all that passed filtering."""
         valid_strains = self.db_get_strains_passed()
 
         # Write output starting with sequences, if they've been requested. It is
@@ -391,7 +398,6 @@ class FilterBase(abc.ABC):
                 # Update the set of available sequence strains.
                 self.sequence_strains = observed_sequence_strains
 
-
     @abc.abstractmethod
     def db_output_strains(self): pass
 
@@ -402,6 +408,7 @@ class FilterBase(abc.ABC):
     def db_output_log(self): pass
 
     def write_report(self):
+        """Output a report of how many strains were dropped and reasoning."""
         total_strains_passed = self.db_get_filtered_strains_count()
         num_excluded_by_lack_of_metadata = self.get_num_excluded_by_lack_of_metadata()
         num_metadata_strains = self.db_get_num_metadata_strains()
@@ -458,6 +465,7 @@ class FilterBase(abc.ABC):
     def db_get_strains_passed(self) -> Set[str]: pass
 
     def get_num_excluded_by_lack_of_metadata(self):
+        """Get number of strains excluded present in sequences but missing in metadata."""
         metadata_strains = self.db_get_metadata_strains()
         if self.use_sequences:
             return len(self.sequence_strains - metadata_strains)
