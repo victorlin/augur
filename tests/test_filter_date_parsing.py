@@ -1,7 +1,6 @@
 import pytest
 from treetime.utils import numeric_date
 from datetime import date
-from augur.filter_support.date_parsing import InvalidDateFormat
 
 from augur.filter_support.db.sqlite import (
     DATE_MIN_COL,
@@ -84,9 +83,9 @@ class TestDateParsing:
 
     def test_ambiguous_year_incomplete_date(self, tmpdir):
         """Ambiguous year without explicit X fails parsing."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('201x', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '201x'"
+        date_min, date_max = get_parsed_date_min_max('201x', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     # TODO: DateDisambiguator parity: max_date = min(max_date, datetime.date.today())
     @pytest.mark.skip(reason="not implemented")
@@ -99,52 +98,53 @@ class TestDateParsing:
 
     # TODO: DateDisambiguator parity: assert_only_less_significant_uncertainty
     @pytest.mark.skip(reason="not implemented")
-    def test_a(self, tmpdir):
+    def test_assert_only_less_significant_uncertainty(self, tmpdir):
         """Date from the future should be converted to today."""
-        get_parsed_date_min_max('2018-XX-01', tmpdir)
-        # should raise "Invalid date: Month contains uncertainty, so day must also be uncertain."
+        date_min, date_max = get_parsed_date_min_max('2018-XX-01', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_out_of_bounds_month(self, tmpdir):
-        """Out-of-bounds month raises an error."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('2018-00-01', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '2018-00-01'"
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('2018-13-01', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '2018-13-01'"
+        """Out-of-bounds month cannot be parsed."""
+        date_min, date_max = get_parsed_date_min_max('2018-00-01', tmpdir)
+        assert date_min == None
+        assert date_max == None
+        date_min, date_max = get_parsed_date_min_max('2018-13-01', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_out_of_bounds_day(self, tmpdir):
-        """Out-of-bounds day raises an error."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('2018-01-00', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '2018-01-00'"
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('2018-02-30', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '2018-02-30'"
+        """Out-of-bounds day cannot be parsed."""
+        date_min, date_max = get_parsed_date_min_max('2018-01-00', tmpdir)
+        assert date_min == None
+        assert date_max == None
+        date_min, date_max = get_parsed_date_min_max('2018-02-30', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_negative_iso_date_error(self, tmpdir):
-        """Negative ISO dates are not supported."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('-2018-01-01', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '-2018-01-01'"
+        """Negative ISO dates are unsupported."""
+        date_min, date_max = get_parsed_date_min_max('-2018-01-01', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_negative_ambiguous_iso_date_error(self, tmpdir):
         """Negative ambiguous ISO dates are unsupported."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('-2018-XX-XX', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '-2018-XX-XX'"
+        date_min, date_max = get_parsed_date_min_max('-2018-XX-XX', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_negative_iso_date_missing_day_error(self, tmpdir):
         """Negative incomplete ISO dates are unsupported."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('-2018-01', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '-2018-01'"
+        date_min, date_max = get_parsed_date_min_max('-2018-01', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_negative_iso_date_missing_month_day_error(self, tmpdir):
         """Negative incomplete ISO dates are unsupported."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('-2018', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '-2018'"
+        date_min, date_max = get_parsed_date_min_max('-2018', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_negative_numeric_date(self, tmpdir):
         """Parse negative numeric date."""
@@ -155,9 +155,9 @@ class TestDateParsing:
 
     def test_zero_year_error(self, tmpdir):
         """Zero year-only date is unsupported."""
-        with pytest.raises(InvalidDateFormat) as e_info:
-            get_parsed_date_min_max('0', tmpdir)
-        assert str(e_info.value) == "Some dates have an invalid format (showing at most 3): '0'"
+        date_min, date_max = get_parsed_date_min_max('0', tmpdir)
+        assert date_min == None
+        assert date_max == None
 
     def test_zero_year(self, tmpdir):
         """Parse the date 0.0."""
