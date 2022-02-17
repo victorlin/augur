@@ -112,7 +112,8 @@ class FilterSQLite(FilterBase):
                     {get_date_max.__name__}("{self.date_column}") as {DATE_MAX_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
-            self._validate_date_table()
+            # skip validation, but implemented if needed in the future
+            # self._validate_date_table()
         else:
             # create placeholder table for later JOINs
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
