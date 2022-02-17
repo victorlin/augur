@@ -128,7 +128,17 @@ class FilterSQLite(FilterBase):
         self.db_create_strain_index(DATE_TABLE_NAME)
 
     def _validate_date_table(self):
-        max_results = 3
+        """Validate dates in `DATE_TABLE_NAME`.
+
+        Internally runs a query for invalid dates, i.e. rows where:
+        1. date was specified (not null or empty string)
+        2. min/max date could not be determined (null value)
+
+        Raises
+        ------
+        :class:`InvalidDateFormat`
+        """
+        max_results = 3 # limit length of error message
         self.cur.execute(f"""
             SELECT cast("{self.date_column}" as text)
             FROM {DATE_TABLE_NAME}
