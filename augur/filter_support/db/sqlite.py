@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import sqlite3
 from tempfile import NamedTemporaryFile
+from augur.filter_support.exceptions import FilterException
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
@@ -487,14 +488,18 @@ class FilterSQLite(FilterBase):
             where_filter = exclude_function(**kwargs)
             kwargs_str = filter_kwargs_to_str(kwargs)
             kwargs_str = kwargs_str.replace('\'', '\'\'') # escape single quote for SQLite
-            self.cur.execute(f"""
-                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
-                SET
-                    {EXCLUDE_COL} = TRUE,
-                    {FILTER_REASON_COL} = '{exclude_function.__name__}',
-                    {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
-                WHERE {where_filter}
-            """)
+            try:
+                self.cur.execute(f"""
+                    UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                    SET
+                        {EXCLUDE_COL} = TRUE,
+                        {FILTER_REASON_COL} = '{exclude_function.__name__}',
+                        {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
+                    WHERE {where_filter}
+                """)
+            except sqlite3.OperationalError as sql_e:
+                if str(sql_e).startswith('no such column'):
+                    raise FilterException(sql_e) from sql_e
             self.connection.commit()
 
     def db_apply_force_inclusions(self, include_by):
@@ -503,14 +508,18 @@ class FilterSQLite(FilterBase):
             where_filter = include_function(**kwargs)
             kwargs_str = filter_kwargs_to_str(kwargs)
             kwargs_str = kwargs_str.replace('\'', '\'\'') # escape single quote for SQLite
-            self.cur.execute(f"""
-                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
-                SET
-                    {INCLUDE_COL} = TRUE,
-                    {FILTER_REASON_COL} = '{include_function.__name__}',
-                    {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
-                WHERE {where_filter}
-            """)
+            try:
+                self.cur.execute(f"""
+                    UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                    SET
+                        {INCLUDE_COL} = TRUE,
+                        {FILTER_REASON_COL} = '{include_function.__name__}',
+                        {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
+                    WHERE {where_filter}
+                """)
+            except sqlite3.OperationalError as sql_e:
+                if str(sql_e).startswith('no such column'):
+                    raise FilterException(sql_e) from sql_e
             self.connection.commit()
 
     def db_create_output_table(self):
