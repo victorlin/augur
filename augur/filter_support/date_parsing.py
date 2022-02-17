@@ -28,6 +28,7 @@ def valid_date(date_in):
 
 
 def get_year(date_in):
+    """Get the year from a date. Only works for ISO dates."""
     date_in = str(date_in)
     try:
         return int(date_in.split('-')[0])
@@ -36,6 +37,7 @@ def get_year(date_in):
 
 
 def get_month(date_in):
+    """Get the month from a date. Only works for ISO dates."""
     date_in = str(date_in)
     try:
         return int(date_in.split('-')[1])
@@ -44,6 +46,7 @@ def get_month(date_in):
 
 
 def get_day(date_in):
+    """Get the day from a date. Only works for ISO dates."""
     date_in = str(date_in)
     try:
         return int(date_in.split('-')[2])
@@ -56,6 +59,7 @@ def get_day(date_in):
 # max_date = min(max_date, datetime.date.today())
 
 def get_date_min(date_in):
+    """Get the minimum date from a potentially ambiguous date."""
     date_in = str(date_in)
     if not date_in:
         return None
@@ -78,6 +82,7 @@ def get_date_min(date_in):
 
 
 def get_date_max(date_in):
+    """Get the maximum date from a potentially ambiguous date."""
     date_in = str(date_in)
     if not date_in:
         return None
@@ -112,6 +117,7 @@ def get_date_max(date_in):
 from calendar import isleap
 date_to_numeric_cache = dict()
 def date_to_numeric(d:date):
+    """Return the numeric date representation of a datetime.date."""
     if d not in date_to_numeric_cache:
         days_in_year = 366 if isleap(d.year) else 365
         numeric_date = d.year + (d.timetuple().tm_yday-0.5) / days_in_year
