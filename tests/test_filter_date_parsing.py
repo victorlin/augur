@@ -87,8 +87,6 @@ class TestDateParsing:
         assert date_min == None
         assert date_max == None
 
-    # TODO: DateDisambiguator parity: max_date = min(max_date, datetime.date.today())
-    @pytest.mark.skip(reason="not implemented")
     def test_future_year(self, tmpdir):
         """Date from the future should be converted to today."""
         date_min, date_max = get_parsed_date_min_max(
