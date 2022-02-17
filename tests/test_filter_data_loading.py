@@ -70,7 +70,7 @@ class TestDataLoading:
 
     def test_load_invalid_id_column(self, tmpdir):
         data = [
-            ('invalid_name','date','country'),
+            ("invalid_name","date","country"),
             ("SEQ_1","2020-01-XX","A"),
         ]
         args = get_valid_args(data, tmpdir)
@@ -80,29 +80,29 @@ class TestDataLoading:
 
     def test_load_custom_id_column(self, tmpdir):
         data = [
-            ('custom_id_col','date','country'),
+            ("custom_id_col","date","country"),
             ("SEQ_1","2020-01-XX","A"),
         ]
         args = get_valid_args(data, tmpdir)
-        args.metadata_id_columns = ['custom_id_col']
+        args.metadata_id_columns = ["custom_id_col"]
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
             SELECT custom_id_col FROM {METADATA_TABLE_NAME}
         """)
-        assert results == [('SEQ_1',)]
+        assert results == [("SEQ_1",)]
 
     def test_load_custom_id_column_with_spaces(self, tmpdir):
         data = [
-            ('strain name with spaces','date','country'),
+            ("strain name with spaces","date","country"),
             ("SEQ_1","2020-01-XX","A"),
         ]
         args = get_valid_args(data, tmpdir)
-        args.metadata_id_columns = ['strain name with spaces']
+        args.metadata_id_columns = ["strain name with spaces"]
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
             SELECT "strain name with spaces" FROM {METADATA_TABLE_NAME}
         """)
-        assert results == [('SEQ_1',)]
+        assert results == [("SEQ_1",)]
 
     def test_load_priority_scores_extra_column(self, tmpdir):
         """Attempt to load a priority score file with an extra column raises a ValueError."""

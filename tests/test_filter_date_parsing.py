@@ -13,7 +13,7 @@ from tests.test_filter import get_filter_obj_run, get_valid_args, query_fetchall
 
 def get_parsed_date_min_max(date:str, tmpdir):
     data = [
-        ('strain','date'),
+        ("strain","date"),
         ("SEQ_1",date),
     ]
     args = get_valid_args(data, tmpdir)
@@ -28,62 +28,62 @@ class TestDateParsing:
     def test_ambiguous_day(self, tmpdir):
         """Ambiguous day yields a certain min/max range."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '2018-01-XX', tmpdir)
+                                        "2018-01-XX", tmpdir)
         assert date_min == pytest.approx(2018.001, abs=1e-3)
         assert date_max == pytest.approx(2018.083, abs=1e-3)
 
     def test_missing_day(self, tmpdir):
         """Date without day yields a range equivalent to ambiguous day."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '2018-01', tmpdir)
+                                        "2018-01", tmpdir)
         assert date_min == pytest.approx(2018.001, abs=1e-3)
         assert date_max == pytest.approx(2018.083, abs=1e-3)
 
     def test_ambiguous_month(self, tmpdir):
         """Ambiguous month yields a certain min/max range."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '2018-XX-XX', tmpdir)
+                                        "2018-XX-XX", tmpdir)
         assert date_min == pytest.approx(2018.001, abs=1e-3)
         assert date_max == pytest.approx(2018.999, abs=1e-3)
 
     def test_missing_month(self, tmpdir):
         """Date without month/day yields a range equivalent to ambiguous month/day."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '2018', tmpdir)
+                                        "2018", tmpdir)
         assert date_min == pytest.approx(2018.001, abs=1e-3)
         assert date_max == pytest.approx(2018.999, abs=1e-3)
 
     def test_numerical_exact_year(self, tmpdir):
         """Numerical year ending in .0 should be interpreted as exact."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '2018.0', tmpdir)
+                                        "2018.0", tmpdir)
         assert date_min == pytest.approx(2018.001, abs=1e-3)
         assert date_max == pytest.approx(2018.001, abs=1e-3)
 
     def test_ambiguous_year(self, tmpdir):
         """Ambiguous year replaces X with 0 (min) and 9 (max)."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '201X-XX-XX', tmpdir)
+                                        "201X-XX-XX", tmpdir)
         assert date_min == pytest.approx(2010.001, abs=1e-3)
         assert date_max == pytest.approx(2019.999, abs=1e-3)
 
     def test_ambiguous_year_incomplete_date(self, tmpdir):
         """Ambiguous year without month/day yields a range equivalent to ambiguous month/day counterpart."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '201X', tmpdir)
+                                        "201X", tmpdir)
         assert date_min == pytest.approx(2010.001, abs=1e-3)
         assert date_max == pytest.approx(2019.999, abs=1e-3)
 
     def test_ambiguous_year_decade(self, tmpdir):
         """Parse year-only ambiguous date with ambiguous decade."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '10X1', tmpdir)
+                                        "10X1", tmpdir)
         assert date_min == pytest.approx(1001.001, abs=1e-3)
         assert date_max == pytest.approx(1091.999, abs=1e-3)
 
     def test_ambiguous_year_incomplete_date(self, tmpdir):
         """Ambiguous year without explicit X fails parsing."""
-        date_min, date_max = get_parsed_date_min_max('201x', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("201x", tmpdir)
         assert date_min == None
         assert date_max == None
 
@@ -92,7 +92,7 @@ class TestDateParsing:
     def test_future_year(self, tmpdir):
         """Date from the future should be converted to today."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '3000', tmpdir)
+                                        "3000", tmpdir)
         assert date_min == pytest.approx(numeric_date(date.today()), abs=1e-3)
         assert date_max == pytest.approx(numeric_date(date.today()), abs=1e-3)
 
@@ -100,68 +100,68 @@ class TestDateParsing:
     @pytest.mark.skip(reason="not implemented")
     def test_assert_only_less_significant_uncertainty(self, tmpdir):
         """Date from the future should be converted to today."""
-        date_min, date_max = get_parsed_date_min_max('2018-XX-01', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("2018-XX-01", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_out_of_bounds_month(self, tmpdir):
         """Out-of-bounds month cannot be parsed."""
-        date_min, date_max = get_parsed_date_min_max('2018-00-01', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("2018-00-01", tmpdir)
         assert date_min == None
         assert date_max == None
-        date_min, date_max = get_parsed_date_min_max('2018-13-01', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("2018-13-01", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_out_of_bounds_day(self, tmpdir):
         """Out-of-bounds day cannot be parsed."""
-        date_min, date_max = get_parsed_date_min_max('2018-01-00', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("2018-01-00", tmpdir)
         assert date_min == None
         assert date_max == None
-        date_min, date_max = get_parsed_date_min_max('2018-02-30', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("2018-02-30", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_negative_iso_date_error(self, tmpdir):
         """Negative ISO dates are unsupported."""
-        date_min, date_max = get_parsed_date_min_max('-2018-01-01', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("-2018-01-01", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_negative_ambiguous_iso_date_error(self, tmpdir):
         """Negative ambiguous ISO dates are unsupported."""
-        date_min, date_max = get_parsed_date_min_max('-2018-XX-XX', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("-2018-XX-XX", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_negative_iso_date_missing_day_error(self, tmpdir):
         """Negative incomplete ISO dates are unsupported."""
-        date_min, date_max = get_parsed_date_min_max('-2018-01', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("-2018-01", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_negative_iso_date_missing_month_day_error(self, tmpdir):
         """Negative incomplete ISO dates are unsupported."""
-        date_min, date_max = get_parsed_date_min_max('-2018', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("-2018", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_negative_numeric_date(self, tmpdir):
         """Parse negative numeric date."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '-2018.0', tmpdir)
+                                        "-2018.0", tmpdir)
         assert date_min == pytest.approx(-2018.0, abs=1e-3)
         assert date_max == pytest.approx(-2018.0, abs=1e-3)
 
     def test_zero_year_error(self, tmpdir):
         """Zero year-only date is unsupported."""
-        date_min, date_max = get_parsed_date_min_max('0', tmpdir)
+        date_min, date_max = get_parsed_date_min_max("0", tmpdir)
         assert date_min == None
         assert date_max == None
 
     def test_zero_year(self, tmpdir):
         """Parse the date 0.0."""
         date_min, date_max = get_parsed_date_min_max(
-                                        '0.0', tmpdir)
+                                        "0.0", tmpdir)
         assert date_min == pytest.approx(0.0, abs=1e-3)
         assert date_max == pytest.approx(0.0, abs=1e-3)

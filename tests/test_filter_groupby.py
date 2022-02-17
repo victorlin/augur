@@ -224,7 +224,7 @@ class TestFilterGroupBy:
 
     def test_all_samples_dropped(self, tmpdir):
         data = [
-            ('strain','date','country'),
+            ("strain","date","country"),
             ("SEQ_1","2020","A"),
             ("SEQ_2","2020","B"),
             ("SEQ_3","2020","C"),
@@ -232,7 +232,7 @@ class TestFilterGroupBy:
             ("SEQ_5","2020","E")
         ]
         args = get_valid_args(data, tmpdir)
-        args.group_by = ['country', 'year', 'month']
+        args.group_by = ["country", "year", "month"]
         args.sequences_per_group = 1
         with pytest.raises(FilterException) as e_info:
             get_filter_obj_run(args)
