@@ -3,6 +3,7 @@ from typing import List, Set, Tuple
 import numpy as np
 import pandas as pd
 import sqlite3
+from tempfile import NamedTemporaryFile
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
@@ -12,7 +13,6 @@ from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
 # internal database globals
-DEFAULT_DB_FILE = 'augur.sqlite3'
 # table names
 METADATA_TABLE_NAME = 'metadata'
 SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
@@ -40,7 +40,10 @@ SUBSAMPLE_FILTER_REASON = 'subsampling'
 
 
 class FilterSQLite(FilterBase):
-    def __init__(self, db_file:str=DEFAULT_DB_FILE):
+    def __init__(self, db_file:str=''):
+        if not db_file:
+            tmp_file = NamedTemporaryFile(delete=False)
+            db_file = tmp_file.name
         self.db_file = db_file
 
     def db_connect(self):
