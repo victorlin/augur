@@ -5,6 +5,15 @@ from datetime import date
 class InvalidDateFormat(ValueError):
     pass
 
+RE_ISO_8601_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+# int, negative ok
+RE_YEAR_ONLY = re.compile(r'^-*\d+$')
+
+# float, negative ok
+# year-only is ambiguous
+RE_NUMERIC_DATE = re.compile(r'^-*\d+\.\d+$')
+
 
 def date_type(date_in):
     date_in = str(date_in)
@@ -15,14 +24,11 @@ def date_type(date_in):
 
 def valid_date(date_in):
     date_in = str(date_in)
-    # ISO 8601 date
-    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_in):
+    if RE_ISO_8601_DATE.match(date_in):
         return True
-    # int, negative ok
-    if re.match(r'^-*\d+$', date_in):
+    if RE_YEAR_ONLY.match(date_in):
         return True
-    # float, negative ok
-    if re.match(r'^-*\d+\.\d+$', date_in):
+    if RE_NUMERIC_DATE.match(date_in):
         return True
     return False
 
@@ -62,10 +68,7 @@ def get_date_min(date_in):
     date_in = str(date_in)
     if not date_in:
         return None
-    if re.match(r'^-*\d+\.\d+$', date_in):
-        # date is a numeric date
-        # can be negative
-        # year-only is ambiguous
+    if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
     # convert to numeric
     date_parts = date_in.split('-', maxsplit=2)
@@ -83,10 +86,7 @@ def get_date_max(date_in):
     date_in = str(date_in)
     if not date_in:
         return None
-    if re.match(r'^-*\d+\.\d+$', date_in):
-        # date is a numeric date
-        # can be negative
-        # year-only is ambiguous
+    if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
     # convert to numeric
     date_parts = date_in.split('-', maxsplit=2)
