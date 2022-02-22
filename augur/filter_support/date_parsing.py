@@ -7,8 +7,8 @@ class InvalidDateFormat(ValueError):
 
 RE_ISO_8601_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
-# int, negative ok
-RE_YEAR_ONLY = re.compile(r'^-*\d+$')
+# non-negative int (year-only date)
+RE_YEAR_ONLY = re.compile(r'^\d+$')
 
 # float, negative ok
 # year-only is ambiguous
