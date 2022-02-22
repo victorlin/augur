@@ -1,5 +1,6 @@
 import re
 from datetime import date
+from functools import lru_cache
 
 
 class InvalidDateFormat(ValueError):
@@ -63,6 +64,7 @@ def get_day(date_in):
 # TODO: DateDisambiguator parity
 # assert_only_less_significant_uncertainty
 
+@lru_cache()
 def get_date_min(date_in):
     """Get the minimum date from a potentially ambiguous date."""
     date_in = str(date_in)
@@ -81,6 +83,7 @@ def get_date_min(date_in):
         return None
 
 
+@lru_cache()
 def get_date_max(date_in):
     """Get the maximum date from a potentially ambiguous date."""
     date_in = str(date_in)
