@@ -78,7 +78,7 @@ def get_date_min(date_in):
         year = int(date_parts[0].replace('X', '0'))
         month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
         day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
-        return date_to_numeric_cached(date(year, month, day))
+        return date_to_numeric_capped(date(year, month, day))
     except ValueError:
         return None
 
@@ -105,7 +105,7 @@ def get_date_max(date_in):
                 day = 28
             else:
                 day = 30
-        return date_to_numeric_cached(date(year, month, day))
+        return date_to_numeric_capped(date(year, month, day))
     except ValueError:
         return None
 
@@ -121,11 +121,10 @@ def date_to_numeric(d:date):
 
 today_numeric = date_to_numeric(date.today())
 
-cache = dict()
-def date_to_numeric_cached(d:date):
+@lru_cache()
+def date_to_numeric_capped(d:date):
     """Return the numeric date representation of a datetime.date."""
-    if d not in cache:
-        cache[d] = date_to_numeric(d)
-    if cache[d] > today_numeric:
-        cache[d] = today_numeric
-    return cache[d]
+    d_numeric = date_to_numeric(d)
+    if d_numeric > today_numeric:
+        d_numeric = today_numeric
+    return d_numeric
