@@ -366,7 +366,7 @@ There are 3 strains from Colombia. One is force-included, another is dropped wit
   \t1 of these were dropped because they had non-nucleotide characters (esc)
   \t1 of these were filtered out by the query: "country != 'Colombia'" (esc)
   \t1 had no sequence data (esc)
-  \t1 strains were added back because they were in filter/include.txt (esc)
+  \t1 strains were force-included because they were in filter/include.txt (esc)
   9 strains passed all filters
 
   $ diff -u <(sort -k 1,1 filter/filtered_log.tsv) <(sort -k 1,1 "$TMP/filtered_log.tsv")

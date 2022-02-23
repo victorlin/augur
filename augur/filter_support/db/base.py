@@ -436,8 +436,8 @@ class FilterBase(abc.ABC):
             "filter_by_non_nucleotide": "{count} of these were dropped because they had non-nucleotide characters",
             "skip_group_by_with_ambiguous_year": "{count} were dropped during grouping due to ambiguous year information",
             "skip_group_by_with_ambiguous_month": "{count} were dropped during grouping due to ambiguous month information",
-            "force_include_strains": "{count} strains were added back because they were in {include_file}",
-            "force_include_where": "{count} sequences were added back because of '{include_where}'",
+            "force_include_strains": "{count} strains were force-included because they were in {include_file}",
+            "force_include_where": "{count} sequences were force-included because of '{include_where}'",
         }
         for filter_name, filter_kwargs, count in filter_counts:
             if filter_kwargs:
