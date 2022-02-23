@@ -75,7 +75,7 @@ class TestFilterGroupBy:
         data = [
             ("strain","date","country"),
             ("SEQ_1","2020-01-XX","A"),
-            ("SEQ_2","2020-XX-01","A"),
+            ("SEQ_2","2020-XX-XX","A"),
             ("SEQ_3","2020-03-01","B"),
             ("SEQ_4","2020-04-01","B"),
             ("SEQ_5","2020-05-01","B")
