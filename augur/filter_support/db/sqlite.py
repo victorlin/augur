@@ -9,7 +9,7 @@ from augur.filter_support.exceptions import FilterException
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
 from augur.filter_support.db.base import FilterBase
-from augur.filter_support.date_parsing import InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max
+from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
@@ -116,8 +116,7 @@ class FilterSQLite(FilterBase):
                     {get_date_max.__name__}("{self.date_column}") as {DATE_MAX_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
-            # skip validation, but implemented if needed in the future
-            # self._validate_date_table()
+            self._validate_date_table()
         else:
             # create placeholder table for later JOINs
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
@@ -148,12 +147,14 @@ class FilterSQLite(FilterBase):
             SELECT cast("{self.date_column}" as text)
             FROM {DATE_TABLE_NAME}
             WHERE NOT ("{self.date_column}" IS NULL OR "{self.date_column}" = '')
-                AND ({DATE_MIN_COL} IS NULL OR {DATE_MAX_COL} IS NULL)
+                AND ({DATE_MIN_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE}')
             LIMIT {max_results}
         """)
         invalid_dates = [repr(row[0]) for row in self.cur.fetchall()]
         if invalid_dates:
-            raise InvalidDateFormat(f"Some dates have an invalid format (showing at most {max_results}): {','.join(invalid_dates)}")
+            raise InvalidDateFormat(f"Some dates have an invalid format (showing at most {max_results}): {','.join(invalid_dates)}.\n"
+                + "If year contains ambiguity, month and day must also be ambiguous.\n"
+                + "If month contains ambiguity, day must also be ambiguous.")
 
     def filter_by_exclude_all(self):
         """Exclude all strains regardless of the given metadata content.

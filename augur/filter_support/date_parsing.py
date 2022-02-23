@@ -1,6 +1,7 @@
 import re
 from datetime import date
 from functools import lru_cache
+from typing import List
 
 
 class InvalidDateFormat(ValueError):
@@ -61,19 +62,41 @@ def get_day(date_in):
         return None
 
 
-# TODO: DateDisambiguator parity
-# assert_only_less_significant_uncertainty
+ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE = 'assert_only_less_significant_ambiguity'
+
+
+def assert_only_less_significant_ambiguity(date_parts:List[str]):
+    has_exact_year = date_parts[0].isnumeric()
+    has_exact_month = len(date_parts) > 1 and date_parts[1].isnumeric()
+    has_exact_day = len(date_parts) > 2 and date_parts[2].isnumeric()
+    if has_exact_day and not (has_exact_month and has_exact_year):
+        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE)
+    if has_exact_month and not has_exact_year:
+        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE)
+
 
 @lru_cache()
 def get_date_min(date_in):
-    """Get the minimum date from a potentially ambiguous date."""
+    """Get the minimum date from a potentially ambiguous date.
+
+    Also check for assert_only_less_significant_ambiguity.
+    If the check raises an :class:`InvalidDateFormat`, return a constant string `ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE`
+    which comes from the exception.
+    """
     date_in = str(date_in)
     if not date_in:
         return None
     if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
-    # convert to numeric
+    # convert non-negative ISO to numeric
+    is_negative = date_in[0] == '-'
+    if is_negative:
+        return None
     date_parts = date_in.split('-', maxsplit=2)
+    try:
+        assert_only_less_significant_ambiguity(date_parts)
+    except InvalidDateFormat as e:
+        return str(e)
     try:
         year = int(date_parts[0].replace('X', '0'))
         month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
@@ -91,7 +114,10 @@ def get_date_max(date_in):
         return None
     if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
-    # convert to numeric
+    # convert non-negative ISO to numeric
+    is_negative = date_in[0] == '-'
+    if is_negative:
+        return None
     date_parts = date_in.split('-', maxsplit=2)
     try:
         year = int(date_parts[0].replace('X', '9'))
