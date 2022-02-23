@@ -1,6 +1,8 @@
 import pytest
 from treetime.utils import numeric_date
 from datetime import date
+from textwrap import dedent
+from augur.filter_support.date_parsing import InvalidDateFormat
 
 from augur.filter_support.db.sqlite import (
     DATE_MIN_COL,
@@ -94,13 +96,23 @@ class TestDateParsing:
         assert date_min == pytest.approx(numeric_date(date.today()), abs=1e-3)
         assert date_max == pytest.approx(numeric_date(date.today()), abs=1e-3)
 
-    # TODO: DateDisambiguator parity: assert_only_less_significant_uncertainty
-    @pytest.mark.skip(reason="not implemented")
-    def test_assert_only_less_significant_uncertainty(self, tmpdir):
-        """Date from the future should be converted to today."""
-        date_min, date_max = get_parsed_date_min_max("2018-XX-01", tmpdir)
-        assert date_min == None
-        assert date_max == None
+    def test_ambiguous_month_exact_date_error(self, tmpdir):
+        """Date that has ambiguous month but exact date raises an error."""
+        with pytest.raises(InvalidDateFormat) as e_info:
+            get_parsed_date_min_max("2018-XX-01", tmpdir)
+        assert str(e_info.value) == dedent(f"""\
+            Some dates have an invalid format (showing at most 3): '2018-XX-01'.
+            If year contains ambiguity, month and day must also be ambiguous.
+            If month contains ambiguity, day must also be ambiguous.""")
+
+    def test_ambiguous_month_exact_date_error(self, tmpdir):
+        """Date that has ambiguous year but exact month and date raises an error."""
+        with pytest.raises(InvalidDateFormat) as e_info:
+            get_parsed_date_min_max("20X8-01-01", tmpdir)
+        assert str(e_info.value) == dedent(f"""\
+            Some dates have an invalid format (showing at most 3): '20X8-01-01'.
+            If year contains ambiguity, month and day must also be ambiguous.
+            If month contains ambiguity, day must also be ambiguous.""")
 
     def test_out_of_bounds_month(self, tmpdir):
         """Out-of-bounds month cannot be parsed."""
