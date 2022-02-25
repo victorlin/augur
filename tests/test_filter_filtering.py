@@ -86,7 +86,8 @@ class TestFiltering:
         data = [("strain","date"),
                 ("SEQ_1","2020-02-XX"),
                 ("SEQ_2","2020-02-26"),
-                ("SEQ_3","2020-02-25")]
+                ("SEQ_3","2020-02-25"),
+                ("SEQ_4","?")]
         args = get_valid_args(data, tmpdir)
         args.min_date = '2020-02-26'
         filter_obj = get_filter_obj_run(args)
@@ -95,14 +96,15 @@ class TestFiltering:
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
         """)
-        assert results == [("SEQ_3",)]
+        assert results == [("SEQ_3",), ("SEQ_4",)]
 
     def test_filter_by_max_date(self, tmpdir):
         """Filter by max date, inclusive."""
         data = [("strain","date"),
                 ("SEQ_1","2020-03-XX"),
                 ("SEQ_2","2020-03-01"),
-                ("SEQ_3","2020-03-02")]
+                ("SEQ_3","2020-03-02"),
+                ("SEQ_4","?")]
         args = get_valid_args(data, tmpdir)
         args.max_date = '2020-03-01'
         filter_obj = get_filter_obj_run(args)
@@ -111,7 +113,7 @@ class TestFiltering:
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_max_date'
         """)
-        assert results == [("SEQ_3",)]
+        assert results == [("SEQ_3",), ("SEQ_4",)]
 
     def test_filter_by_exclude_where(self, tmpdir):
         """Filter by max date, inclusive."""
