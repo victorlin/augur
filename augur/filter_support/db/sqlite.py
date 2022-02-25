@@ -9,7 +9,7 @@ from augur.filter_support.exceptions import FilterException
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
 from augur.utils import read_strains
 from augur.filter_support.db.base import FilterBase
-from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max
+from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, get_date_min_and_errors, get_date_max
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
@@ -27,7 +27,7 @@ OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
 DATE_YEAR_COL = 'year'
 DATE_MONTH_COL = 'month'
 DATE_DAY_COL = 'day'
-DATE_MIN_COL = 'date_min'
+DATE_MIN_OR_ERROR_COL = 'date_min'
 DATE_MAX_COL = 'date_max'
 FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
@@ -103,7 +103,7 @@ class FilterSQLite(FilterBase):
             self.connection.create_function(get_year.__name__, 1, get_year)
             self.connection.create_function(get_month.__name__, 1, get_month)
             self.connection.create_function(get_day.__name__, 1, get_day)
-            self.connection.create_function(get_date_min.__name__, 1, get_date_min)
+            self.connection.create_function(get_date_min_and_errors.__name__, 1, get_date_min_and_errors)
             self.connection.create_function(get_date_max.__name__, 1, get_date_max)
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
@@ -112,7 +112,7 @@ class FilterSQLite(FilterBase):
                     {get_year.__name__}("{self.date_column}") as {DATE_YEAR_COL},
                     {get_month.__name__}("{self.date_column}") as {DATE_MONTH_COL},
                     {get_day.__name__}("{self.date_column}") as {DATE_DAY_COL},
-                    {get_date_min.__name__}("{self.date_column}") as {DATE_MIN_COL},
+                    {get_date_min_and_errors.__name__}("{self.date_column}") as {DATE_MIN_OR_ERROR_COL},
                     {get_date_max.__name__}("{self.date_column}") as {DATE_MAX_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
@@ -125,7 +125,7 @@ class FilterSQLite(FilterBase):
                     '' as {DATE_YEAR_COL},
                     '' as {DATE_MONTH_COL},
                     '' as {DATE_DAY_COL},
-                    '' as {DATE_MIN_COL},
+                    '' as {DATE_MIN_OR_ERROR_COL},
                     '' as {DATE_MAX_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
@@ -136,7 +136,7 @@ class FilterSQLite(FilterBase):
 
         Internally runs a query for invalid dates, i.e. rows where:
         1. date was specified (not null or empty string)
-        2. min/max date could not be determined (null value)
+        2. date failed assert_only_less_significant_ambiguity check
 
         Raises
         ------
@@ -147,7 +147,7 @@ class FilterSQLite(FilterBase):
             SELECT cast("{self.date_column}" as text)
             FROM {DATE_TABLE_NAME}
             WHERE NOT ("{self.date_column}" IS NULL OR "{self.date_column}" = '')
-                AND ({DATE_MIN_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE}')
+                AND ({DATE_MIN_OR_ERROR_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR}')
             LIMIT {max_results}
         """)
         invalid_dates = [repr(row[0]) for row in self.cur.fetchall()]
@@ -325,12 +325,12 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        min_date = get_date_min(min_date)
+        min_date = get_date_min_and_errors(min_date)
         return f"""
             "{self.metadata_id_column}" IN (
                 SELECT "{self.metadata_id_column}"
                 FROM {DATE_TABLE_NAME}
-                WHERE {DATE_MAX_COL} < {min_date} OR {DATE_MIN_COL} IS NULL
+                WHERE {DATE_MAX_COL} < {min_date} OR {DATE_MIN_OR_ERROR_COL} IS NULL
             )
         """
 
@@ -352,7 +352,7 @@ class FilterSQLite(FilterBase):
             "{self.metadata_id_column}" IN (
                 SELECT "{self.metadata_id_column}"
                 FROM {DATE_TABLE_NAME}
-                WHERE {DATE_MIN_COL} > {max_date} OR {DATE_MAX_COL} IS NULL
+                WHERE {DATE_MIN_OR_ERROR_COL} > {max_date} OR {DATE_MAX_COL} IS NULL
             )
         """
 

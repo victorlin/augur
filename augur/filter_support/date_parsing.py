@@ -18,19 +18,22 @@ RE_NUMERIC_DATE = re.compile(r'^-*\d+\.\d+$')
 
 
 def date_type(date_in):
+    """Validate date format and return string form if valid.
+
+    Intended for use as the `type` parameter in `argparse.ArgumentParser.add_argument()`."""
     date_in = str(date_in)
     if not valid_date(date_in):
         raise InvalidDateFormat(f'Invalid date format: {date_in}')
     return date_in
 
 
-def valid_date(date_in):
-    date_in = str(date_in)
-    if RE_ISO_8601_DATE.match(date_in):
+def valid_date(d:str):
+    """Check that a date string is in a supported format."""
+    if RE_ISO_8601_DATE.match(d):
         return True
-    if RE_YEAR_ONLY.match(date_in):
+    if RE_YEAR_ONLY.match(d):
         return True
-    if RE_NUMERIC_DATE.match(date_in):
+    if RE_NUMERIC_DATE.match(d):
         return True
     return False
 
@@ -42,7 +45,10 @@ CACHE_SIZE = 8192
 
 @lru_cache(maxsize=CACHE_SIZE)
 def get_year(date_in):
-    """Get the year from a date. Only works for ISO dates."""
+    """Get the year from a date. Only works for ISO dates.
+
+    This function is intended to be registered as a user-defined function in sqlite3.
+    """
     date_in = str(date_in)
     try:
         return int(date_in.split('-')[0])
@@ -52,7 +58,10 @@ def get_year(date_in):
 
 @lru_cache(maxsize=CACHE_SIZE)
 def get_month(date_in):
-    """Get the month from a date. Only works for ISO dates."""
+    """Get the month from a date. Only works for ISO dates.
+
+    This function is intended to be registered as a user-defined function in sqlite3.
+    """
     date_in = str(date_in)
     try:
         return int(date_in.split('-')[1])
@@ -62,7 +71,10 @@ def get_month(date_in):
 
 @lru_cache(maxsize=CACHE_SIZE)
 def get_day(date_in):
-    """Get the day from a date. Only works for ISO dates."""
+    """Get the day from a date. Only works for ISO dates.
+
+    This function is intended to be registered as a user-defined function in sqlite3.
+    """
     date_in = str(date_in)
     try:
         return int(date_in.split('-')[2])
@@ -70,35 +82,53 @@ def get_day(date_in):
         return None
 
 
-ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE = 'assert_only_less_significant_ambiguity'
+ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR = 'assert_only_less_significant_ambiguity'
 
 
 def assert_only_less_significant_ambiguity(date_parts:List[str]):
+    """
+    Raise an exception if a constrained digit appears in a less-significant place
+    than an uncertain digit.
+
+    These patterns are valid:
+        2000-01-01
+        2000-01-XX
+        2000-XX-XX
+
+    but this is invalid, because month is uncertain but day is constrained:
+        2000-XX-01
+
+    These invalid cases are assumed to be unintended use of the tool.
+    """
     has_exact_year = date_parts[0].isnumeric()
     has_exact_month = len(date_parts) > 1 and date_parts[1].isnumeric()
     has_exact_day = len(date_parts) > 2 and date_parts[2].isnumeric()
     if has_exact_day and not (has_exact_month and has_exact_year):
-        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE)
+        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR)
     if has_exact_month and not has_exact_year:
-        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE)
+        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR)
 
 
 @lru_cache(maxsize=CACHE_SIZE)
-def get_date_min(date_in):
+def get_date_min_and_errors(date_in):
     """Get the minimum date from a potentially ambiguous date.
 
-    Also check for assert_only_less_significant_ambiguity.
-    If the check raises an :class:`InvalidDateFormat`, return a constant string `ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE`
-    which comes from the exception.
+    Also check for assert_only_less_significant_ambiguity:
+
+    If an exception is raised here, it will result in a `sqlite3.OperationalError`
+    without trace to the original exception. For this reason, if the check raises
+    :class:`InvalidDateFormat`, return a constant string
+    `ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE` which sqlite3 can then "handle".
+
+    This function is intended to be registered as a user-defined function in sqlite3.
     """
     date_in = str(date_in)
     if not date_in:
         return None
     if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
-    # convert non-negative ISO to numeric
-    is_negative = date_in[0] == '-'
-    if is_negative:
+    if date_in[0] == '-':
+        # negative ISO date not supported
         return None
     date_parts = date_in.split('-', maxsplit=2)
     try:
@@ -106,6 +136,8 @@ def get_date_min(date_in):
     except InvalidDateFormat as e:
         return str(e)
     try:
+        # convert ISO to numeric, resolving any ambiguity
+        # TODO: resolve partial month/day ambiguity eg. 2018-1X-XX, 2018-10-3X
         year = int(date_parts[0].replace('X', '0'))
         month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 1
         day = int(date_parts[2]) if len(date_parts) > 2 and date_parts[2].isnumeric() else 1
@@ -116,18 +148,22 @@ def get_date_min(date_in):
 
 @lru_cache(maxsize=CACHE_SIZE)
 def get_date_max(date_in):
-    """Get the maximum date from a potentially ambiguous date."""
+    """Get the maximum date from a potentially ambiguous date.
+
+    This function is intended to be registered as a user-defined function in sqlite3.
+    """
     date_in = str(date_in)
     if not date_in:
         return None
     if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
-    # convert non-negative ISO to numeric
-    is_negative = date_in[0] == '-'
-    if is_negative:
+    if date_in[0] == '-':
+        # negative ISO date not supported
         return None
     date_parts = date_in.split('-', maxsplit=2)
     try:
+        # convert ISO to numeric, resolving any ambiguity
+        # TODO: resolve partial month/day ambiguity eg. 2018-1X-XX, 2018-10-3X
         year = int(date_parts[0].replace('X', '9'))
         month = int(date_parts[1]) if len(date_parts) > 1 and date_parts[1].isnumeric() else 12
         if len(date_parts) == 3 and date_parts[2].isnumeric():
@@ -150,15 +186,15 @@ def get_date_max(date_in):
 
 from calendar import isleap
 def date_to_numeric(d:date):
+    """Return the numeric date representation of a datetime.date."""
     days_in_year = 366 if isleap(d.year) else 365
     return d.year + (d.timetuple().tm_yday-0.5) / days_in_year
 
-today_numeric = date_to_numeric(date.today())
 
 @lru_cache(maxsize=CACHE_SIZE)
-def date_to_numeric_capped(d:date):
-    """Return the numeric date representation of a datetime.date."""
+def date_to_numeric_capped(d:date, max_numeric:float=date_to_numeric(date.today())):
+    """Return the numeric date representation of a datetime.date, capped at a maximum numeric value."""
     d_numeric = date_to_numeric(d)
-    if d_numeric > today_numeric:
-        d_numeric = today_numeric
+    if d_numeric > max_numeric:
+        d_numeric = max_numeric
     return d_numeric
