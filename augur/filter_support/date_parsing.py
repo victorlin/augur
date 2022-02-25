@@ -35,6 +35,7 @@ def valid_date(date_in):
     return False
 
 
+@lru_cache()
 def get_year(date_in):
     """Get the year from a date. Only works for ISO dates."""
     date_in = str(date_in)
@@ -44,6 +45,7 @@ def get_year(date_in):
         return None
 
 
+@lru_cache()
 def get_month(date_in):
     """Get the month from a date. Only works for ISO dates."""
     date_in = str(date_in)
@@ -53,6 +55,7 @@ def get_month(date_in):
         return None
 
 
+@lru_cache()
 def get_day(date_in):
     """Get the day from a date. Only works for ISO dates."""
     date_in = str(date_in)
