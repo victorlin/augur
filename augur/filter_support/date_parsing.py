@@ -82,43 +82,9 @@ def get_day(date_in):
         return None
 
 
-ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR = 'assert_only_less_significant_ambiguity'
-
-
-def assert_only_less_significant_ambiguity(date_parts:List[str]):
-    """
-    Raise an exception if a constrained digit appears in a less-significant place
-    than an uncertain digit.
-
-    These patterns are valid:
-        2000-01-01
-        2000-01-XX
-        2000-XX-XX
-
-    but this is invalid, because month is uncertain but day is constrained:
-        2000-XX-01
-
-    These invalid cases are assumed to be unintended use of the tool.
-    """
-    has_exact_year = date_parts[0].isnumeric()
-    has_exact_month = len(date_parts) > 1 and date_parts[1].isnumeric()
-    has_exact_day = len(date_parts) > 2 and date_parts[2].isnumeric()
-    if has_exact_day and not (has_exact_month and has_exact_year):
-        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR)
-    if has_exact_month and not has_exact_year:
-        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR)
-
-
 @lru_cache(maxsize=CACHE_SIZE)
-def get_date_min_and_errors(date_in):
+def get_date_min(date_in):
     """Get the minimum date from a potentially ambiguous date.
-
-    Also check for assert_only_less_significant_ambiguity:
-
-    If an exception is raised here, it will result in a `sqlite3.OperationalError`
-    without trace to the original exception. For this reason, if the check raises
-    :class:`InvalidDateFormat`, return a constant string
-    `ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE` which sqlite3 can then "handle".
 
     This function is intended to be registered as a user-defined function in sqlite3.
     """
@@ -131,10 +97,6 @@ def get_date_min_and_errors(date_in):
         # negative ISO date not supported
         return None
     date_parts = date_in.split('-', maxsplit=2)
-    try:
-        assert_only_less_significant_ambiguity(date_parts)
-    except InvalidDateFormat as e:
-        return str(e)
     try:
         # convert ISO to numeric, resolving any ambiguity
         # TODO: resolve partial month/day ambiguity eg. 2018-1X-XX, 2018-10-3X
@@ -178,6 +140,64 @@ def get_date_max(date_in):
         return date_to_numeric_capped(date(year, month, day))
     except ValueError:
         return None
+
+
+@lru_cache(maxsize=CACHE_SIZE)
+def get_date_errors(date_in):
+    """Check date for any errors.
+
+    assert_only_less_significant_ambiguity:
+
+    If an exception is raised here, it will result in a `sqlite3.OperationalError`
+    without trace to the original exception. For this reason, if the check raises
+    :class:`InvalidDateFormat`, return a constant string
+    `ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE` which sqlite3 can then "handle".
+
+    This function is intended to be registered as a user-defined function in sqlite3.
+    """
+    date_in = str(date_in)
+    if not date_in:
+        # let empty string pass silently
+        return None
+    if RE_NUMERIC_DATE.match(date_in):
+        # let numeric dates pass silently
+        return None
+    if date_in[0] == '-':
+        # let negative ISO dates pass silently
+        return None
+    date_parts = date_in.split('-', maxsplit=2)
+    try:
+        assert_only_less_significant_ambiguity(date_parts)
+    except InvalidDateFormat as e:
+        return str(e)
+
+
+ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR = 'assert_only_less_significant_ambiguity'
+
+
+def assert_only_less_significant_ambiguity(date_parts:List[str]):
+    """
+    Raise an exception if a constrained digit appears in a less-significant place
+    than an uncertain digit.
+
+    These patterns are valid:
+        2000-01-01
+        2000-01-XX
+        2000-XX-XX
+
+    but this is invalid, because month is uncertain but day is constrained:
+        2000-XX-01
+
+    These invalid cases are assumed to be unintended use of the tool.
+    """
+    has_exact_year = date_parts[0].isnumeric()
+    has_exact_month = len(date_parts) > 1 and date_parts[1].isnumeric()
+    has_exact_day = len(date_parts) > 2 and date_parts[2].isnumeric()
+    if has_exact_day and not (has_exact_month and has_exact_year):
+        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR)
+    if has_exact_month and not has_exact_year:
+        raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR)
+
 
 
 ### date_to_numeric logic ###
