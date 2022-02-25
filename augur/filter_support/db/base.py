@@ -91,6 +91,10 @@ class FilterBase(abc.ABC):
         """Set column names for strain and date, to be used for metadata and intermediate database tables."""
         self.metadata_id_column = get_metadata_id_column(self.args.metadata, self.args.metadata_id_columns)
         self.date_column = 'date'
+        self.db_set_sanitized_identifiers()
+
+    @abc.abstractmethod
+    def db_set_sanitized_identifiers(self): pass
 
     @abc.abstractmethod
     def db_load_metadata(self): pass

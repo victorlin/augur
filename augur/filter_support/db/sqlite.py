@@ -6,7 +6,7 @@ import sqlite3
 from tempfile import NamedTemporaryFile
 from augur.filter_support.exceptions import FilterException
 
-from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN
+from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
 from augur.utils import read_strains
 from augur.filter_support.db.base import FilterBase
 from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max, get_date_errors
@@ -53,11 +53,17 @@ class FilterSQLite(FilterBase):
         self.connection = sqlite3.connect(self.db_file, timeout=15) # to reduce OperationalError: database is locked
         self.cur = self.connection.cursor()
 
+    def db_set_sanitized_identifiers(self):
+        """Sets sanitized names for externally sourced identifiers."""
+        self.sanitized_metadata_id_column = sanitize_identifier(self.metadata_id_column)
+        self.sanitized_date_column = sanitize_identifier(self.date_column)
+
     def db_create_strain_index(self, table_name:str):
         """Creates a unique index on `metadata_id_column` in a table."""
+        index_name = f'idx_{table_name}_id_col'
         self.cur.execute(f"""
-            CREATE UNIQUE INDEX idx_{table_name}_strain_col
-            ON {table_name} ("{self.metadata_id_column}")
+            CREATE UNIQUE INDEX {index_name}
+            ON {table_name} ({self.sanitized_metadata_id_column})
         """)
 
     def db_load_metadata(self):
@@ -79,7 +85,7 @@ class FilterSQLite(FilterBase):
     def db_get_sequence_index_strains(self):
         """Returns the set of all strains in the sequence index."""
         self.cur.execute(f"""
-            SELECT "{self.metadata_id_column}"
+            SELECT {self.sanitized_metadata_id_column}
             FROM {SEQUENCE_INDEX_TABLE_NAME}
         """)
         return {row[0] for row in self.cur.fetchall()}
@@ -109,14 +115,14 @@ class FilterSQLite(FilterBase):
             self.connection.create_function(get_date_errors.__name__, 1, get_date_errors)
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
-                    "{self.metadata_id_column}",
-                    "{self.date_column}",
-                    {get_year.__name__}("{self.date_column}") as {DATE_YEAR_COL},
-                    {get_month.__name__}("{self.date_column}") as {DATE_MONTH_COL},
-                    {get_day.__name__}("{self.date_column}") as {DATE_DAY_COL},
-                    {get_date_min.__name__}("{self.date_column}") as {DATE_MIN_COL},
-                    {get_date_max.__name__}("{self.date_column}") as {DATE_MAX_COL},
-                    {get_date_errors.__name__}("{self.date_column}") as {DATE_ERRORS_COL}
+                    {self.sanitized_metadata_id_column},
+                    {self.sanitized_date_column},
+                    {get_year.__name__}({self.sanitized_date_column}) as {DATE_YEAR_COL},
+                    {get_month.__name__}({self.sanitized_date_column}) as {DATE_MONTH_COL},
+                    {get_day.__name__}({self.sanitized_date_column}) as {DATE_DAY_COL},
+                    {get_date_min.__name__}({self.sanitized_date_column}) as {DATE_MIN_COL},
+                    {get_date_max.__name__}({self.sanitized_date_column}) as {DATE_MAX_COL},
+                    {get_date_errors.__name__}({self.sanitized_date_column}) as {DATE_ERRORS_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
             self._validate_date_table()
@@ -124,7 +130,7 @@ class FilterSQLite(FilterBase):
             # create placeholder table for later JOINs
             self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                 SELECT
-                    "{self.metadata_id_column}",
+                    {self.sanitized_metadata_id_column},
                     '' as {DATE_YEAR_COL},
                     '' as {DATE_MONTH_COL},
                     '' as {DATE_DAY_COL},
@@ -147,9 +153,9 @@ class FilterSQLite(FilterBase):
         """
         max_results = 3 # limit length of error message
         self.cur.execute(f"""
-            SELECT cast("{self.date_column}" as text)
+            SELECT cast({self.sanitized_date_column} as text)
             FROM {DATE_TABLE_NAME}
-            WHERE NOT ("{self.date_column}" IS NULL OR "{self.date_column}" = '')
+            WHERE NOT ({self.sanitized_date_column} IS NULL OR {self.sanitized_date_column} = '')
                 AND ({DATE_ERRORS_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR}')
             LIMIT {max_results}
         """)
@@ -188,7 +194,7 @@ class FilterSQLite(FilterBase):
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
         return f"""
-            "{self.metadata_id_column}" IN ({','.join(excluded_strains)})
+            {self.sanitized_metadata_id_column} IN ({','.join(excluded_strains)})
         """
 
     def parse_filter_query(self, query):
@@ -242,8 +248,8 @@ class FilterSQLite(FilterBase):
         """
         column, op, value = self.parse_filter_query(exclude_where)
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
                 WHERE {column} {op} '{value}'
             )
@@ -266,8 +272,8 @@ class FilterSQLite(FilterBase):
         """
         # NOT query to exclude all that do not match
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
                 WHERE NOT ({query})
             )
@@ -292,24 +298,24 @@ class FilterSQLite(FilterBase):
         """
         if ambiguity == 'year':
             return f"""
-                "{self.metadata_id_column}" IN (
-                    SELECT "{self.metadata_id_column}"
+                {self.sanitized_metadata_id_column} IN (
+                    SELECT {self.sanitized_metadata_id_column}
                     FROM {DATE_TABLE_NAME}
                     WHERE {DATE_YEAR_COL} IS NULL
                 )
             """
         if ambiguity == 'month':
             return f"""
-                "{self.metadata_id_column}" IN (
-                    SELECT "{self.metadata_id_column}"
+                {self.sanitized_metadata_id_column} IN (
+                    SELECT {self.sanitized_metadata_id_column}
                     FROM {DATE_TABLE_NAME}
                     WHERE {DATE_MONTH_COL} IS NULL OR {DATE_YEAR_COL} IS NULL
                 )
             """
         if ambiguity == 'day' or ambiguity == 'any':
             return f"""
-                "{self.metadata_id_column}" IN (
-                    SELECT "{self.metadata_id_column}"
+                {self.sanitized_metadata_id_column} IN (
+                    SELECT {self.sanitized_metadata_id_column}
                     FROM {DATE_TABLE_NAME}
                     WHERE {DATE_DAY_COL} IS NULL OR {DATE_MONTH_COL} IS NULL OR {DATE_YEAR_COL} IS NULL
                 )
@@ -330,8 +336,8 @@ class FilterSQLite(FilterBase):
         """
         min_date = get_date_min(min_date)
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {DATE_TABLE_NAME}
                 WHERE {DATE_MAX_COL} < {min_date} OR {DATE_MIN_COL} IS NULL
             )
@@ -352,8 +358,8 @@ class FilterSQLite(FilterBase):
         """
         max_date = get_date_max(max_date)
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {DATE_TABLE_NAME}
                 WHERE {DATE_MIN_COL} > {max_date} OR {DATE_MAX_COL} IS NULL
             )
@@ -370,8 +376,8 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         return f"""
-            "{self.metadata_id_column}" NOT IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} NOT IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
             )
         """
@@ -390,8 +396,8 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
                 WHERE A+C+G+T < {min_length}
             )
@@ -406,8 +412,8 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
                 WHERE invalid_nucleotides != 0
             )
@@ -429,7 +435,7 @@ class FilterSQLite(FilterBase):
         included_strains = read_strains(include_file)
         included_strains = [f"'{strain}'" for strain in included_strains]
         return f"""
-            "{self.metadata_id_column}" IN ({','.join(included_strains)})
+            {self.sanitized_metadata_id_column} IN ({','.join(included_strains)})
         """
 
     def force_include_where(self, include_where):
@@ -452,8 +458,8 @@ class FilterSQLite(FilterBase):
         """
         column, op, value = self.parse_filter_query(include_where)
         return f"""
-            "{self.metadata_id_column}" IN (
-                SELECT "{self.metadata_id_column}"
+            {self.sanitized_metadata_id_column} IN (
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
                 WHERE {column} {op} '{value}'
             )
@@ -474,7 +480,7 @@ class FilterSQLite(FilterBase):
         self.cur.execute(f"""
             CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
             SELECT
-                "{self.metadata_id_column}",
+                {self.sanitized_metadata_id_column},
                 FALSE as {EXCLUDE_COL},
                 FALSE as {INCLUDE_COL},
                 NULL as {FILTER_REASON_COL},
@@ -538,7 +544,7 @@ class FilterSQLite(FilterBase):
             CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
             SELECT m.* FROM {METADATA_TABLE_NAME} m
             JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
-                USING ("{self.metadata_id_column}")
+                USING ({self.sanitized_metadata_id_column})
             WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
         """)
 
@@ -577,9 +583,9 @@ class FilterSQLite(FilterBase):
         # `ORDER BY ... NULLS LAST` is unsupported for SQLite <3.30.0 so `CASE ... IS NULL` is a workaround
         # ref https://stackoverflow.com/a/12503284
         query_for_subsampled_strains = f"""
-            SELECT "{self.metadata_id_column}"
+            SELECT {self.sanitized_metadata_id_column}
             FROM (
-                SELECT "{self.metadata_id_column}", {','.join(group_by_cols)}, ROW_NUMBER() OVER (
+                SELECT {self.sanitized_metadata_id_column}, {','.join(group_by_cols)}, ROW_NUMBER() OVER (
                     PARTITION BY {','.join(group_by_cols)}
                     ORDER BY (CASE WHEN {PRIORITY_COL} IS NULL THEN 1 ELSE 0 END), {PRIORITY_COL} DESC
                 ) AS group_i
@@ -594,7 +600,7 @@ class FilterSQLite(FilterBase):
             SET
                 {EXCLUDE_COL} = TRUE,
                 {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
-            WHERE NOT {EXCLUDE_COL} AND "{self.metadata_id_column}" NOT IN (
+            WHERE NOT {EXCLUDE_COL} AND {self.sanitized_metadata_id_column} NOT IN (
                 {query_for_subsampled_strains}
             )
         """)
@@ -615,7 +621,7 @@ class FilterSQLite(FilterBase):
     def db_generate_priorities_table(self, seed:int=None):
         # use pandas/numpy since random seeding is not possible with SQLite https://stackoverflow.com/a/24394275
         df_priority = pd.read_sql(f"""
-                SELECT "{self.metadata_id_column}"
+                SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
             """, self.connection)
@@ -653,16 +659,16 @@ class FilterSQLite(FilterBase):
         # left outer join priorities table to prevent dropping strains without a priority
         self.cur.execute(f"""CREATE TABLE {EXTENDED_FILTERED_TABLE_NAME} AS
             SELECT
-                m."{self.metadata_id_column}",
+                m.{self.sanitized_metadata_id_column},
                 {group_by_cols_for_select}
                 d.{DATE_YEAR_COL}, d.{DATE_MONTH_COL},
                 p.{PRIORITY_COL},
                 TRUE AS {DUMMY_COL}
             FROM {METADATA_TABLE_NAME} m
-            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m."{self.metadata_id_column}" = f."{self.metadata_id_column}")
+            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m.{self.sanitized_metadata_id_column} = f.{self.sanitized_metadata_id_column})
                 AND (NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL})
-            JOIN {DATE_TABLE_NAME} d USING ("{self.metadata_id_column}")
-            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ("{self.metadata_id_column}")
+            JOIN {DATE_TABLE_NAME} d USING ({self.sanitized_metadata_id_column})
+            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ({self.sanitized_metadata_id_column})
         """)
 
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
@@ -676,7 +682,7 @@ class FilterSQLite(FilterBase):
 
     def db_output_strains(self):
         df = pd.read_sql_query(f"""
-                SELECT "{self.metadata_id_column}" FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}
+                SELECT {self.sanitized_metadata_id_column} FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}
             """, self.connection)
         df.to_csv(self.args.output_strains, index=None, header=False)
 
@@ -687,7 +693,7 @@ class FilterSQLite(FilterBase):
 
     def db_output_log(self):
         df = pd.read_sql_query(f"""
-                SELECT "{self.metadata_id_column}", {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
+                SELECT {self.sanitized_metadata_id_column}, {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE {FILTER_REASON_COL} IS NOT NULL
             """, self.connection)
@@ -695,14 +701,14 @@ class FilterSQLite(FilterBase):
 
     def db_get_metadata_strains(self) -> Set[str]:
         self.cur.execute(f"""
-            SELECT "{self.metadata_id_column}"
+            SELECT {self.sanitized_metadata_id_column}
             FROM {METADATA_TABLE_NAME}
         """)
         return {row[0] for row in self.cur.fetchall()}
 
     def db_get_strains_passed(self) -> Set[str]:
         self.cur.execute(f"""
-            SELECT "{self.metadata_id_column}"
+            SELECT {self.sanitized_metadata_id_column}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
         """)

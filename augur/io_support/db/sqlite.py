@@ -87,3 +87,13 @@ def _get_column_names(tsv_file:str):
         **read_csv_kwargs,
     )
     return list(row.columns)
+
+
+def sanitize_identifier(identifier:str):
+    """Sanitize a SQLite identifier.
+    
+    1. Escape existing double quotes
+    2. Wrap inside double quotes
+    """
+    identifier = identifier.replace('"', '""')
+    return f'"{identifier}"'
