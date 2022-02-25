@@ -35,7 +35,12 @@ def valid_date(date_in):
     return False
 
 
-@lru_cache()
+CACHE_SIZE = 8192
+# The following functions use a cache to minimize redundant operations on
+# large datasets that are likely to have multiple entries with the same date value.
+
+
+@lru_cache(maxsize=CACHE_SIZE)
 def get_year(date_in):
     """Get the year from a date. Only works for ISO dates."""
     date_in = str(date_in)
@@ -45,7 +50,7 @@ def get_year(date_in):
         return None
 
 
-@lru_cache()
+@lru_cache(maxsize=CACHE_SIZE)
 def get_month(date_in):
     """Get the month from a date. Only works for ISO dates."""
     date_in = str(date_in)
@@ -55,7 +60,7 @@ def get_month(date_in):
         return None
 
 
-@lru_cache()
+@lru_cache(maxsize=CACHE_SIZE)
 def get_day(date_in):
     """Get the day from a date. Only works for ISO dates."""
     date_in = str(date_in)
@@ -78,7 +83,7 @@ def assert_only_less_significant_ambiguity(date_parts:List[str]):
         raise InvalidDateFormat(ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_VALUE)
 
 
-@lru_cache()
+@lru_cache(maxsize=CACHE_SIZE)
 def get_date_min(date_in):
     """Get the minimum date from a potentially ambiguous date.
 
@@ -109,7 +114,7 @@ def get_date_min(date_in):
         return None
 
 
-@lru_cache()
+@lru_cache(maxsize=CACHE_SIZE)
 def get_date_max(date_in):
     """Get the maximum date from a potentially ambiguous date."""
     date_in = str(date_in)
@@ -150,7 +155,7 @@ def date_to_numeric(d:date):
 
 today_numeric = date_to_numeric(date.today())
 
-@lru_cache()
+@lru_cache(maxsize=CACHE_SIZE)
 def date_to_numeric_capped(d:date):
     """Return the numeric date representation of a datetime.date."""
     d_numeric = date_to_numeric(d)
