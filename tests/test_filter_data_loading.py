@@ -2,7 +2,9 @@ import pytest
 
 from augur.filter_support.db.sqlite import (
     METADATA_TABLE_NAME,
+    OUTPUT_METADATA_TABLE_NAME,
     PRIORITIES_TABLE_NAME,
+    SEQUENCE_INDEX_TABLE_NAME,
 )
 
 from test_filter import write_file
@@ -119,3 +121,38 @@ class TestDataLoading:
         with pytest.raises(ValueError) as e_info:
             filter_obj.db_load_priorities_table()
         assert str(e_info.value) == f"Failed to parse priority file {filter_obj.args.priority}."
+
+    def test_load_sequences_subset_strains(self, tmpdir):
+        """Loading sequences filters output to the intersection of strains from metadata and sequences."""
+        data = [("strain",),
+                ("SEQ_1",),
+                ("SEQ_2",),
+                ("SEQ_3",)]
+        args = get_valid_args(data, tmpdir)
+        fasta_lines = [
+            ">SEQ_1", "aaaa",
+            ">SEQ_3", "aaaa",
+            ">SEQ_4", "nnnn",
+        ]
+        args.sequences = write_file(tmpdir, "sequences.fasta", "\n".join(fasta_lines))
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"SELECT strain FROM {OUTPUT_METADATA_TABLE_NAME}")
+        assert results == [("SEQ_1",), ("SEQ_3",)]
+
+    def test_generate_sequence_index(self, tmpdir):
+        """Loading sequences filters output to the intersection of strains from metadata and sequences."""
+        data = [("strain",),
+                ("SEQ_1",),
+                ("SEQ_2",),
+                ("SEQ_3",)]
+        args = get_valid_args(data, tmpdir)
+        fasta_lines = [
+            ">SEQ_1", "aaaa",
+            ">SEQ_3", "aaaa",
+            ">SEQ_4", "nnnn",
+        ]
+        args.sequences = write_file(tmpdir, "sequences.fasta", "\n".join(fasta_lines))
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"SELECT strain, A, N FROM {SEQUENCE_INDEX_TABLE_NAME}")
+        print(results)
+        assert results == [("SEQ_1", 4, 0), ("SEQ_3", 4, 0), ("SEQ_4", 0, 4)]
