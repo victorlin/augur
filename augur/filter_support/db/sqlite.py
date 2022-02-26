@@ -175,8 +175,12 @@ class FilterSQLite(FilterBase):
         -------
         str:
             expression for SQL query `WHERE` clause
+        dict:
+            named parameters used in the expression, if any
         """
-        return 'True'
+        expression = 'True'
+        parameters = {}
+        return expression, parameters
 
     def filter_by_exclude_strains(self, exclude_file):
         """Exclude the given set of strains from the given metadata.
@@ -193,9 +197,11 @@ class FilterSQLite(FilterBase):
         """
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN ({','.join(excluded_strains)})
         """
+        parameters = {}
+        return expression, parameters
 
     def parse_filter_query(self, query):
         """Parse an augur filter-style query and return the corresponding column,
@@ -247,13 +253,15 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         column, op, value = self.parse_filter_query(exclude_where)
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
-                WHERE {column} {op} '{value}'
+                WHERE {METADATA_TABLE_NAME}.{sanitize_identifier(column)} {op} :value
             )
         """
+        parameters = {'value': value}
+        return expression, parameters
 
     def filter_by_query(self, query):
         """Filter by any valid SQL expression on the metadata.
@@ -271,13 +279,15 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         # NOT query to exclude all that do not match
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
                 WHERE NOT ({query})
             )
         """
+        parameters = {}
+        return expression, parameters
 
     def filter_by_ambiguous_date(self, ambiguity="any"):
         """Filter metadata in the given pandas DataFrame where values in the given date
@@ -297,29 +307,31 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         if ambiguity == 'year':
-            return f"""
+            expression = f"""
                 {self.sanitized_metadata_id_column} IN (
                     SELECT {self.sanitized_metadata_id_column}
                     FROM {DATE_TABLE_NAME}
                     WHERE {DATE_YEAR_COL} IS NULL
                 )
             """
-        if ambiguity == 'month':
-            return f"""
+        elif ambiguity == 'month':
+            expression = f"""
                 {self.sanitized_metadata_id_column} IN (
                     SELECT {self.sanitized_metadata_id_column}
                     FROM {DATE_TABLE_NAME}
                     WHERE {DATE_MONTH_COL} IS NULL OR {DATE_YEAR_COL} IS NULL
                 )
             """
-        if ambiguity == 'day' or ambiguity == 'any':
-            return f"""
+        elif ambiguity == 'day' or ambiguity == 'any':
+            expression = f"""
                 {self.sanitized_metadata_id_column} IN (
                     SELECT {self.sanitized_metadata_id_column}
                     FROM {DATE_TABLE_NAME}
                     WHERE {DATE_DAY_COL} IS NULL OR {DATE_MONTH_COL} IS NULL OR {DATE_YEAR_COL} IS NULL
                 )
             """
+        parameters = {}
+        return expression, parameters
 
     def filter_by_min_date(self, min_date):
         """Filter metadata by minimum date.
@@ -335,13 +347,15 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         min_date = get_date_min(min_date)
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {DATE_TABLE_NAME}
-                WHERE {DATE_MAX_COL} < {min_date} OR {DATE_MIN_COL} IS NULL
+                WHERE {DATE_MAX_COL} < :min_date OR {DATE_MIN_COL} IS NULL
             )
         """
+        parameters = {'min_date': min_date}
+        return expression, parameters
 
     def filter_by_max_date(self, max_date):
         """Filter metadata by maximum date.
@@ -357,13 +371,15 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         max_date = get_date_max(max_date)
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {DATE_TABLE_NAME}
-                WHERE {DATE_MIN_COL} > {max_date} OR {DATE_MAX_COL} IS NULL
+                WHERE {DATE_MIN_COL} > :max_date OR {DATE_MAX_COL} IS NULL
             )
         """
+        parameters = {'max_date': max_date}
+        return expression, parameters
 
     def filter_by_sequence_index(self):
         """Filter metadata by presence of corresponding entries in a given sequence
@@ -375,12 +391,14 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} NOT IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
             )
         """
+        parameters = {}
+        return expression, parameters
 
     def filter_by_sequence_length(self, min_length=0):
         """Filter metadata by sequence length from a given sequence index.
@@ -395,13 +413,15 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
-                WHERE A+C+G+T < {min_length}
+                WHERE A+C+G+T < :min_length
             )
         """
+        parameters = {'min_length': min_length}
+        return expression, parameters
 
     def filter_by_non_nucleotide(self):
         """Filter metadata for strains with invalid nucleotide content.
@@ -411,13 +431,15 @@ class FilterSQLite(FilterBase):
         str:
             expression for SQL query `WHERE` clause
         """
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
                 WHERE invalid_nucleotides != 0
             )
         """
+        parameters = {}
+        return expression, parameters
 
     def force_include_strains(self, include_file):
         """Include strains in the given text file from the given metadata.
@@ -434,9 +456,11 @@ class FilterSQLite(FilterBase):
         """
         included_strains = read_strains(include_file)
         included_strains = [f"'{strain}'" for strain in included_strains]
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN ({','.join(included_strains)})
         """
+        parameters = {}
+        return expression, parameters
 
     def force_include_where(self, include_where):
         """Include all strains from the given metadata that match the given query.
@@ -457,13 +481,15 @@ class FilterSQLite(FilterBase):
             expression for SQL query `WHERE` clause
         """
         column, op, value = self.parse_filter_query(include_where)
-        return f"""
+        expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
-                WHERE {column} {op} '{value}'
+                WHERE {METADATA_TABLE_NAME}.{sanitize_identifier(column)} {op} :value
             )
         """
+        parameters = {'value': value}
+        return expression, parameters
 
     def db_create_filter_reason_table(self, exclude_by:list, include_by:list):
         """Creates an intermediate table for filter reason.
@@ -495,18 +521,22 @@ class FilterSQLite(FilterBase):
     def db_apply_exclusions(self, exclude_by):
         """Updates the filter reason table with exclusion rules."""
         for exclude_function, kwargs in exclude_by:
-            where_filter = exclude_function(**kwargs)
-            kwargs_str = filter_kwargs_to_str(kwargs)
-            kwargs_str = kwargs_str.replace('\'', '\'\'') # escape single quote for SQLite
+            where_expression, where_parameters = exclude_function(**kwargs)
+            sql = f"""
+                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                SET
+                    {EXCLUDE_COL} = TRUE,
+                    {FILTER_REASON_COL} = :filter_reason,
+                    {FILTER_REASON_KWARGS_COL} = :filter_reason_kwargs
+                WHERE {where_expression}
+            """
+            sql_parameters = {
+                'filter_reason': exclude_function.__name__,
+                'filter_reason_kwargs': filter_kwargs_to_str(kwargs)
+            }
+            sql_parameters = {**sql_parameters, **where_parameters}
             try:
-                self.cur.execute(f"""
-                    UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
-                    SET
-                        {EXCLUDE_COL} = TRUE,
-                        {FILTER_REASON_COL} = '{exclude_function.__name__}',
-                        {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
-                    WHERE {where_filter}
-                """)
+                self.cur.execute(sql, sql_parameters)
             except sqlite3.OperationalError as sql_e:
                 if str(sql_e).startswith('no such column'):
                     raise FilterException(sql_e) from sql_e
@@ -515,18 +545,22 @@ class FilterSQLite(FilterBase):
     def db_apply_force_inclusions(self, include_by):
         """Updates the filter reason table with force-inclusion rules."""
         for include_function, kwargs in include_by:
-            where_filter = include_function(**kwargs)
-            kwargs_str = filter_kwargs_to_str(kwargs)
-            kwargs_str = kwargs_str.replace('\'', '\'\'') # escape single quote for SQLite
+            where_expression, where_parameters = include_function(**kwargs)
+            sql = f"""
+                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                SET
+                    {INCLUDE_COL} = TRUE,
+                    {FILTER_REASON_COL} = :filter_reason,
+                    {FILTER_REASON_KWARGS_COL} = :filter_reason_kwargs
+                WHERE {where_expression}
+            """
+            sql_parameters = {
+                'filter_reason': include_function.__name__,
+                'filter_reason_kwargs': filter_kwargs_to_str(kwargs)
+            }
+            sql_parameters = {**sql_parameters, **where_parameters}
             try:
-                self.cur.execute(f"""
-                    UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
-                    SET
-                        {INCLUDE_COL} = TRUE,
-                        {FILTER_REASON_COL} = '{include_function.__name__}',
-                        {FILTER_REASON_KWARGS_COL} = '{kwargs_str}'
-                    WHERE {where_filter}
-                """)
+                self.cur.execute(sql, sql_parameters)
             except sqlite3.OperationalError as sql_e:
                 if str(sql_e).startswith('no such column'):
                     raise FilterException(sql_e) from sql_e
