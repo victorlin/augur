@@ -141,4 +141,4 @@ class TestFiltering:
         args.exclude_where = ["invalid=colorado"]
         with pytest.raises(FilterException) as e_info:
             get_filter_obj_run(args)
-        assert str(e_info.value) == 'no such column: invalid'
+        assert str(e_info.value) == 'no such column: metadata.invalid'
