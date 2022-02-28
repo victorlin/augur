@@ -64,7 +64,6 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
         raise ValueError(f'Failed to load {tsv_file}.') from e
 
 
-
 def cleanup(database:str):
     """Removes the database file if present."""
     try:

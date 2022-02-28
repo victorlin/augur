@@ -50,7 +50,7 @@ class FilterSQLite(FilterBase):
 
     def db_connect(self):
         """Creates a sqlite3 connection and cursor, stored as instance attributes."""
-        self.connection = sqlite3.connect(self.db_file, timeout=15) # to reduce OperationalError: database is locked
+        self.connection = sqlite3.connect(self.db_file)
         self.cur = self.connection.cursor()
 
     def db_set_sanitized_identifiers(self):
@@ -641,10 +641,6 @@ class FilterSQLite(FilterBase):
         self.connection.commit()
 
     def db_load_priorities_table(self):
-        dtypes = {
-            self.metadata_id_column: 'TEXT',
-            PRIORITY_COL: 'NUMERIC'
-        }
         try:
             load_tsv(self.args.priority, self.connection, PRIORITIES_TABLE_NAME,
                     header=False, names=[self.metadata_id_column, PRIORITY_COL])
