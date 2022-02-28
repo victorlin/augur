@@ -11,6 +11,7 @@ from test_filter import (
     get_filter_obj_run,
     get_valid_args,
     query_fetchall,
+    write_file,
 )
 
 
@@ -142,3 +143,49 @@ class TestFiltering:
         with pytest.raises(FilterException) as e_info:
             get_filter_obj_run(args)
         assert str(e_info.value) == 'no such column: metadata.invalid'
+
+    def test_filter_by_min_length(self, tmpdir):
+        """Filter by minimum sequence length of 3."""
+        data = [("strain",),
+                ("SEQ_1",),
+                ("SEQ_2",),
+                ("SEQ_3",)]
+        args = get_valid_args(data, tmpdir)
+        fasta_lines = [
+            ">SEQ_1", "aa",
+            ">SEQ_2", "aaa",
+            ">SEQ_3", "nnnn",
+        ]
+        args.sequences = write_file(tmpdir, "sequences.fasta", "\n".join(fasta_lines))
+        args.min_length = 3
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT strain
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_sequence_length'
+        """)
+        assert results == [("SEQ_1",), ("SEQ_3",)]
+
+    def test_filter_by_non_nucleotide(self, tmpdir):
+        """Filter out sequences with at least 1 invalid nucleotide character."""
+        data = [("strain",),
+                ("SEQ_1",),
+                ("SEQ_2",),
+                ("SEQ_3",),
+                ("SEQ_4",)]
+        args = get_valid_args(data, tmpdir)
+        fasta_lines = [
+            ">SEQ_1", "aaaa",
+            ">SEQ_2", "nnnn",
+            ">SEQ_3", "xxxx",
+            ">SEQ_4", "aaax",
+        ]
+        args.sequences = write_file(tmpdir, "sequences.fasta", "\n".join(fasta_lines))
+        args.non_nucleotide = True
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT strain
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_non_nucleotide'
+        """)
+        assert results == [("SEQ_3",), ("SEQ_4",)]
