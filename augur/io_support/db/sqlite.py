@@ -47,19 +47,13 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
 
     # don't use pandas to_sql since it keeps data in memory
     # and using parallelized chunks does not work well with SQLite limited concurrency
+    insert_statement = f"""
+        INSERT INTO {table_name}
+        VALUES ({','.join(['?' for _ in df.columns])})
+    """
+    rows = _iter_indexed_rows(tsv_file, header)
     try:
-        with myopen(tsv_file) as f:
-            reader = csv.reader(f, delimiter='\t')  # TODO: detect delimiter
-            if header:
-                next(reader)
-            for i, row in enumerate(reader):
-                if not row:
-                    continue
-                indexed_row = [i] + row
-                cur.executemany(f"""
-                    INSERT INTO {table_name}
-                    VALUES ({','.join(['?' for _ in df.columns])})
-                """, [indexed_row])
+        cur.executemany(insert_statement, rows)
     except sqlite3.ProgrammingError as e:
         raise ValueError(f'Failed to load {tsv_file}.') from e
 
@@ -86,6 +80,18 @@ def _get_column_names(tsv_file:str):
         **read_csv_kwargs,
     )
     return list(row.columns)
+
+
+def _iter_indexed_rows(tsv_file:str, skip_header=True):
+    """Yield rows from a tabular file with an additional first column for row number."""
+    with myopen(tsv_file) as f:
+        reader = csv.reader(f, delimiter='\t')  # TODO: detect delimiter
+        if skip_header:
+            next(reader)
+        for i, row in enumerate(reader):
+            if not row:
+                continue
+            yield [i] + row
 
 
 def sanitize_identifier(identifier:str):
