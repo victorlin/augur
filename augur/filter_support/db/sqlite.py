@@ -91,8 +91,7 @@ class FilterSQLite(FilterBase):
     def db_get_sequence_index_strains(self):
         """Returns the set of all strains in the sequence index."""
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            cur = con.execute(f"""
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {SEQUENCE_INDEX_TABLE_NAME}
             """)
@@ -163,8 +162,7 @@ class FilterSQLite(FilterBase):
         """
         max_results = 3 # limit length of error message
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            cur = con.execute(f"""
                 SELECT cast({self.sanitized_date_column} as text)
                 FROM {DATE_TABLE_NAME}
                 WHERE NOT ({self.sanitized_date_column} IS NULL OR {self.sanitized_date_column} = '')
@@ -604,8 +602,7 @@ class FilterSQLite(FilterBase):
             List of counts per group.
         """
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            cur = con.execute(f"""
                 SELECT {','.join(group_by_cols)}, COUNT(*)
                 FROM {EXTENDED_FILTERED_TABLE_NAME}
                 GROUP BY {','.join(group_by_cols)}
@@ -618,13 +615,11 @@ class FilterSQLite(FilterBase):
         Note: this can return a different number before and after subsampling.
         """
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            return con.execute(f"""
                 SELECT COUNT(*)
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
-            """)
-            return cur.fetchone()[0]
+            """).fetchone()[0]
 
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]):
         """Subsamples filtered metadata and updates the filter reason table."""
@@ -751,8 +746,7 @@ class FilterSQLite(FilterBase):
 
     def db_get_metadata_strains(self) -> Set[str]:
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            cur = con.execute(f"""
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
             """)
@@ -760,8 +754,7 @@ class FilterSQLite(FilterBase):
 
     def db_get_strains_passed(self) -> Set[str]:
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            cur = con.execute(f"""
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
@@ -770,34 +763,28 @@ class FilterSQLite(FilterBase):
 
     def db_get_num_metadata_strains(self) -> int:
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            return con.execute(f"""
                 SELECT COUNT(*)
                 FROM {METADATA_TABLE_NAME}
-            """)
-            return cur.fetchone()[0]
+            """).fetchone()[0]
 
     def db_get_num_excluded_subsamp(self) -> int:
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            return con.execute(f"""
                 SELECT COUNT(*)
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
-            """)
-            return cur.fetchone()[0]
+            """).fetchone()[0]
 
     def db_get_filter_counts(self) -> List[Tuple[str, str, int]]:
         with self.get_db_context() as con:
-            cur = con.cursor()
-            cur.execute(f"""
+            return con.execute(f"""
                 SELECT {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}, COUNT(*)
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE {FILTER_REASON_COL} IS NOT NULL
                     AND {FILTER_REASON_COL} != '{SUBSAMPLE_FILTER_REASON}'
                 GROUP BY {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
-            """)
-            return cur.fetchall()
+            """).fetchall()
 
     def db_cleanup(self):
         if not self.using_in_memory_db:
