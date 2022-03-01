@@ -26,10 +26,12 @@ def write_metadata(tmpdir, metadata):
 
 def get_filter_obj_run(args:argparse.Namespace):
     """Returns a filter object connected to an in-memory database with run() invoked."""
-    obj = FilterSQLite(':memory:')
+    # use an in-memory database for tests since:
+    # 1. test data is not large
+    # 2. in-memory I/O is generally faster
+    obj = FilterSQLite(in_memory_db=True)
     obj.set_args(args)
-    # keep intermediate tables to validate contents
-    obj.run(cleanup=False)
+    obj.run()
     return obj
 
 
@@ -40,12 +42,15 @@ def get_valid_args(data, tmpdir):
 
 
 def query_fetchall(filter_obj:FilterSQLite, query:str):
-    filter_obj.cur.execute(query)
-    return filter_obj.cur.fetchall()
+    with filter_obj.get_db_context() as con:
+        cur = con.cursor()
+        cur.execute(query)
+        return cur.fetchall()
 
 
 def query_fetchall_dict(filter_obj:FilterSQLite, query:str):
     filter_obj.connection.row_factory = sqlite3.Row
-    cur = filter_obj.connection.cursor()
-    cur.execute(query)
-    return [dict(row) for row in cur.fetchall()]
+    with filter_obj.get_db_context() as con:
+        cur = con.cursor()
+        cur.execute(query)
+        return [dict(row) for row in cur.fetchall()]
