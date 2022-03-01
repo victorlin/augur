@@ -43,14 +43,10 @@ def get_valid_args(data, tmpdir):
 
 def query_fetchall(filter_obj:FilterSQLite, query:str):
     with filter_obj.get_db_context() as con:
-        cur = con.cursor()
-        cur.execute(query)
-        return cur.fetchall()
+        return con.execute(query).fetchall()
 
 
 def query_fetchall_dict(filter_obj:FilterSQLite, query:str):
     filter_obj.connection.row_factory = sqlite3.Row
     with filter_obj.get_db_context() as con:
-        cur = con.cursor()
-        cur.execute(query)
-        return [dict(row) for row in cur.fetchall()]
+        return [dict(row) for row in con.execute(query)]
