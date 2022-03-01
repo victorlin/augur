@@ -41,9 +41,9 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
     )
     df.insert(0, ROW_ORDER_COLUMN, 1)
 
-    cur = connection.cursor()
-    create_table_statement = pd.io.sql.get_schema(df, table_name, con=connection)
-    cur.execute(create_table_statement)
+    with connection:
+        create_table_statement = pd.io.sql.get_schema(df, table_name, con=connection)
+        connection.execute(create_table_statement)
 
     # don't use pandas to_sql since it keeps data in memory
     # and using parallelized chunks does not work well with SQLite limited concurrency
@@ -53,7 +53,8 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
     """
     rows = _iter_indexed_rows(tsv_file, header)
     try:
-        cur.executemany(insert_statement, rows)
+        with connection:
+            connection.executemany(insert_statement, rows)
     except sqlite3.ProgrammingError as e:
         raise ValueError(f'Failed to load {tsv_file}.') from e
 

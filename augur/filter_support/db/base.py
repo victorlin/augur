@@ -35,7 +35,6 @@ class FilterBase(abc.ABC):
     def run(self, cleanup=True):
         # Validate arguments before attempting any I/O.
         self.validate_arguments()
-        self.db_connect()
         self.set_metadata_columns()
         self.db_load_metadata()
         self.add_attributes()
@@ -83,9 +82,6 @@ class FilterBase(abc.ABC):
         # If user requested grouping, confirm that other required inputs are provided, too.
         if self.args.group_by and not any((self.args.sequences_per_group, self.args.subsample_max_sequences)):
             raise FilterException("You must specify a number of sequences per group or maximum sequences to subsample.")
-
-    @abc.abstractmethod
-    def db_connect(self): pass
 
     def set_metadata_columns(self):
         """Set column names for strain and date, to be used for metadata and intermediate database tables."""

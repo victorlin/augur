@@ -48,10 +48,8 @@ class FilterSQLite(FilterBase):
             db_file = tmp_file.name
         self.db_file = db_file
 
-    def db_connect(self):
-        """Creates a sqlite3 connection and cursor, stored as instance attributes."""
-        self.connection = sqlite3.connect(self.db_file)
-        self.cur = self.connection.cursor()
+    def get_db_context(self, **connect_kwargs):
+        return sqlite3.connect(self.db_file, **connect_kwargs)  # , isolation_level=None
 
     def db_set_sanitized_identifiers(self):
         """Sets sanitized names for externally sourced identifiers."""
@@ -61,17 +59,18 @@ class FilterSQLite(FilterBase):
     def db_create_strain_index(self, table_name:str):
         """Creates a unique index on `metadata_id_column` in a table."""
         index_name = f'idx_{table_name}_id_col'
-        self.cur.execute(f"""
-            CREATE UNIQUE INDEX {index_name}
-            ON {table_name} ({self.sanitized_metadata_id_column})
-        """)
+        with self.get_db_context() as con:
+            con.execute(f"""
+                CREATE UNIQUE INDEX {index_name}
+                ON {table_name} ({self.sanitized_metadata_id_column})
+            """)
 
     def db_load_metadata(self):
         """Loads a metadata file into the database.
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(self.args.metadata, self.connection, METADATA_TABLE_NAME)
+        load_tsv(self.args.metadata, self.get_db_context(), METADATA_TABLE_NAME)
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path:str):
@@ -79,20 +78,23 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(path, self.connection, SEQUENCE_INDEX_TABLE_NAME)
+        load_tsv(path, self.get_db_context(), SEQUENCE_INDEX_TABLE_NAME)
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
         """Returns the set of all strains in the sequence index."""
-        self.cur.execute(f"""
-            SELECT {self.sanitized_metadata_id_column}
-            FROM {SEQUENCE_INDEX_TABLE_NAME}
-        """)
-        return {row[0] for row in self.cur.fetchall()}
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT {self.sanitized_metadata_id_column}
+                FROM {SEQUENCE_INDEX_TABLE_NAME}
+            """)
+            return {row[0] for row in cur.fetchall()}
 
     def db_has_date_col(self):
         """Returns a boolean indicating whether `self.date_column` is in the metadata."""
-        columns = {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
+        with self.get_db_context() as con:
+            columns = {i[1] for i in con.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
         return (self.date_column in columns)
 
     def db_create_date_table(self):
@@ -105,39 +107,40 @@ class FilterSQLite(FilterBase):
         - `DATE_MIN_COL`: Exact date, minimum if ambiguous (`float` numeric date)
         - `DATE_MAX_COL`: Exact date, maximum if ambiguous (`float` numeric date)
         """
-        if self.has_date_col:
-            # TODO: handle numeric dates for year/month/day
-            self.connection.create_function(get_year.__name__, 1, get_year)
-            self.connection.create_function(get_month.__name__, 1, get_month)
-            self.connection.create_function(get_day.__name__, 1, get_day)
-            self.connection.create_function(get_date_min.__name__, 1, get_date_min)
-            self.connection.create_function(get_date_max.__name__, 1, get_date_max)
-            self.connection.create_function(get_date_errors.__name__, 1, get_date_errors)
-            self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
-                SELECT
-                    {self.sanitized_metadata_id_column},
-                    {self.sanitized_date_column},
-                    {get_year.__name__}({self.sanitized_date_column}) as {DATE_YEAR_COL},
-                    {get_month.__name__}({self.sanitized_date_column}) as {DATE_MONTH_COL},
-                    {get_day.__name__}({self.sanitized_date_column}) as {DATE_DAY_COL},
-                    {get_date_min.__name__}({self.sanitized_date_column}) as {DATE_MIN_COL},
-                    {get_date_max.__name__}({self.sanitized_date_column}) as {DATE_MAX_COL},
-                    {get_date_errors.__name__}({self.sanitized_date_column}) as {DATE_ERRORS_COL}
-                FROM {METADATA_TABLE_NAME}
-            """)
-            self._validate_date_table()
-        else:
-            # create placeholder table for later JOINs
-            self.cur.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
-                SELECT
-                    {self.sanitized_metadata_id_column},
-                    '' as {DATE_YEAR_COL},
-                    '' as {DATE_MONTH_COL},
-                    '' as {DATE_DAY_COL},
-                    '' as {DATE_MIN_COL},
-                    '' as {DATE_MAX_COL}
-                FROM {METADATA_TABLE_NAME}
-            """)
+        with self.get_db_context() as con:
+            if self.has_date_col:
+                # TODO: handle numeric dates for year/month/day
+                con.create_function(get_year.__name__, 1, get_year)
+                con.create_function(get_month.__name__, 1, get_month)
+                con.create_function(get_day.__name__, 1, get_day)
+                con.create_function(get_date_min.__name__, 1, get_date_min)
+                con.create_function(get_date_max.__name__, 1, get_date_max)
+                con.create_function(get_date_errors.__name__, 1, get_date_errors)
+                con.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
+                    SELECT
+                        {self.sanitized_metadata_id_column},
+                        {self.sanitized_date_column},
+                        {get_year.__name__}({self.sanitized_date_column}) as {DATE_YEAR_COL},
+                        {get_month.__name__}({self.sanitized_date_column}) as {DATE_MONTH_COL},
+                        {get_day.__name__}({self.sanitized_date_column}) as {DATE_DAY_COL},
+                        {get_date_min.__name__}({self.sanitized_date_column}) as {DATE_MIN_COL},
+                        {get_date_max.__name__}({self.sanitized_date_column}) as {DATE_MAX_COL},
+                        {get_date_errors.__name__}({self.sanitized_date_column}) as {DATE_ERRORS_COL}
+                    FROM {METADATA_TABLE_NAME}
+                """)
+                self._validate_date_table()
+            else:
+                # create placeholder table for later JOINs
+                con.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
+                    SELECT
+                        {self.sanitized_metadata_id_column},
+                        '' as {DATE_YEAR_COL},
+                        '' as {DATE_MONTH_COL},
+                        '' as {DATE_DAY_COL},
+                        '' as {DATE_MIN_COL},
+                        '' as {DATE_MAX_COL}
+                    FROM {METADATA_TABLE_NAME}
+                """)
         self.db_create_strain_index(DATE_TABLE_NAME)
 
     def _validate_date_table(self):
@@ -152,14 +155,16 @@ class FilterSQLite(FilterBase):
         :class:`InvalidDateFormat`
         """
         max_results = 3 # limit length of error message
-        self.cur.execute(f"""
-            SELECT cast({self.sanitized_date_column} as text)
-            FROM {DATE_TABLE_NAME}
-            WHERE NOT ({self.sanitized_date_column} IS NULL OR {self.sanitized_date_column} = '')
-                AND ({DATE_ERRORS_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR}')
-            LIMIT {max_results}
-        """)
-        invalid_dates = [repr(row[0]) for row in self.cur.fetchall()]
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT cast({self.sanitized_date_column} as text)
+                FROM {DATE_TABLE_NAME}
+                WHERE NOT ({self.sanitized_date_column} IS NULL OR {self.sanitized_date_column} = '')
+                    AND ({DATE_ERRORS_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR}')
+                LIMIT {max_results}
+            """)
+            invalid_dates = [repr(row[0]) for row in cur.fetchall()]
         if invalid_dates:
             raise InvalidDateFormat(f"Some dates have an invalid format (showing at most {max_results}): {','.join(invalid_dates)}.\n"
                 + "If year contains ambiguity, month and day must also be ambiguous.\n"
@@ -503,16 +508,17 @@ class FilterSQLite(FilterBase):
         include_by : list
             A list of filter expressions for SQL query `WHERE` clause
         """
-        self.cur.execute(f"""
-            CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
-            SELECT
-                {self.sanitized_metadata_id_column},
-                FALSE as {EXCLUDE_COL},
-                FALSE as {INCLUDE_COL},
-                NULL as {FILTER_REASON_COL},
-                NULL as {FILTER_REASON_KWARGS_COL}
-            FROM {METADATA_TABLE_NAME}
-        """)
+        with self.get_db_context() as con:
+            con.execute(f"""
+                CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
+                SELECT
+                    {self.sanitized_metadata_id_column},
+                    FALSE as {EXCLUDE_COL},
+                    FALSE as {INCLUDE_COL},
+                    NULL as {FILTER_REASON_COL},
+                    NULL as {FILTER_REASON_KWARGS_COL}
+                FROM {METADATA_TABLE_NAME}
+            """)
         self.db_create_strain_index(METADATA_FILTER_REASON_TABLE_NAME)
         # note: consider JOIN vs subquery if performance issues https://stackoverflow.com/q/3856164
         self.db_apply_exclusions(exclude_by)
@@ -536,11 +542,11 @@ class FilterSQLite(FilterBase):
             }
             sql_parameters = {**sql_parameters, **where_parameters}
             try:
-                self.cur.execute(sql, sql_parameters)
+                with self.get_db_context() as con:
+                    con.execute(sql, sql_parameters)
             except sqlite3.OperationalError as sql_e:
                 if str(sql_e).startswith('no such column'):
                     raise FilterException(sql_e) from sql_e
-            self.connection.commit()
 
     def db_apply_force_inclusions(self, include_by):
         """Updates the filter reason table with force-inclusion rules."""
@@ -560,11 +566,11 @@ class FilterSQLite(FilterBase):
             }
             sql_parameters = {**sql_parameters, **where_parameters}
             try:
-                self.cur.execute(sql, sql_parameters)
+                with self.get_db_context() as con:
+                    con.execute(sql, sql_parameters)
             except sqlite3.OperationalError as sql_e:
                 if str(sql_e).startswith('no such column'):
                     raise FilterException(sql_e) from sql_e
-            self.connection.commit()
 
     def db_create_output_table(self):
         """Creates a final intermediate table to be used for output.
@@ -574,13 +580,14 @@ class FilterSQLite(FilterBase):
         2. force-inclusion rules
         3. subsampling
         """
-        self.cur.execute(f"""
-            CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
-            SELECT m.* FROM {METADATA_TABLE_NAME} m
-            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
-                USING ({self.sanitized_metadata_id_column})
-            WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
-        """)
+        with self.get_db_context() as con:
+            con.execute(f"""
+                CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
+                SELECT m.* FROM {METADATA_TABLE_NAME} m
+                JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
+                    USING ({self.sanitized_metadata_id_column})
+                WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
+            """)
 
     def db_get_counts_per_group(self, group_by_cols:List[str]) -> List[int]:
         """
@@ -589,24 +596,28 @@ class FilterSQLite(FilterBase):
         list[int]
             List of counts per group.
         """
-        self.cur.execute(f"""
-            SELECT {','.join(group_by_cols)}, COUNT(*)
-            FROM {EXTENDED_FILTERED_TABLE_NAME}
-            GROUP BY {','.join(group_by_cols)}
-        """)
-        return [row[-1] for row in self.cur.fetchall()]
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT {','.join(group_by_cols)}, COUNT(*)
+                FROM {EXTENDED_FILTERED_TABLE_NAME}
+                GROUP BY {','.join(group_by_cols)}
+            """)
+            return [row[-1] for row in cur.fetchall()]
 
     def db_get_filtered_strains_count(self) -> int:
         """Returns the number of metadata strains that pass all filter rules.
 
         Note: this can return a different number before and after subsampling.
         """
-        self.cur.execute(f"""
-            SELECT COUNT(*)
-            FROM {METADATA_FILTER_REASON_TABLE_NAME}
-            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
-        """)
-        return self.cur.fetchone()[0]
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT COUNT(*)
+                FROM {METADATA_FILTER_REASON_TABLE_NAME}
+                WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
+            """)
+            return cur.fetchone()[0]
 
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]):
         """Subsamples filtered metadata and updates the filter reason table."""
@@ -629,20 +640,20 @@ class FilterSQLite(FilterBase):
             WHERE {' AND '.join(where_conditions)}
         """
         # update filter reason table
-        self.cur.execute(f"""
-            UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
-            SET
-                {EXCLUDE_COL} = TRUE,
-                {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
-            WHERE NOT {EXCLUDE_COL} AND {self.sanitized_metadata_id_column} NOT IN (
-                {query_for_subsampled_strains}
-            )
-        """)
-        self.connection.commit()
+        with self.get_db_context() as con:
+            con.execute(f"""
+                UPDATE {METADATA_FILTER_REASON_TABLE_NAME}
+                SET
+                    {EXCLUDE_COL} = TRUE,
+                    {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
+                WHERE NOT {EXCLUDE_COL} AND {self.sanitized_metadata_id_column} NOT IN (
+                    {query_for_subsampled_strains}
+                )
+            """)
 
     def db_load_priorities_table(self):
         try:
-            load_tsv(self.args.priority, self.connection, PRIORITIES_TABLE_NAME,
+            load_tsv(self.args.priority, self.get_db_context(), PRIORITIES_TABLE_NAME,
                     header=False, names=[self.metadata_id_column, PRIORITY_COL])
         except ValueError as e:
             raise ValueError(f"Failed to parse priority file {self.args.priority}.") from e
@@ -654,14 +665,15 @@ class FilterSQLite(FilterBase):
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
-            """, self.connection)
+            """, self.get_db_context())
         rng = np.random.default_rng(seed)
         df_priority[PRIORITY_COL] = rng.random(len(df_priority))
-        df_priority.to_sql(PRIORITIES_TABLE_NAME, self.connection, index=False)
+        df_priority.to_sql(PRIORITIES_TABLE_NAME, self.get_db_context(), index=False)
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
 
     def db_get_metadata_cols(self) -> Set[str]:
-        return {i[1] for i in self.cur.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
+        with self.get_db_context() as con:
+            return {i[1] for i in con.execute(f'PRAGMA table_info({METADATA_TABLE_NAME})')}
 
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]):
         """Creates a new table with rows as filtered metadata, with the following columns:
@@ -687,37 +699,38 @@ class FilterSQLite(FilterBase):
                 # add an extra comma for valid SQL
                 group_by_cols_for_select = ','.join(f'm.{col}' for col in group_by_cols_copy) + ','
         # left outer join priorities table to prevent dropping strains without a priority
-        self.cur.execute(f"""CREATE TABLE {EXTENDED_FILTERED_TABLE_NAME} AS
-            SELECT
-                m.{self.sanitized_metadata_id_column},
-                {group_by_cols_for_select}
-                d.{DATE_YEAR_COL}, d.{DATE_MONTH_COL},
-                p.{PRIORITY_COL},
-                TRUE AS {DUMMY_COL}
-            FROM {METADATA_TABLE_NAME} m
-            JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m.{self.sanitized_metadata_id_column} = f.{self.sanitized_metadata_id_column})
-                AND (NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL})
-            JOIN {DATE_TABLE_NAME} d USING ({self.sanitized_metadata_id_column})
-            LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ({self.sanitized_metadata_id_column})
-        """)
+        with self.get_db_context() as con:
+            con.execute(f"""CREATE TABLE {EXTENDED_FILTERED_TABLE_NAME} AS
+                SELECT
+                    m.{self.sanitized_metadata_id_column},
+                    {group_by_cols_for_select}
+                    d.{DATE_YEAR_COL}, d.{DATE_MONTH_COL},
+                    p.{PRIORITY_COL},
+                    TRUE AS {DUMMY_COL}
+                FROM {METADATA_TABLE_NAME} m
+                JOIN {METADATA_FILTER_REASON_TABLE_NAME} f ON (m.{self.sanitized_metadata_id_column} = f.{self.sanitized_metadata_id_column})
+                    AND (NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL})
+                JOIN {DATE_TABLE_NAME} d USING ({self.sanitized_metadata_id_column})
+                LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ({self.sanitized_metadata_id_column})
+            """)
 
     def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
         df_groups = pd.read_sql_query(f"""
                 SELECT {','.join(group_by)}
                 FROM {EXTENDED_FILTERED_TABLE_NAME}
                 GROUP BY {','.join(group_by)}
-            """, self.connection)
+            """, self.get_db_context())
         df_sizes = get_sizes_per_group(df_groups, GROUP_SIZE_COL, sequences_per_group, random_seed=self.args.subsample_seed)
-        df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.connection)
+        df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.get_db_context())
 
     def db_output_strains(self):
         df = pd.read_sql_query(f"""
                 SELECT {self.sanitized_metadata_id_column} FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}
-            """, self.connection)
+            """, self.get_db_context())
         df.to_csv(self.args.output_strains, index=None, header=False)
 
     def db_output_metadata(self):
-        df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.connection)
+        df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.get_db_context())
         df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
         df.to_csv(self.args.output_metadata, sep='\t', index=None)
 
@@ -726,48 +739,58 @@ class FilterSQLite(FilterBase):
                 SELECT {self.sanitized_metadata_id_column}, {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
                 FROM {METADATA_FILTER_REASON_TABLE_NAME}
                 WHERE {FILTER_REASON_COL} IS NOT NULL
-            """, self.connection)
+            """, self.get_db_context())
         df.to_csv(self.args.output_log, sep='\t', index=None)
 
     def db_get_metadata_strains(self) -> Set[str]:
-        self.cur.execute(f"""
-            SELECT {self.sanitized_metadata_id_column}
-            FROM {METADATA_TABLE_NAME}
-        """)
-        return {row[0] for row in self.cur.fetchall()}
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT {self.sanitized_metadata_id_column}
+                FROM {METADATA_TABLE_NAME}
+            """)
+            return {row[0] for row in cur.fetchall()}
 
     def db_get_strains_passed(self) -> Set[str]:
-        self.cur.execute(f"""
-            SELECT {self.sanitized_metadata_id_column}
-            FROM {METADATA_FILTER_REASON_TABLE_NAME}
-            WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
-        """)
-        return {row[0] for row in self.cur.fetchall()}
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT {self.sanitized_metadata_id_column}
+                FROM {METADATA_FILTER_REASON_TABLE_NAME}
+                WHERE NOT {EXCLUDE_COL} OR {INCLUDE_COL}
+            """)
+            return {row[0] for row in cur.fetchall()}
 
     def db_get_num_metadata_strains(self) -> int:
-        self.cur.execute(f"""
-            SELECT COUNT(*)
-            FROM {METADATA_TABLE_NAME}
-        """)
-        return self.cur.fetchone()[0]
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT COUNT(*)
+                FROM {METADATA_TABLE_NAME}
+            """)
+            return cur.fetchone()[0]
 
     def db_get_num_excluded_subsamp(self) -> int:
-        self.cur.execute(f"""
-            SELECT COUNT(*)
-            FROM {METADATA_FILTER_REASON_TABLE_NAME}
-            WHERE {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
-        """)
-        return self.cur.fetchone()[0]
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT COUNT(*)
+                FROM {METADATA_FILTER_REASON_TABLE_NAME}
+                WHERE {FILTER_REASON_COL} = '{SUBSAMPLE_FILTER_REASON}'
+            """)
+            return cur.fetchone()[0]
 
     def db_get_filter_counts(self) -> List[Tuple[str, str, int]]:
-        self.cur.execute(f"""
-            SELECT {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}, COUNT(*)
-            FROM {METADATA_FILTER_REASON_TABLE_NAME}
-            WHERE {FILTER_REASON_COL} IS NOT NULL
-                AND {FILTER_REASON_COL} != '{SUBSAMPLE_FILTER_REASON}'
-            GROUP BY {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
-        """)
-        return self.cur.fetchall()
+        with self.get_db_context() as con:
+            cur = con.cursor()
+            cur.execute(f"""
+                SELECT {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}, COUNT(*)
+                FROM {METADATA_FILTER_REASON_TABLE_NAME}
+                WHERE {FILTER_REASON_COL} IS NOT NULL
+                    AND {FILTER_REASON_COL} != '{SUBSAMPLE_FILTER_REASON}'
+                GROUP BY {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
+            """)
+            return cur.fetchall()
 
     def db_cleanup(self):
         cleanup(self.db_file)
