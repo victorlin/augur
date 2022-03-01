@@ -47,6 +47,6 @@ def query_fetchall(filter_obj:FilterSQLite, query:str):
 
 
 def query_fetchall_dict(filter_obj:FilterSQLite, query:str):
-    filter_obj.connection.row_factory = sqlite3.Row
     with filter_obj.get_db_context() as con:
+        con.row_factory = sqlite3.Row
         return [dict(row) for row in con.execute(query)]
