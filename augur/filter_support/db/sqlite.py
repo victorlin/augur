@@ -42,13 +42,20 @@ SUBSAMPLE_FILTER_REASON = 'subsampling'
 
 
 class FilterSQLite(FilterBase):
-    def __init__(self, db_file:str=''):
-        if not db_file:
-            tmp_file = NamedTemporaryFile(delete=False)
-            db_file = tmp_file.name
-        self.db_file = db_file
+    def __init__(self, db_file:str='', in_memory_db=False):
+        self.using_in_memory_db = in_memory_db
+        if self.using_in_memory_db:
+            # use a singleton connection to an in-memory database https://www.sqlite.org/inmemorydb.html
+            self.connection = sqlite3.connect(":memory:")
+        else:
+            if not db_file:
+                tmp_file = NamedTemporaryFile(delete=False)
+                db_file = tmp_file.name
+            self.db_file = db_file
 
     def get_db_context(self, **connect_kwargs):
+        if self.using_in_memory_db:
+            return self.connection
         return sqlite3.connect(self.db_file, **connect_kwargs)  # , isolation_level=None
 
     def db_set_sanitized_identifiers(self):
@@ -793,4 +800,5 @@ class FilterSQLite(FilterBase):
             return cur.fetchall()
 
     def db_cleanup(self):
-        cleanup(self.db_file)
+        if not self.using_in_memory_db:
+            cleanup(self.db_file)
