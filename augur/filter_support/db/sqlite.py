@@ -601,11 +601,12 @@ class FilterSQLite(FilterBase):
         list[int]
             List of counts per group.
         """
+        sanitized_group_by_cols = [sanitize_identifier(col) for col in group_by_cols]
         with self.get_db_context() as con:
             cur = con.execute(f"""
-                SELECT {','.join(group_by_cols)}, COUNT(*)
+                SELECT {','.join(sanitized_group_by_cols)}, COUNT(*)
                 FROM {EXTENDED_FILTERED_TABLE_NAME}
-                GROUP BY {','.join(group_by_cols)}
+                GROUP BY {','.join(sanitized_group_by_cols)}
             """)
             return [row[-1] for row in cur.fetchall()]
 
@@ -623,22 +624,23 @@ class FilterSQLite(FilterBase):
 
     def db_update_filter_reason_table_with_subsampling(self, group_by_cols:List[str]):
         """Subsamples filtered metadata and updates the filter reason table."""
+        sanitized_group_by_cols = [sanitize_identifier(col) for col in group_by_cols]
         # create a SQL query for strains to subsample for
         where_conditions = [f'group_i <= {GROUP_SIZE_COL}']
-        for col in group_by_cols:
+        for col in sanitized_group_by_cols:
             where_conditions.append(f'{col} IS NOT NULL')
         # `ORDER BY ... NULLS LAST` is unsupported for SQLite <3.30.0 so `CASE ... IS NULL` is a workaround
         # ref https://stackoverflow.com/a/12503284
         query_for_subsampled_strains = f"""
             SELECT {self.sanitized_metadata_id_column}
             FROM (
-                SELECT {self.sanitized_metadata_id_column}, {','.join(group_by_cols)}, ROW_NUMBER() OVER (
-                    PARTITION BY {','.join(group_by_cols)}
+                SELECT {self.sanitized_metadata_id_column}, {','.join(sanitized_group_by_cols)}, ROW_NUMBER() OVER (
+                    PARTITION BY {','.join(sanitized_group_by_cols)}
                     ORDER BY (CASE WHEN {PRIORITY_COL} IS NULL THEN 1 ELSE 0 END), {PRIORITY_COL} DESC
                 ) AS group_i
                 FROM {EXTENDED_FILTERED_TABLE_NAME}
             )
-            JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(group_by_cols)})
+            JOIN {GROUP_SIZES_TABLE_NAME} USING({','.join(sanitized_group_by_cols)})
             WHERE {' AND '.join(where_conditions)}
         """
         # update filter reason table
@@ -686,7 +688,7 @@ class FilterSQLite(FilterBase):
         3. `PRIORITY_COL`
         4. `dummy` containing the same value in all rows, used when no group-by columns are provided
         """
-        group_by_cols_for_select = ''
+        sanitized_group_by_cols_for_select = ''
         if group_by_cols:
             # copy to avoid modifying original list
             group_by_cols_copy = list(group_by_cols)
@@ -699,13 +701,13 @@ class FilterSQLite(FilterBase):
             if group_by_cols_copy:
                 # prefix columns with m. as metadata table alias
                 # add an extra comma for valid SQL
-                group_by_cols_for_select = ','.join(f'm.{col}' for col in group_by_cols_copy) + ','
+                sanitized_group_by_cols_for_select = ','.join(f'm.{sanitize_identifier(col)}' for col in group_by_cols_copy) + ','
         # left outer join priorities table to prevent dropping strains without a priority
         with self.get_db_context() as con:
             con.execute(f"""CREATE TABLE {EXTENDED_FILTERED_TABLE_NAME} AS
                 SELECT
                     m.{self.sanitized_metadata_id_column},
-                    {group_by_cols_for_select}
+                    {sanitized_group_by_cols_for_select}
                     d.{DATE_YEAR_COL}, d.{DATE_MONTH_COL},
                     p.{PRIORITY_COL},
                     TRUE AS {DUMMY_COL}
@@ -716,11 +718,12 @@ class FilterSQLite(FilterBase):
                 LEFT OUTER JOIN {PRIORITIES_TABLE_NAME} p USING ({self.sanitized_metadata_id_column})
             """)
 
-    def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float):
+    def db_create_group_sizes_table(self, group_by_cols:List[str], sequences_per_group:float):
+        sanitized_group_by_cols = [sanitize_identifier(col) for col in group_by_cols]
         df_groups = pd.read_sql_query(f"""
-                SELECT {','.join(group_by)}
+                SELECT {','.join(sanitized_group_by_cols)}
                 FROM {EXTENDED_FILTERED_TABLE_NAME}
-                GROUP BY {','.join(group_by)}
+                GROUP BY {','.join(sanitized_group_by_cols)}
             """, self.get_db_context())
         df_sizes = get_sizes_per_group(df_groups, GROUP_SIZE_COL, sequences_per_group, random_seed=self.args.subsample_seed)
         df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.get_db_context())

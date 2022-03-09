@@ -340,7 +340,7 @@ class FilterBase(abc.ABC):
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]): pass
 
     @abc.abstractmethod
-    def db_create_group_sizes_table(self, group_by:list, sequences_per_group:float): pass
+    def db_create_group_sizes_table(self, group_by_cols:List[str], sequences_per_group:float): pass
 
     def write_outputs(self):
         """Write various outputs."""
