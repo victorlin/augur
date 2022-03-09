@@ -8,7 +8,7 @@ from augur.filter_support.exceptions import FilterException
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
 from augur.utils import read_strains
-from augur.filter_support.db.base import FilterBase
+from augur.filter_support.db.base import FilterBase, FilterCallableReturn, FilterOption
 from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max, get_date_errors
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
@@ -175,7 +175,7 @@ class FilterSQLite(FilterBase):
                 + "If year contains ambiguity, month and day must also be ambiguous.\n"
                 + "If month contains ambiguity, day must also be ambiguous.")
 
-    def filter_by_exclude_all(self):
+    def filter_by_exclude_all(self) -> FilterCallableReturn:
         """Exclude all strains regardless of the given metadata content.
 
         This is a placeholder function that can be called as part of a generalized
@@ -183,16 +183,15 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
-        dict:
-            named parameters used in the expression, if any
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         expression = 'True'
         parameters = {}
         return expression, parameters
 
-    def filter_by_exclude_strains(self, exclude_file):
+    def filter_by_exclude_strains(self, exclude_file) -> FilterCallableReturn:
         """Exclude the given set of strains from the given metadata.
 
         Parameters
@@ -202,8 +201,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         excluded_strains = read_strains(exclude_file)
         excluded_strains = [f"'{strain}'" for strain in excluded_strains]
@@ -244,7 +244,7 @@ class FilterSQLite(FilterBase):
 
         return column, op, value
 
-    def filter_by_exclude_where(self, exclude_where):
+    def filter_by_exclude_where(self, exclude_where) -> FilterCallableReturn:
         """Exclude all strains from the given metadata that match the given exclusion query.
 
         Unlike pandas query syntax, exclusion queries should follow the pattern of
@@ -259,8 +259,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         column, op, value = self.parse_filter_query(exclude_where)
         expression = f"""
@@ -273,7 +274,7 @@ class FilterSQLite(FilterBase):
         parameters = {'value': value}
         return expression, parameters
 
-    def filter_by_query(self, query):
+    def filter_by_query(self, query) -> FilterCallableReturn:
         """Filter by any valid SQL expression on the metadata.
 
         Strains that do *not* match the query will be excluded.
@@ -285,8 +286,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         # NOT query to exclude all that do not match
         expression = f"""
@@ -299,7 +301,7 @@ class FilterSQLite(FilterBase):
         parameters = {}
         return expression, parameters
 
-    def filter_by_ambiguous_date(self, ambiguity="any"):
+    def filter_by_ambiguous_date(self, ambiguity="any") -> FilterCallableReturn:
         """Filter metadata in the given pandas DataFrame where values in the given date
         column have a given level of ambiguity.
 
@@ -313,8 +315,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         if ambiguity == 'year':
             expression = f"""
@@ -343,7 +346,7 @@ class FilterSQLite(FilterBase):
         parameters = {}
         return expression, parameters
 
-    def filter_by_min_date(self, min_date):
+    def filter_by_min_date(self, min_date) -> FilterCallableReturn:
         """Filter metadata by minimum date.
 
         Parameters
@@ -353,8 +356,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         min_date = get_date_min(min_date)
         expression = f"""
@@ -367,7 +371,7 @@ class FilterSQLite(FilterBase):
         parameters = {'min_date': min_date}
         return expression, parameters
 
-    def filter_by_max_date(self, max_date):
+    def filter_by_max_date(self, max_date) -> FilterCallableReturn:
         """Filter metadata by maximum date.
 
         Parameters
@@ -377,8 +381,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         max_date = get_date_max(max_date)
         expression = f"""
@@ -391,15 +396,16 @@ class FilterSQLite(FilterBase):
         parameters = {'max_date': max_date}
         return expression, parameters
 
-    def filter_by_sequence_index(self):
+    def filter_by_sequence_index(self) -> FilterCallableReturn:
         """Filter metadata by presence of corresponding entries in a given sequence
         index. This filter effectively intersects the strain ids in the metadata and
         sequence index.
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         expression = f"""
             {self.sanitized_metadata_id_column} NOT IN (
@@ -410,7 +416,7 @@ class FilterSQLite(FilterBase):
         parameters = {}
         return expression, parameters
 
-    def filter_by_sequence_length(self, min_length=0):
+    def filter_by_sequence_length(self, min_length=0) -> FilterCallableReturn:
         """Filter metadata by sequence length from a given sequence index.
 
         Parameters
@@ -420,8 +426,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         expression = f"""
             {self.sanitized_metadata_id_column} IN (
@@ -433,13 +440,14 @@ class FilterSQLite(FilterBase):
         parameters = {'min_length': min_length}
         return expression, parameters
 
-    def filter_by_non_nucleotide(self):
+    def filter_by_non_nucleotide(self) -> FilterCallableReturn:
         """Filter metadata for strains with invalid nucleotide content.
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         expression = f"""
             {self.sanitized_metadata_id_column} IN (
@@ -451,7 +459,7 @@ class FilterSQLite(FilterBase):
         parameters = {}
         return expression, parameters
 
-    def force_include_strains(self, include_file):
+    def force_include_strains(self, include_file) -> FilterCallableReturn:
         """Include strains in the given text file from the given metadata.
 
         Parameters
@@ -461,8 +469,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         included_strains = read_strains(include_file)
         included_strains = [f"'{strain}'" for strain in included_strains]
@@ -472,7 +481,7 @@ class FilterSQLite(FilterBase):
         parameters = {}
         return expression, parameters
 
-    def force_include_where(self, include_where):
+    def force_include_where(self, include_where) -> FilterCallableReturn:
         """Include all strains from the given metadata that match the given query.
 
         Unlike pandas query syntax, inclusion queries should follow the pattern of
@@ -487,8 +496,9 @@ class FilterSQLite(FilterBase):
 
         Returns
         -------
-        str:
-            expression for SQL query `WHERE` clause
+        (str, dict):
+            str: expression for SQL query `WHERE` clause
+            dict: named parameters used in the expression, if any
         """
         column, op, value = self.parse_filter_query(include_where)
         expression = f"""
@@ -501,7 +511,7 @@ class FilterSQLite(FilterBase):
         parameters = {'value': value}
         return expression, parameters
 
-    def db_create_filter_reason_table(self, exclude_by:list, include_by:list):
+    def db_create_filter_reason_table(self, exclude_by:List[FilterOption], include_by:List[FilterOption]):
         """Creates an intermediate table for filter reason.
         
         Applies exclusion and force-inclusion rules to filter strains from the metadata.
@@ -528,7 +538,7 @@ class FilterSQLite(FilterBase):
         self.db_apply_exclusions(exclude_by)
         self.db_apply_force_inclusions(include_by)
 
-    def db_apply_exclusions(self, exclude_by):
+    def db_apply_exclusions(self, exclude_by:List[FilterOption]):
         """Updates the filter reason table with exclusion rules."""
         for exclude_function, kwargs in exclude_by:
             where_expression, where_parameters = exclude_function(**kwargs)
@@ -552,7 +562,7 @@ class FilterSQLite(FilterBase):
                 if str(sql_e).startswith('no such column'):
                     raise FilterException(sql_e) from sql_e
 
-    def db_apply_force_inclusions(self, include_by):
+    def db_apply_force_inclusions(self, include_by:List[FilterOption]):
         """Updates the filter reason table with force-inclusion rules."""
         for include_function, kwargs in include_by:
             where_expression, where_parameters = include_function(**kwargs)

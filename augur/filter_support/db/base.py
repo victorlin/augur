@@ -1,6 +1,6 @@
 import abc
 import os
-from typing import List, Set, Tuple
+from typing import Any, Callable, Dict, List, Set, Tuple
 import sys
 from tempfile import NamedTemporaryFile
 import argparse
@@ -17,6 +17,10 @@ SEQUENCE_ONLY_FILTERS = (
     "min_length",
     "non_nucleotide",
 )
+
+FilterCallableReturn = Tuple[str, Dict[str, Any]]
+FilterCallable = Callable[..., FilterCallableReturn]
+FilterOption = Tuple[FilterCallable, Dict[str, Any]]
 
 
 class FilterBase(abc.ABC):
@@ -154,8 +158,8 @@ class FilterBase(abc.ABC):
 
     def construct_filters(self):
         """Construct lists of exclude and force-include filter expressions."""
-        exclude_by = []
-        include_by = []
+        exclude_by:List[FilterOption] = []
+        include_by:List[FilterOption] = []
 
         # Force include sequences specified in file(s).
         if self.args.include:
@@ -223,54 +227,54 @@ class FilterBase(abc.ABC):
         return exclude_by, include_by
 
     @abc.abstractmethod
-    def filter_by_exclude_all(self): pass
+    def filter_by_exclude_all(self) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_exclude_strains(self, exclude_file): pass
+    def filter_by_exclude_strains(self, exclude_file) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
     def parse_filter_query(self, query): pass
 
     @abc.abstractmethod
-    def filter_by_exclude_where(self, exclude_where): pass
+    def filter_by_exclude_where(self, exclude_where) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_query(self, query): pass
+    def filter_by_query(self, query) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_ambiguous_date(self, ambiguity="any"): pass
+    def filter_by_ambiguous_date(self, ambiguity="any") -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_min_date(self, min_date): pass
+    def filter_by_min_date(self, min_date) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_max_date(self, max_date): pass
+    def filter_by_max_date(self, max_date) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_sequence_index(self): pass
+    def filter_by_sequence_index(self) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_sequence_length(self, min_length=0): pass
+    def filter_by_sequence_length(self, min_length=0) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_non_nucleotide(self): pass
+    def filter_by_non_nucleotide(self) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def force_include_strains(self, include_file): pass
+    def force_include_strains(self, include_file) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def force_include_where(self, include_where): pass
+    def force_include_where(self, include_where) -> FilterCallableReturn: pass
 
-    def skip_group_by_with_ambiguous_month(self):
+    def skip_group_by_with_ambiguous_month(self) -> FilterCallableReturn:
         """Alias to filter_by_ambiguous_date(ambiguity="month") with a specific function name for filter reason."""
         return self.filter_by_ambiguous_date(ambiguity="month")
 
-    def skip_group_by_with_ambiguous_year(self):
+    def skip_group_by_with_ambiguous_year(self) -> FilterCallableReturn:
         """Alias to filter_by_ambiguous_date(ambiguity="year") with a specific function name for filter reason."""
         return self.filter_by_ambiguous_date(ambiguity="year")
 
     @abc.abstractmethod
-    def db_create_filter_reason_table(self, exclude_by:List[str], include_by:List[str]): pass
+    def db_create_filter_reason_table(self, exclude_by:List[FilterOption], include_by:List[FilterOption]): pass
 
     @abc.abstractmethod
     def db_create_output_table(self, input_table:str): pass
