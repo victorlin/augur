@@ -8,7 +8,7 @@ from augur.filter_support.exceptions import FilterException
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
 from augur.utils import read_strains
-from augur.filter_support.db.base import FilterBase, FilterCallableReturn, FilterOption
+from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
 from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max, get_date_errors
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
@@ -34,7 +34,6 @@ FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
 EXCLUDE_COL = 'exclude'
 INCLUDE_COL = 'force_include'
-DUMMY_COL = 'dummy'
 GROUP_SIZE_COL = 'size'
 PRIORITY_COL = 'priority'
 # value for FILTER_REASON_COL with separate logic
