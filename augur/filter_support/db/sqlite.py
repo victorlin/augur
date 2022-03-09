@@ -106,7 +106,7 @@ class FilterSQLite(FilterBase):
     def db_create_date_table(self):
         """Creates an intermediate date table from the metadata table.
 
-        Contains the strain column, original date column, and these computed columns:
+        Contains the strain column, original date column, and these extracted columns:
         - `DATE_YEAR_COL`: Extracted year (int or `NULL`)
         - `DATE_MONTH_COL`: Extracted month (int or `NULL`)
         - `DATE_DAY_COL`: Extracted day (int or `NULL`)
@@ -680,9 +680,9 @@ class FilterSQLite(FilterBase):
     def db_create_extended_filtered_metadata_table(self, group_by_cols:List[str]):
         """Creates a new table with rows as filtered metadata, with the following columns:
 
-        1. Strain
+        1. Metadata ID column
         2. Group-by columns
-        2. Computed date columns (`DATE_YEAR_COL`, `DATE_MONTH_COL`, `DATE_DAY_COL`)
+        2. Extracted date columns (`DATE_YEAR_COL`, `DATE_MONTH_COL`)
         3. `PRIORITY_COL`
         4. `dummy` containing the same value in all rows, used when no group-by columns are provided
         """
@@ -690,7 +690,7 @@ class FilterSQLite(FilterBase):
         if group_by_cols:
             # copy to avoid modifying original list
             group_by_cols_copy = list(group_by_cols)
-            # ignore computed date columns, those are added directly from the date table
+            # ignore extracted date columns, those are added directly from the date table
             # TODO: call out that these columns will be ignored from original metadata if present
             if DATE_YEAR_COL in group_by_cols:
                 group_by_cols_copy.remove(DATE_YEAR_COL)
