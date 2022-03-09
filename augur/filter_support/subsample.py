@@ -47,7 +47,7 @@ def calculate_sequences_per_group(target_max_value, counts_per_group, allow_prob
         )
     except TooManyGroupsError as error:
         if allow_probabilistic:
-            print(f"WARNING: {error}")
+            print_err(f"WARNING: {error}")
             sequences_per_group = _calculate_fractional_sequences_per_group(
                 target_max_value,
                 counts_per_group,
