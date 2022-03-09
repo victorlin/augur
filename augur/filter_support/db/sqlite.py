@@ -126,12 +126,12 @@ class FilterSQLite(FilterBase):
                     SELECT
                         {self.sanitized_metadata_id_column},
                         {self.sanitized_date_column},
-                        {get_year.__name__}({self.sanitized_date_column}) as {DATE_YEAR_COL},
-                        {get_month.__name__}({self.sanitized_date_column}) as {DATE_MONTH_COL},
-                        {get_day.__name__}({self.sanitized_date_column}) as {DATE_DAY_COL},
-                        {get_date_min.__name__}({self.sanitized_date_column}) as {DATE_MIN_COL},
-                        {get_date_max.__name__}({self.sanitized_date_column}) as {DATE_MAX_COL},
-                        {get_date_errors.__name__}({self.sanitized_date_column}) as {DATE_ERRORS_COL}
+                        {get_year.__name__}({self.sanitized_date_column}) AS {DATE_YEAR_COL},
+                        {get_month.__name__}({self.sanitized_date_column}) AS {DATE_MONTH_COL},
+                        {get_day.__name__}({self.sanitized_date_column}) AS {DATE_DAY_COL},
+                        {get_date_min.__name__}({self.sanitized_date_column}) AS {DATE_MIN_COL},
+                        {get_date_max.__name__}({self.sanitized_date_column}) AS {DATE_MAX_COL},
+                        {get_date_errors.__name__}({self.sanitized_date_column}) AS {DATE_ERRORS_COL}
                     FROM {METADATA_TABLE_NAME}
                 """)
                 self._validate_date_table()
@@ -140,11 +140,11 @@ class FilterSQLite(FilterBase):
                 con.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                     SELECT
                         {self.sanitized_metadata_id_column},
-                        '' as {DATE_YEAR_COL},
-                        '' as {DATE_MONTH_COL},
-                        '' as {DATE_DAY_COL},
-                        '' as {DATE_MIN_COL},
-                        '' as {DATE_MAX_COL}
+                        '' AS {DATE_YEAR_COL},
+                        '' AS {DATE_MONTH_COL},
+                        '' AS {DATE_DAY_COL},
+                        '' AS {DATE_MIN_COL},
+                        '' AS {DATE_MAX_COL}
                     FROM {METADATA_TABLE_NAME}
                 """)
         self.db_create_strain_index(DATE_TABLE_NAME)
@@ -163,7 +163,7 @@ class FilterSQLite(FilterBase):
         max_results = 3 # limit length of error message
         with self.get_db_context() as con:
             cur = con.execute(f"""
-                SELECT cast({self.sanitized_date_column} as text)
+                SELECT CAST({self.sanitized_date_column} AS TEXT)
                 FROM {DATE_TABLE_NAME}
                 WHERE NOT ({self.sanitized_date_column} IS NULL OR {self.sanitized_date_column} = '')
                     AND ({DATE_ERRORS_COL} = '{ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR}')
@@ -514,14 +514,13 @@ class FilterSQLite(FilterBase):
             A list of filter expressions for SQL query `WHERE` clause
         """
         with self.get_db_context() as con:
-            con.execute(f"""
-                CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
+            con.execute(f"""CREATE TABLE {METADATA_FILTER_REASON_TABLE_NAME} AS
                 SELECT
                     {self.sanitized_metadata_id_column},
-                    FALSE as {EXCLUDE_COL},
-                    FALSE as {INCLUDE_COL},
-                    NULL as {FILTER_REASON_COL},
-                    NULL as {FILTER_REASON_KWARGS_COL}
+                    FALSE AS {EXCLUDE_COL},
+                    FALSE AS {INCLUDE_COL},
+                    NULL AS {FILTER_REASON_COL},
+                    NULL AS {FILTER_REASON_KWARGS_COL}
                 FROM {METADATA_TABLE_NAME}
             """)
         self.db_create_strain_index(METADATA_FILTER_REASON_TABLE_NAME)
@@ -586,8 +585,7 @@ class FilterSQLite(FilterBase):
         3. subsampling
         """
         with self.get_db_context() as con:
-            con.execute(f"""
-                CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
+            con.execute(f"""CREATE TABLE {OUTPUT_METADATA_TABLE_NAME} AS
                 SELECT m.* FROM {METADATA_TABLE_NAME} m
                 JOIN {METADATA_FILTER_REASON_TABLE_NAME} f
                     USING ({self.sanitized_metadata_id_column})
@@ -730,12 +728,18 @@ class FilterSQLite(FilterBase):
 
     def db_output_strains(self):
         df = pd.read_sql_query(f"""
-                SELECT {self.sanitized_metadata_id_column} FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}
+                SELECT {self.sanitized_metadata_id_column}
+                FROM {OUTPUT_METADATA_TABLE_NAME}
+                ORDER BY {ROW_ORDER_COLUMN}
             """, self.get_db_context())
         df.to_csv(self.args.output_strains, index=None, header=False)
 
     def db_output_metadata(self):
-        df = pd.read_sql_query(f"SELECT * FROM {OUTPUT_METADATA_TABLE_NAME} ORDER BY {ROW_ORDER_COLUMN}", self.get_db_context())
+        df = pd.read_sql_query(f"""
+                SELECT *
+                FROM {OUTPUT_METADATA_TABLE_NAME}
+                ORDER BY {ROW_ORDER_COLUMN}
+            """, self.get_db_context())
         df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
         df.to_csv(self.args.output_metadata, sep='\t', index=None)
 
