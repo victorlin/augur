@@ -227,12 +227,30 @@ def get_sizes_per_group(df_groups:pd.DataFrame, size_col:str, max_size, max_atte
 
 
 def get_valid_group_by_cols(group_by_cols:List[str], metadata_cols: Set[str]):
+    """Perform validation on requested group-by columns and return the valid subset.
+
+    Parameters
+    ----------
+    group_by_cols
+        Column names requested for grouping.
+    metadata_cols
+        All column names in metadata.
+
+    Returns
+    -------
+    list(str):
+        Valid group-by columns.
+    """
+    # TODO: change behavior to address https://github.com/nextstrain/augur/issues/754
+    extracted_date_cols = {'year', 'month'}
     group_by_set = set(group_by_cols)
-    if 'date' not in metadata_cols and group_by_set <= {'year', 'month'}:
+    if group_by_set <= extracted_date_cols and 'date' not in metadata_cols:
+        # all requested group-by columns are extracted date columns, but the date column is missing
         raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done. Note that using 'year' or 'year month' requires a column called 'date'.")
-    if not group_by_set & (metadata_cols | {'year', 'month'}):
+    if not group_by_set & (metadata_cols | extracted_date_cols):
+        # none of the requested group-by columns are valid
         raise FilterException(f"The specified group-by categories ({group_by_cols}) were not found. No sequences-per-group sampling will be done.")
-    unknown_cols = list(group_by_set - metadata_cols - {'year', 'month'})
+    unknown_cols = list(group_by_set - metadata_cols - extracted_date_cols)
     if 'date' not in metadata_cols:
         if "year" in group_by_set:
             print_err("WARNING: A 'date' column could not be found to group-by year.")
@@ -241,9 +259,10 @@ def get_valid_group_by_cols(group_by_cols:List[str], metadata_cols: Set[str]):
             print_err("WARNING: A 'date' column could not be found to group-by month.")
             unknown_cols.append("month")
     if unknown_cols:
+        # warn and skip unknown columns
         print_err(f"WARNING: Some of the specified group-by categories couldn't be found: {', '.join(unknown_cols)}")
         print_err("Filtering by group may behave differently than expected!")
-        valid_group_by_cols = list(group_by_cols)
+        valid_group_by_cols = list(group_by_cols)  # copy to preserve input object
         for col in unknown_cols:
             valid_group_by_cols.remove(col)
         return valid_group_by_cols

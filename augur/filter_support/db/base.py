@@ -283,17 +283,17 @@ class FilterBase(abc.ABC):
         """Apply subsampling to update filter reason table."""
         self.create_priorities_table()
 
-        group_by_cols = self.args.group_by
+        valid_group_by_cols = []
         if self.args.group_by:
             metadata_cols = self.db_get_metadata_cols()
-            group_by_cols = get_valid_group_by_cols(group_by_cols, metadata_cols)
-        self.db_create_extended_filtered_metadata_table(group_by_cols)
+            valid_group_by_cols = get_valid_group_by_cols(self.args.group_by, metadata_cols)
+        self.db_create_extended_filtered_metadata_table(valid_group_by_cols)
 
         if self.args.subsample_max_sequences:
             if self.args.group_by:
-                counts_per_group = self.db_get_counts_per_group(group_by_cols)
+                counts_per_group = self.db_get_counts_per_group(valid_group_by_cols)
             else:
-                group_by_cols = [DUMMY_COL]
+                valid_group_by_cols = [DUMMY_COL]
                 counts_per_group = [self.db_get_filtered_strains_count()]
 
             try:
@@ -312,8 +312,8 @@ class FilterBase(abc.ABC):
         else:
             sequences_per_group = self.args.sequences_per_group
 
-        self.db_create_group_sizes_table(group_by_cols, sequences_per_group)
-        self.db_update_filter_reason_table_with_subsampling(group_by_cols)
+        self.db_create_group_sizes_table(valid_group_by_cols, sequences_per_group)
+        self.db_update_filter_reason_table_with_subsampling(valid_group_by_cols)
 
     @abc.abstractmethod
     def db_get_counts_per_group(self, group_by_cols:List[str]) -> List[int]: pass
