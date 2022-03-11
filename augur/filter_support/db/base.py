@@ -100,6 +100,9 @@ class FilterBase(abc.ABC):
     def db_load_metadata(self): pass
 
     @abc.abstractmethod
+    def db_load_sequences(self): pass
+
+    @abc.abstractmethod
     def db_load_sequence_index(self, path:str): pass
 
     def add_attributes(self):
@@ -279,6 +282,9 @@ class FilterBase(abc.ABC):
     @abc.abstractmethod
     def db_create_output_table(self, input_table:str): pass
 
+    @abc.abstractmethod
+    def db_create_sequence_output_table(self, input_table:str): pass
+
     def subsample(self):
         """Apply subsampling to update filter reason table."""
         self.create_priorities_table()
@@ -349,7 +355,10 @@ class FilterBase(abc.ABC):
     def write_outputs(self):
         """Write various outputs."""
         if self.args.output:
-            self.read_and_output_sequences()
+            self.db_load_sequences()
+            self.db_create_sequence_output_table()
+            self.db_output_sequences()
+            # self.read_and_output_sequences()
         if self.args.output_strains:
             self.db_output_strains()
         if self.args.output_metadata:
@@ -407,6 +416,9 @@ class FilterBase(abc.ABC):
 
     @abc.abstractmethod
     def db_output_metadata(self): pass
+
+    @abc.abstractmethod
+    def db_output_sequences(self): pass
 
     @abc.abstractmethod
     def db_output_log(self): pass

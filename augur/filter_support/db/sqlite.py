@@ -4,9 +4,11 @@ import numpy as np
 import pandas as pd
 import sqlite3
 from tempfile import NamedTemporaryFile
+
 from augur.filter_support.exceptions import FilterException
 
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
+from augur.io_support.db.sqlite_sequences import SEQUENCE_ID_COLUMN, load_fasta, write_fasta
 from augur.utils import read_strains
 from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
 from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max, get_date_errors
@@ -16,6 +18,7 @@ from augur.filter_support.output import filter_kwargs_to_str
 # internal database globals
 # table names
 METADATA_TABLE_NAME = 'metadata'
+SEQUENCES_TABLE_NAME = 'sequences'
 SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
 PRIORITIES_TABLE_NAME = 'priorities'
 DATE_TABLE_NAME = 'metadata_date_expanded'
@@ -23,6 +26,7 @@ METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
 EXTENDED_FILTERED_TABLE_NAME = 'metadata_filtered_extended'
 GROUP_SIZES_TABLE_NAME = 'group_sizes'
 OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
+OUTPUT_SEQUENCES_TABLE_NAME = 'sequences_output'
 # column names
 DATE_YEAR_COL = 'year'
 DATE_MONTH_COL = 'month'
@@ -78,6 +82,18 @@ class FilterSQLite(FilterBase):
         """
         load_tsv(self.args.metadata, self.get_db_context(), METADATA_TABLE_NAME)
         self.db_create_strain_index(METADATA_TABLE_NAME)
+
+    def db_load_sequences(self):
+        """Loads a sequences file into the database.
+
+        Retrieves the filename from `self.args`.
+        """
+        load_fasta(self.args.sequences, self.get_db_context(), SEQUENCES_TABLE_NAME)
+        with self.get_db_context() as con:
+            con.execute(f"""
+                CREATE UNIQUE INDEX sequence_id_index_test
+                ON {SEQUENCES_TABLE_NAME} ({SEQUENCE_ID_COLUMN})
+            """)
 
     def db_load_sequence_index(self, path:str):
         """Loads a sequence index file into the database.
@@ -601,6 +617,16 @@ class FilterSQLite(FilterBase):
                 WHERE NOT f.{EXCLUDE_COL} OR f.{INCLUDE_COL}
             """)
 
+    def db_create_sequence_output_table(self):
+        """Creates a final intermediate table to be used for output.
+        """
+        with self.get_db_context() as con:
+            con.execute(f"""CREATE TABLE {OUTPUT_SEQUENCES_TABLE_NAME} AS
+                SELECT s.* FROM {SEQUENCES_TABLE_NAME} s
+                JOIN {OUTPUT_METADATA_TABLE_NAME} m
+                    ON (s.{SEQUENCE_ID_COLUMN} = m.{self.sanitized_metadata_id_column})
+            """)
+
     def db_get_counts_per_group(self, group_by_cols:List[str]) -> List[int]:
         """
         Returns
@@ -759,6 +785,9 @@ class FilterSQLite(FilterBase):
                 WHERE {FILTER_REASON_COL} IS NOT NULL
             """, self.get_db_context())
         df.to_csv(self.args.output_log, sep='\t', index=None)
+
+    def db_output_sequences(self):
+        write_fasta(self.args.output, self.get_db_context(), OUTPUT_SEQUENCES_TABLE_NAME)
 
     def db_get_metadata_strains(self) -> Set[str]:
         with self.get_db_context() as con:
