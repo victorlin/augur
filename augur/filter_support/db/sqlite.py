@@ -16,13 +16,13 @@ from augur.filter_support.output import filter_kwargs_to_str
 # internal database globals
 # table names
 METADATA_TABLE_NAME = 'metadata'
-SEQUENCE_INDEX_TABLE_NAME = 'sequence_index'
-PRIORITIES_TABLE_NAME = 'priorities'
-DATE_TABLE_NAME = 'metadata_date_expanded'
-METADATA_FILTER_REASON_TABLE_NAME = 'metadata_filtered_reason'
-EXTENDED_FILTERED_TABLE_NAME = 'metadata_filtered_extended'
-GROUP_SIZES_TABLE_NAME = 'group_sizes'
-OUTPUT_METADATA_TABLE_NAME = 'metadata_output'
+SEQUENCE_INDEX_TABLE_NAME = '_augur_filter_sequence_index'
+PRIORITIES_TABLE_NAME = '_augur_filter_priorities'
+DATE_TABLE_NAME = '_augur_filter_metadata_date_expanded'
+METADATA_FILTER_REASON_TABLE_NAME = '_augur_filter_metadata_filtered_reason'
+EXTENDED_FILTERED_TABLE_NAME = '_augur_filter_metadata_filtered_extended'
+GROUP_SIZES_TABLE_NAME = '_augur_filter_group_sizes'
+OUTPUT_METADATA_TABLE_NAME = '_augur_filter_metadata_output'
 # column names
 DATE_YEAR_COL = 'year'
 DATE_MONTH_COL = 'month'
