@@ -43,11 +43,12 @@ def load_json_schema(path):
     except json.JSONDecodeError as err:
         raise ValidateError("Schema {} is not a valid JSON file. Error: {}".format(path, err))
     # check loaded schema is itself valid -- see http://python-jsonschema.readthedocs.io/en/latest/errors/
+    Validator = jsonschema.validators.validator_for(schema)
     try:
-        jsonschema.Draft6Validator.check_schema(schema)
+        Validator.check_schema(schema)
     except jsonschema.exceptions.SchemaError as err:
-        raise ValidateError("Schema {} is not a valid JSON file. Error: {}".format(path, err))
-    return jsonschema.Draft6Validator(schema)
+        raise ValidateError(f"Schema {path} is not a valid JSON Schema ({Validator.META_SCHEMA['$schema']}). Error: {err}")
+    return Validator(schema)
 
 def load_json(path):
     with open(path, 'rb') as fh:
@@ -118,6 +119,13 @@ def export_v1(meta_json, tree_json, **kwargs):
         print("Validation of {!r} and {!r} succeeded, but there were warnings you may want to resolve.".format(meta_json, tree_json))
 
 
+def measurements(measurements_json, **kwargs):
+    schema = load_json_schema("schema-measurements.json")
+    measurements = load_json(measurements_json)
+    validate_json(measurements, schema, measurements_json)
+    return measurements
+
+
 def register_arguments(parser):
     subparsers = parser.add_subparsers(dest="subcommand", help="Which file(s) do you want to validate?")
 
@@ -131,6 +139,8 @@ def register_arguments(parser):
     subparsers.add_parser("auspice-config-v2", help="validate auspice config intended for `augur export v2`") \
         .add_argument('config_json', metavar='JSON', help="auspice config JSON")
 
+    subparsers.add_parser("measurements", help="validate measurements JSON intended for auspice measurements panel") \
+        .add_argument("measurements_json", metavar="JSON", help="exported measurements JSON")
 
 def run(args):
     try:
