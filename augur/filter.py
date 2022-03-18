@@ -916,7 +916,7 @@ def get_groups_for_subsampling(strains, metadata, group_by=None):
             metadata = pd.concat([metadata, df_dates], axis=1)
         else:
             # replace date with year/month/day as nullable ints
-            date_cols = ['year', 'month', 'day']
+            date_cols = ['_year', '_month', '_day']
             df_dates = metadata['date'].str.split('-', n=2, expand=True)
             df_dates = df_dates.set_axis(date_cols[:len(df_dates.columns)], axis=1)
             missing_date_cols = set(date_cols) - set(df_dates.columns)
@@ -927,8 +927,8 @@ def get_groups_for_subsampling(strains, metadata, group_by=None):
             metadata = pd.concat([metadata.drop('date', axis=1), df_dates], axis=1)
             if 'year' in group_by_set:
                 # skip ambiguous years
-                df_skip = metadata[metadata['year'].isnull()]
-                metadata.dropna(subset=['year'], inplace=True)
+                df_skip = metadata[metadata[date_cols[0]].isnull()]
+                metadata.dropna(subset=[date_cols[0]], inplace=True)
                 for strain in df_skip.index:
                     skipped_strains.append({
                         "strain": strain,
@@ -937,16 +937,16 @@ def get_groups_for_subsampling(strains, metadata, group_by=None):
                     })
             if 'month' in group_by_set:
                 # skip ambiguous months
-                df_skip = metadata[metadata['month'].isnull()]
-                metadata.dropna(subset=['month'], inplace=True)
+                df_skip = metadata[metadata[date_cols[1]].isnull()]
+                metadata.dropna(subset=[date_cols[1]], inplace=True)
                 for strain in df_skip.index:
                     skipped_strains.append({
                         "strain": strain,
                         "filter": "skip_group_by_with_ambiguous_month",
                         "kwargs": "",
                     })
-                # month = (year, month)
-                metadata['month'] = list(zip(metadata['year'], metadata['month']))
+                # _month = (_year, _month)
+                metadata[date_cols[1]] = list(zip(metadata[date_cols[0]], metadata[date_cols[1]]))
             # TODO: support group by day
 
     unknown_groups = group_by_set - set(metadata.columns)
