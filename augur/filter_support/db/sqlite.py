@@ -262,15 +262,14 @@ class FilterSQLite(FilterBase):
             str: expression for SQL query `WHERE` clause
             dict: named parameters used in the expression, if any
         """
-        column, op, value = self.parse_filter_query(exclude_where)
         expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {METADATA_TABLE_NAME}
-                WHERE {METADATA_TABLE_NAME}.{sanitize_identifier(column)} {op} :value
+                WHERE ({exclude_where})
             )
         """
-        parameters = {'value': value}
+        parameters = {'exclude_where': exclude_where}
         return expression, parameters
 
     def filter_by_query(self, query) -> FilterCallableReturn:

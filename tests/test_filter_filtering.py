@@ -211,7 +211,7 @@ class TestFiltering:
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
         args = get_valid_args(data, tmpdir)
-        args.exclude_where = ["location=colorado"]
+        args.exclude_where = ["location='colorado'"]
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
             SELECT strain
@@ -227,10 +227,10 @@ class TestFiltering:
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
         args = get_valid_args(data, tmpdir)
-        args.exclude_where = ["invalid=colorado"]
+        args.exclude_where = ["invalid='colorado'"]
         with pytest.raises(FilterException) as e_info:
             get_filter_obj_run(args)
-        assert str(e_info.value) == 'no such column: metadata.invalid'
+        assert str(e_info.value) == 'no such column: invalid'
 
     def test_force_include_where_missing_column_error(self, tmpdir):
         """Try filtering by an expression matching on an invalid column."""
@@ -352,11 +352,11 @@ class TestFiltering:
                 ("SEQ_2","colorado","bad"),
                 ("SEQ_3","nevada","good")]
         args = get_valid_args(data, tmpdir)
-        args.exclude_where = ["location!=colorado"]
+        args.exclude_where = ["location!='colorado'"]
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
             SELECT strain, {FILTER_REASON_KWARGS_COL}
             FROM {METADATA_FILTER_REASON_TABLE_NAME}
             WHERE {FILTER_REASON_COL} = 'filter_by_exclude_where'
         """)
-        assert results == [('SEQ_3', '[["exclude_where", "location!=colorado"]]')]
+        assert results == [('SEQ_3', '[["exclude_where", "location!=\'colorado\'"]]')]
