@@ -6,6 +6,10 @@ from augur.filter_support.db.sqlite import (
     INCLUDE_COL,
     METADATA_FILTER_REASON_TABLE_NAME,
 )
+from augur.filter_support.date_parsing import (
+    any_to_numeric_type_min,
+    any_to_numeric_type_max,
+)
 from augur.filter_support.exceptions import FilterException
 
 from test_filter import (
@@ -91,7 +95,7 @@ class TestFiltering:
                 ("SEQ_3","2020-02-25"),
                 ("SEQ_4","?")]
         args = get_valid_args(data, tmpdir)
-        args.min_date = '2020-02-26'
+        args.min_date = any_to_numeric_type_min('2020-02-26')
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
             SELECT strain
@@ -108,7 +112,7 @@ class TestFiltering:
                 ("SEQ_3","2020-03-02"),
                 ("SEQ_4","?")]
         args = get_valid_args(data, tmpdir)
-        args.max_date = '2020-03-01'
+        args.max_date = any_to_numeric_type_max('2020-03-01')
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
             SELECT strain
