@@ -9,7 +9,7 @@ from augur.filter_support.exceptions import FilterException
 from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
 from augur.utils import read_strains
 from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
-from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, get_date_min, get_date_max, get_date_errors
+from augur.filter_support.date_parsing import ASSERT_ONLY_LESS_SIGNIFICANT_AMBIGUITY_ERROR, InvalidDateFormat, get_year, get_month, get_day, try_get_numeric_date_min, try_get_numeric_date_max, get_date_errors
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
 
@@ -27,8 +27,8 @@ OUTPUT_METADATA_TABLE_NAME = '_augur_filter_metadata_output'
 DATE_YEAR_COL = 'year'
 DATE_MONTH_COL = 'month'
 DATE_DAY_COL = 'day'
-DATE_MIN_COL = 'date_min'
-DATE_MAX_COL = 'date_max'
+NUMERIC_DATE_MIN_COL = 'date_min'
+NUMERIC_DATE_MAX_COL = 'date_max'
 DATE_ERRORS_COL = 'date_errors'
 FILTER_REASON_COL = 'filter'
 FILTER_REASON_KWARGS_COL = 'kwargs'
@@ -109,8 +109,8 @@ class FilterSQLite(FilterBase):
         - `DATE_YEAR_COL`: Extracted year (int or `NULL`)
         - `DATE_MONTH_COL`: Extracted month (int or `NULL`)
         - `DATE_DAY_COL`: Extracted day (int or `NULL`)
-        - `DATE_MIN_COL`: Exact date, minimum if ambiguous (`float` numeric date)
-        - `DATE_MAX_COL`: Exact date, maximum if ambiguous (`float` numeric date)
+        - `DATE_MIN_COL`: Exact date, minimum if ambiguous
+        - `DATE_MAX_COL`: Exact date, maximum if ambiguous
         """
         with self.get_db_context() as con:
             if self.has_date_col:
@@ -118,8 +118,8 @@ class FilterSQLite(FilterBase):
                 con.create_function(get_year.__name__, 1, get_year)
                 con.create_function(get_month.__name__, 1, get_month)
                 con.create_function(get_day.__name__, 1, get_day)
-                con.create_function(get_date_min.__name__, 1, get_date_min)
-                con.create_function(get_date_max.__name__, 1, get_date_max)
+                con.create_function(try_get_numeric_date_min.__name__, 1, try_get_numeric_date_min)
+                con.create_function(try_get_numeric_date_max.__name__, 1, try_get_numeric_date_max)
                 con.create_function(get_date_errors.__name__, 1, get_date_errors)
                 con.execute(f"""CREATE TABLE {DATE_TABLE_NAME} AS
                     SELECT
@@ -128,8 +128,8 @@ class FilterSQLite(FilterBase):
                         {get_year.__name__}({self.sanitized_date_column}) AS {DATE_YEAR_COL},
                         {get_month.__name__}({self.sanitized_date_column}) AS {DATE_MONTH_COL},
                         {get_day.__name__}({self.sanitized_date_column}) AS {DATE_DAY_COL},
-                        {get_date_min.__name__}({self.sanitized_date_column}) AS {DATE_MIN_COL},
-                        {get_date_max.__name__}({self.sanitized_date_column}) AS {DATE_MAX_COL},
+                        {try_get_numeric_date_min.__name__}({self.sanitized_date_column}) AS {NUMERIC_DATE_MIN_COL},
+                        {try_get_numeric_date_max.__name__}({self.sanitized_date_column}) AS {NUMERIC_DATE_MAX_COL},
                         {get_date_errors.__name__}({self.sanitized_date_column}) AS {DATE_ERRORS_COL}
                     FROM {METADATA_TABLE_NAME}
                 """)
@@ -142,8 +142,8 @@ class FilterSQLite(FilterBase):
                         '' AS {DATE_YEAR_COL},
                         '' AS {DATE_MONTH_COL},
                         '' AS {DATE_DAY_COL},
-                        '' AS {DATE_MIN_COL},
-                        '' AS {DATE_MAX_COL}
+                        '' AS {NUMERIC_DATE_MIN_COL},
+                        '' AS {NUMERIC_DATE_MAX_COL}
                     FROM {METADATA_TABLE_NAME}
                 """)
         self.db_create_strain_index(DATE_TABLE_NAME)
@@ -345,7 +345,7 @@ class FilterSQLite(FilterBase):
         parameters = {}
         return expression, parameters
 
-    def filter_by_min_date(self, min_date) -> FilterCallableReturn:
+    def filter_by_min_date(self, min_date:float) -> FilterCallableReturn:
         """Filter metadata by minimum date.
 
         Parameters
@@ -359,18 +359,17 @@ class FilterSQLite(FilterBase):
             str: expression for SQL query `WHERE` clause
             dict: named parameters used in the expression, if any
         """
-        min_date = get_date_min(min_date)
         expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {DATE_TABLE_NAME}
-                WHERE {DATE_MAX_COL} < :min_date OR {DATE_MIN_COL} IS NULL
+                WHERE {NUMERIC_DATE_MAX_COL} < :min_date OR {NUMERIC_DATE_MIN_COL} IS NULL
             )
         """
         parameters = {'min_date': min_date}
         return expression, parameters
 
-    def filter_by_max_date(self, max_date) -> FilterCallableReturn:
+    def filter_by_max_date(self, max_date:float) -> FilterCallableReturn:
         """Filter metadata by maximum date.
 
         Parameters
@@ -384,12 +383,11 @@ class FilterSQLite(FilterBase):
             str: expression for SQL query `WHERE` clause
             dict: named parameters used in the expression, if any
         """
-        max_date = get_date_max(max_date)
         expression = f"""
             {self.sanitized_metadata_id_column} IN (
                 SELECT {self.sanitized_metadata_id_column}
                 FROM {DATE_TABLE_NAME}
-                WHERE {DATE_MIN_COL} > :max_date OR {DATE_MAX_COL} IS NULL
+                WHERE {NUMERIC_DATE_MIN_COL} > :max_date OR {NUMERIC_DATE_MAX_COL} IS NULL
             )
         """
         parameters = {'max_date': max_date}

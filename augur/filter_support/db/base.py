@@ -245,10 +245,10 @@ class FilterBase(abc.ABC):
     def filter_by_ambiguous_date(self, ambiguity="any") -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_min_date(self, min_date) -> FilterCallableReturn: pass
+    def filter_by_min_date(self, min_date:float) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
-    def filter_by_max_date(self, max_date) -> FilterCallableReturn: pass
+    def filter_by_max_date(self, max_date:float) -> FilterCallableReturn: pass
 
     @abc.abstractmethod
     def filter_by_sequence_index(self) -> FilterCallableReturn: pass
