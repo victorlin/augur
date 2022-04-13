@@ -5,8 +5,8 @@ from textwrap import dedent
 from augur.filter_support.date_parsing import InvalidDateFormat
 
 from augur.filter_support.db.sqlite import (
-    DATE_MIN_COL,
-    DATE_MAX_COL,
+    NUMERIC_DATE_MIN_COL,
+    NUMERIC_DATE_MAX_COL,
     DATE_TABLE_NAME,
 )
 
@@ -21,7 +21,7 @@ def get_parsed_date_min_max(date:str, tmpdir):
     args = get_valid_args(data, tmpdir)
     filter_obj = get_filter_obj_run(args)
     results = query_fetchall(filter_obj, f"""
-        SELECT {DATE_MIN_COL}, {DATE_MAX_COL} FROM {DATE_TABLE_NAME}
+        SELECT {NUMERIC_DATE_MIN_COL}, {NUMERIC_DATE_MAX_COL} FROM {DATE_TABLE_NAME}
     """)
     return results[0]
 
