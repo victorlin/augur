@@ -1,4 +1,5 @@
 import pytest
+from augur.filter_support.date_parsing import any_to_numeric_type_min
 from augur.filter_support.exceptions import FilterException
 from augur.filter_support.db.sqlite import (
     EXCLUDE_COL,
@@ -61,7 +62,7 @@ class TestSubsampling:
         ]
         args = get_valid_args(data, tmpdir)
         args.subsample_seed = 1234
-        args.min_date = '2019'
+        args.min_date = any_to_numeric_type_min('2019')
         args.subsample_max_sequences = 6
         filter_obj = get_filter_obj_run(args)
         results = query_fetchall(filter_obj, f"""
