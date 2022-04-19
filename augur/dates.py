@@ -1,5 +1,8 @@
 import argparse
+import datetime
 import re
+import isodate
+import treetime
 from datetime import date
 from textwrap import dedent
 from functools import lru_cache
@@ -39,8 +42,7 @@ RE_AMBIGUOUS_ISO_8601_DATE_YEAR_MONTH = re.compile(r'^[\dX]{4}-[\dX]{2}$')
 # e.g. 0, 1, 123, 12345
 RE_YEAR_ONLY = re.compile(r'^[\dX]+$')
 
-# TODO: relative dates (ISO 8601 durations)
-# no regex for ISO 8601 duration (it is complex), just try evaluating last and catch exceptions.
+# also support relative dates (ISO 8601 durations) - see any_to_numeric()
 
 
 CACHE_SIZE = 8192
@@ -117,14 +119,31 @@ def any_to_numeric(date_in:Any, ambiguity_resolver:str):
     For ambiguous ISO 8601 dates, resolve to either minimum or maximum possible value.
     """
     date_in = str(date_in)
+
+    # Absolute date in numeric format.
     if RE_NUMERIC_DATE.match(date_in):
         return float(date_in)
+
+    # Absolute date in potentially incomplete/ambiguous ISO 8601 date format.
     if (RE_ISO_8601_DATE.match(date_in) or
         RE_AMBIGUOUS_ISO_8601_DATE.match(date_in) or
         RE_AMBIGUOUS_ISO_8601_DATE_YEAR_MONTH.match(date_in) or
         RE_YEAR_ONLY.match(date_in)
         ):
         return iso_to_numeric(date_in, ambiguity_resolver)
+
+    # Relative date in ISO 8601 duration format.
+    # No regex for this (it is complex), just try evaluating last and
+    # let any expected errors pass to raise the general-purpose InvalidDateFormat.
+    try:
+        # make a copy of date_in for this block
+        duration_str = str(date_in)
+        if not duration_str.startswith('P'):
+            duration_str = 'P'+duration_str
+        return treetime.utils.numeric_date(datetime.date.today() - isodate.parse_duration(duration_str))
+    except (ValueError, isodate.ISO8601Error):
+        pass
+
     raise InvalidDateFormat(f"""Unable to determine date from '{date_in}'. Ensure it is in one of the supported formats:\n{SUPPORTED_DATE_HELP_TEXT}""")
 
 
