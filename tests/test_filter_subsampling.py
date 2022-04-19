@@ -1,5 +1,5 @@
 import pytest
-from augur.filter_support.date_parsing import any_to_numeric_type_min
+from augur.dates import any_to_numeric_type_min
 from augur.filter_support.exceptions import FilterException
 from augur.filter_support.db.sqlite import (
     EXCLUDE_COL,

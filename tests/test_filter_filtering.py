@@ -1,14 +1,14 @@
 import pytest
+from augur.dates import (
+    any_to_numeric_type_min,
+    any_to_numeric_type_max,
+)
 from augur.filter_support.db.sqlite import (
     EXCLUDE_COL,
     FILTER_REASON_COL,
     FILTER_REASON_KWARGS_COL,
     INCLUDE_COL,
     METADATA_FILTER_REASON_TABLE_NAME,
-)
-from augur.filter_support.date_parsing import (
-    any_to_numeric_type_min,
-    any_to_numeric_type_max,
 )
 from augur.filter_support.exceptions import FilterException
 

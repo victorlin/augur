@@ -2,8 +2,8 @@ import pytest
 from treetime.utils import numeric_date
 from datetime import date
 from textwrap import dedent
-from augur.filter_support.date_parsing import InvalidDateFormat
 
+from augur.dates import InvalidDateFormat
 from augur.filter_support.db.sqlite import (
     NUMERIC_DATE_MIN_COL,
     NUMERIC_DATE_MAX_COL,
