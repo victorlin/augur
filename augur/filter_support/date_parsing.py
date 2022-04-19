@@ -1,8 +1,16 @@
 import argparse
 import re
 from datetime import date
+from textwrap import dedent
 from functools import lru_cache
 from typing import Any, List
+
+
+SUPPORTED_DATE_HELP_TEXT = dedent("""\
+    1. an Augur-style numeric date with the year as the integer part (e.g. 2020.42) or
+    2. a date in ISO 8601 date format (i.e. YYYY-MM-DD) (e.g. '2020-06-04') or
+    3. a backwards-looking relative date in ISO 8601 duration format with optional P prefix (e.g. '1W', 'P1W')
+""")
 
 
 class InvalidDateFormat(ValueError):
@@ -117,7 +125,8 @@ def any_to_numeric(date_in:Any, ambiguity_resolver:str):
         RE_YEAR_ONLY.match(date_in)
         ):
         return iso_to_numeric(date_in, ambiguity_resolver)
-    raise InvalidDateFormat("TODO")
+    raise InvalidDateFormat(f"""Unable to determine date from '{date_in}'. Ensure it is in one of the supported formats:\n{SUPPORTED_DATE_HELP_TEXT}""")
+
 
 
 def any_to_numeric_type_min(date_in:Any):
