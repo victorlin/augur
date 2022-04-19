@@ -4,7 +4,7 @@ Export JSON files suitable for visualization with auspice.
 from pathlib import Path
 import os, sys
 import time
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
 import warnings
 import numbers
 import re
@@ -44,6 +44,67 @@ def configure_warnings():
 
 class InvalidOption(Exception):
     pass
+
+class CustomOrderedDict(OrderedDict):
+    """
+    Similar to OrderedDict but will convert dictionaries (and dictionaries of dictionaries)
+    into (nested) CustomOrderedDicts.
+    Encountered lists of dicts will be converted to lists of CustomOrderedDict but we will not
+    recursively explore nested lists.
+    Tuples and other iterators are not explored.
+    """
+    def __init__(self, *args):
+        super().__init__(*args)
+        for key in self:
+            if isinstance(self[key], dict) and not isinstance(self[key], OrderedDict):
+                self[key] = CustomOrderedDict(self[key])
+            elif isinstance(self[key], list):
+                self[key] = [
+                    (CustomOrderedDict(el) if (isinstance(el, dict) and not isinstance(el, OrderedDict)) else el)
+                    for el in self[key]
+                ]
+    def set_order(self, *order):
+        """
+        changes the order of keys to match those specified in `order` as much
+        as possible. Missing keys are ignored. Extra keys will come after those
+        specified in `order`.
+        """
+        for key in reversed(order):
+            self.move_to_end_if_present(key, last=False)
+    def move_to_end_if_present(self, key, **kwargs):
+        try:
+            self.move_to_end(key, **kwargs)
+        except KeyError:
+            pass
+
+
+def orderKeys(data):
+    """
+    converts the data dict (where keys are inherently unordered) into an
+    OrderedDict where keys are nicely ordered for human eyes to scan the
+    data when written to JSON. The ordering (mostly) mirrors the schema.
+    """
+    od = CustomOrderedDict(data)
+    od.set_order("version", "meta", "tree")
+    if "meta" in od:
+        od["meta"].set_order("title", "updated", "build_url", "data_provenance", "maintainers")
+        for coloring in od['meta'].get('colorings', []):
+            coloring.set_order("key", "title", "type", "scale", "legend")
+    def order_nodes(node):
+        """recursive function to order nodes in a (sub)tree"""
+        node.set_order("name", "node_attrs", "branch_attrs")
+        # children often a _large_ object and it improves readability if this comes last in the node
+        node.move_to_end_if_present("children")
+        if "node_attrs" in node:
+            node["node_attrs"].set_order("div", "num_date")
+        for child in node.get("children", []):
+            order_nodes(child)
+    if isinstance(od.get("tree"), list):
+        for subtree in od['tree']:
+            order_nodes(subtree)
+    elif isinstance(od.get("tree"), dict):
+        order_nodes(od['tree'])
+    return od
 
 def convert_tree_to_json_structure(node, metadata, div=0):
     """
@@ -792,6 +853,7 @@ def register_arguments_v2(subparsers):
     )
     optional_settings.add_argument('--minify-json', action="store_true", help="export JSONs without indentation or line returns")
     optional_settings.add_argument('--include-root-sequence', action="store_true", help="Export an additional JSON containing the root sequence (reference sequence for vcf) used to identify mutations. The filename will follow the pattern of <OUTPUT>_root-sequence.json for a main auspice JSON of <OUTPUT>.json")
+    optional_settings.add_argument('--skip-validation', action="store_true", help="skip validation of input/output files. Use at your own risk!")
 
     return v2
 
@@ -903,12 +965,13 @@ def get_config(args):
     if not args.auspice_config:
         return {}
     config = read_config(args.auspice_config)
-    try:
-        print("Validating config file {} against the JSON schema".format(args.auspice_config))
-        validate_auspice_config_v2(args.auspice_config)
-    except ValidateError:
-        print("Validation of {} failed. Please check the formatting of this file & refer to the augur documentation for further help. ".format(args.auspice_config))
-        sys.exit(2)
+    if not args.skip_validation:
+        try:
+            print("Validating config file {} against the JSON schema".format(args.auspice_config))
+            validate_auspice_config_v2(args.auspice_config)
+        except ValidateError:
+            print("Validation of {} failed. Please check the formatting of this file & refer to the augur documentation for further help. ".format(args.auspice_config))
+            sys.exit(2)
     # Print a warning about the inclusion of "vaccine_choices" which are _unused_ by `export v2`
     # (They are in the schema as this allows v1-compat configs to be used)
     if config.get("vaccine_choices"):
@@ -972,9 +1035,13 @@ def run_v2(args):
     set_panels(data_json, config, args.panels)
     set_data_provenance(data_json, config)
 
+    # pass through any extensions block in the auspice config JSON without any changes / checking
+    if config.get("extensions"):
+        data_json["meta"]["extensions"] = config["extensions"]
+
     # Write outputs - the (unified) dataset JSON intended for auspice & perhaps the ref root-sequence JSON
     indent = {"indent": None} if args.minify_json else {}
-    write_json(data=data_json, file_name=args.output, include_version=False, **indent)
+    write_json(data=orderKeys(data_json), file_name=args.output, include_version=False, **indent)
 
     if args.include_root_sequence:
         if 'reference' in node_data:
@@ -989,7 +1056,8 @@ def run_v2(args):
             fatal("Root sequence output was requested, but the node data provided is missing a 'reference' key.")
 
     # validate outputs
-    validate_data_json(args.output)
+    if not args.skip_validation:
+        validate_data_json(args.output)
 
     if deprecationWarningsEmitted:
         print("\n------------------------")

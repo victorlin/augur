@@ -2,6 +2,8 @@ import argparse
 import shlex
 import sqlite3
 
+from freezegun import freeze_time
+
 import augur.filter
 from augur.filter_support.db.sqlite import FilterSQLite
 
