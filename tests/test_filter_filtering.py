@@ -121,6 +121,38 @@ class TestFiltering:
         """)
         assert results == [("SEQ_3",), ("SEQ_4",)]
 
+    def test_filter_incomplete_year(self, tmpdir):
+        """Test that 2020 is evaluated as 2020-XX-XX"""
+        data = [("strain","date"),
+                ("SEQ_1","2020.0"),
+                ("SEQ_2","2020"),
+                ("SEQ_3","2020-XX-XX")]
+        args = get_valid_args(data, tmpdir)
+        args.min_date = any_to_numeric_type_min('2020-02-01')
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT strain
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
+        """)
+        assert results == [("SEQ_1",)]
+
+    def test_filter_date_formats(self, tmpdir):
+        """Test that 2020.0, 2020, and 2020-XX-XX all pass --min-date 2019"""
+        data = [("strain","date"),
+                ("SEQ_1","2020.0"),
+                ("SEQ_2","2020"),
+                ("SEQ_3","2020-XX-XX")]
+        args = get_valid_args(data, tmpdir)
+        args.min_date = any_to_numeric_type_min('2019')
+        filter_obj = get_filter_obj_run(args)
+        results = query_fetchall(filter_obj, f"""
+            SELECT strain
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} = 'filter_by_min_date'
+        """)
+        assert results == []
+
     def test_filter_by_ambiguous_date_year(self, tmpdir):
         """Filter out dates with ambiguous year."""
         data = [("strain","date"),
