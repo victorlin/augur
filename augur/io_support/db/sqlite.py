@@ -2,48 +2,37 @@ import os
 import pandas as pd
 import sqlite3
 
-from . import get_delimiter, iter_indexed_rows
+from . import TabularFileLoaderBase
 
 ROW_ORDER_COLUMN = '_sqlite_id' # for preserving row order, otherwise unused
 
 
-def load_tsv(file:str, connection:sqlite3.Connection, table_name:str, header=True, names=[]):
-    """Loads tabular data from a file."""
-    delimiter = get_delimiter(file)
-    read_csv_kwargs = {
-        "sep": delimiter,
-        "engine": "c",
-        "skipinitialspace": True,
-    }
-    if not header and not names:
-        raise ValueError()
-    if not header and names:
-        read_csv_kwargs['header'] = None
-        read_csv_kwargs['names'] = names
-    # infer data types from first 100 rows using pandas
-    df = pd.read_csv(
-        file,
-        nrows=100,
-        **read_csv_kwargs,
-    )
-    df.insert(0, ROW_ORDER_COLUMN, 1)
+class TabularFileLoaderSQLite(TabularFileLoaderBase):
+    def __init__(self, file:str, connection:sqlite3.Connection, table_name:str, header=True, names=[]):
+        super().__init__(file, header, names)
+        self.connection = connection
+        self.table_name = table_name
 
-    with connection:
-        create_table_statement = pd.io.sql.get_schema(df, table_name, con=connection)
-        connection.execute(create_table_statement)
+    def load(self):
+        # insert ROW_ORDER_COLUMN with dummy value of 1
+        self.df_head.insert(0, ROW_ORDER_COLUMN, value=1)
+        self.columns = self.df_head.columns
+        # create table with schema defined by self.df_head, including additional ROW_ORDER_COLUMN
+        with self.connection:
+            create_table_statement = pd.io.sql.get_schema(self.df_head, self.table_name, con=self.connection)
+            self.connection.execute(create_table_statement)
 
-    # don't use pandas to_sql since it keeps data in memory
-    # and using parallelized chunks does not work well with SQLite limited concurrency
-    insert_statement = f"""
-        INSERT INTO {table_name}
-        VALUES ({','.join(['?' for _ in df.columns])})
-    """
-    rows = iter_indexed_rows(file, header)
-    try:
-        with connection:
-            connection.executemany(insert_statement, rows)
-    except sqlite3.ProgrammingError as e:
-        raise ValueError(f'Failed to load {file}.') from e
+        # insert rows
+        insert_statement = f"""
+            INSERT INTO {self.table_name}
+            VALUES ({','.join(['?' for _ in self.columns])})
+        """
+        rows = self._iter_indexed_rows() # this relies on ROW_ORDER_COLUMN as first column
+        try:
+            with self.connection:
+                self.connection.executemany(insert_statement, rows)
+        except sqlite3.ProgrammingError as e:
+            raise ValueError(f'Failed to load {self.file}.') from e
 
 
 def cleanup(database:str):

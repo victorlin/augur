@@ -16,7 +16,7 @@ from augur.dates import (
     try_get_numeric_date_max,
     get_date_errors,
 )
-from augur.io_support.db.sqlite import load_tsv, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
+from augur.io_support.db.sqlite import TabularFileLoaderSQLite, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
 from augur.utils import read_strains
 from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
 from augur.filter_support.subsample import get_sizes_per_group
@@ -85,7 +85,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(self.args.metadata, self.get_db_context(), METADATA_TABLE_NAME)
+        TabularFileLoaderSQLite(self.args.metadata, self.get_db_context(), METADATA_TABLE_NAME).load()
         self.db_create_strain_index(METADATA_TABLE_NAME)
 
     def db_load_sequence_index(self, path:str):
@@ -93,7 +93,7 @@ class FilterSQLite(FilterBase):
 
         Retrieves the filename from `self.args`.
         """
-        load_tsv(path, self.get_db_context(), SEQUENCE_INDEX_TABLE_NAME)
+        TabularFileLoaderSQLite(path, self.get_db_context(), SEQUENCE_INDEX_TABLE_NAME).load()
         self.db_create_strain_index(SEQUENCE_INDEX_TABLE_NAME)
 
     def db_get_sequence_index_strains(self):
@@ -671,8 +671,8 @@ class FilterSQLite(FilterBase):
 
     def db_load_priorities_table(self):
         try:
-            load_tsv(self.args.priority, self.get_db_context(), PRIORITIES_TABLE_NAME,
-                    header=False, names=[self.metadata_id_column, PRIORITY_COL])
+            TabularFileLoaderSQLite(self.args.priority, self.get_db_context(), PRIORITIES_TABLE_NAME,
+                    header=False, names=[self.metadata_id_column, PRIORITY_COL]).load()
         except ValueError as e:
             raise ValueError(f"Failed to parse priority file {self.args.priority}.") from e
         self.db_create_strain_index(PRIORITIES_TABLE_NAME)
