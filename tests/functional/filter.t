@@ -422,3 +422,14 @@ Filter out a sequence with invalid nucleotides.
   >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
   $ wc -l "$TMP/filtered_metadata.tsv"
   \s*11 .* (re)
+
+Try a comma-delimited file.
+
+  $ ${AUGUR} filter \
+  >  --metadata filter/metadata.csv \
+  >  --exclude-where "region=South America" "region=North America" "region=Southeast Asia" \
+  >  --include-where "country=Ecuador" \
+  >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
+  $ wc -l "$TMP/filtered_strains.txt"
+  \s*2 .* (re)
+  $ rm -f "$TMP/filtered_strains.txt"
