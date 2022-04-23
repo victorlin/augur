@@ -1,30 +1,17 @@
-import csv
 import os
 import pandas as pd
 import sqlite3
-from typing import Dict, List
 
-from augur.utils import myopen
+from . import get_delimiter, iter_indexed_rows
 
 ROW_ORDER_COLUMN = '_sqlite_id' # for preserving row order, otherwise unused
 
 
-def get_metadata_id_column(metadata_file:str, id_columns:List[str]):
-    """Returns the first column in `id_columns` that is present in the metadata.
-
-    Raises a `ValueError` when none of `id_columns` are found.
-    """
-    metadata_columns = _get_column_names(metadata_file)
-    for col in id_columns:
-        if col in metadata_columns:
-            return col
-    raise ValueError(f"None of the possible id columns ({id_columns!r}) were found in the metadata's columns {tuple(metadata_columns)!r}")
-
-
-def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header=True, names=[]):
+def load_tsv(file:str, connection:sqlite3.Connection, table_name:str, header=True, names=[]):
     """Loads tabular data from a file."""
+    delimiter = get_delimiter(file)
     read_csv_kwargs = {
-        "sep": '\t',
+        "sep": delimiter,
         "engine": "c",
         "skipinitialspace": True,
     }
@@ -35,7 +22,7 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
         read_csv_kwargs['names'] = names
     # infer data types from first 100 rows using pandas
     df = pd.read_csv(
-        tsv_file,
+        file,
         nrows=100,
         **read_csv_kwargs,
     )
@@ -51,12 +38,12 @@ def load_tsv(tsv_file:str, connection:sqlite3.Connection, table_name:str, header
         INSERT INTO {table_name}
         VALUES ({','.join(['?' for _ in df.columns])})
     """
-    rows = _iter_indexed_rows(tsv_file, header)
+    rows = iter_indexed_rows(file, header)
     try:
         with connection:
             connection.executemany(insert_statement, rows)
     except sqlite3.ProgrammingError as e:
-        raise ValueError(f'Failed to load {tsv_file}.') from e
+        raise ValueError(f'Failed to load {file}.') from e
 
 
 def cleanup(database:str):
@@ -65,34 +52,6 @@ def cleanup(database:str):
         os.remove(database)
     except FileNotFoundError:
         pass
-
-
-def _get_column_names(tsv_file:str):
-    """Get column names using pandas."""
-    read_csv_kwargs = {
-        "sep": '\t',
-        "engine": "c",
-        "skipinitialspace": True,
-        "dtype": 'string',
-    }
-    row = pd.read_csv(
-        tsv_file,
-        nrows=1,
-        **read_csv_kwargs,
-    )
-    return list(row.columns)
-
-
-def _iter_indexed_rows(tsv_file:str, skip_header=True):
-    """Yield rows from a tabular file with an additional first column for row number."""
-    with myopen(tsv_file) as f:
-        reader = csv.reader(f, delimiter='\t')  # TODO: detect delimiter
-        if skip_header:
-            next(reader)
-        for i, row in enumerate(reader):
-            if not row:
-                continue
-            yield [i] + row
 
 
 def sanitize_identifier(identifier:str):
