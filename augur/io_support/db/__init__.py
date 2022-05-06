@@ -40,42 +40,50 @@ def get_delimiter(file:str, delimiters:List[str]=[',', '\t']):
         try:
             dialect = csv.Sniffer().sniff(f.readline(), delimiters=delimiters)
         except csv.Error:
-            # this can happen for single-column files, e.g. VCF sequence indexes
+            # This can happen for single-column files, e.g. VCF sequence indexes
+            # If so, use a tab character as the default.
             return '\t'
     return dialect.delimiter
 
 
 class TabularFileLoaderBase:
-    def __init__(self, file:str, header=True, names=[]):
+    """Base class for loading tabular files into a database.
+
+    Stores commonly used attributes - see __init__.
+    """
+    def __init__(self, file:str, header=True, names:List[str]=[]):
         self.file = file
+        "Path to the tabular file to be represented by an instance of this class."
         self.header = header
+        "True if file has a header, otherwise false."
         self.names = names
+        "List of column names in file."
 
         self.delimiter = get_delimiter(self.file)
-        self.df_head = self._get_pd_df_head_100()
+        "Inferred delimiter of file."
+        self.df_head = self._get_pd_df_head(nrows=100)
+        "pandas.DataFrame of first 100 rows in file, used for schema purposes."
 
-    def _get_pd_df_head_100(self) -> pd.DataFrame:
-        """Get a pandas DataFrame representation of the first 100 rows in the file.
+    def _get_pd_df_head(self, nrows:int) -> pd.DataFrame:
+        """Get a pandas DataFrame representation of the first `nrows` rows in the file.
         
         This is used later to:
         1. Define column names
         2. Infer data types for table creation
-
-        TODO: describe header/names
         """
         read_csv_kwargs = {
             "sep": self.delimiter,
             "engine": "c",
             "skipinitialspace": True,
         }
-        if not self.header and not self.names:
-            raise ValueError()
-        if not self.header and self.names:
+        if (not self.header and not self.names) or (self.header and self.names):
+            raise ValueError("DataFrame must have either a header row or column names specified, but not both.")
+        if self.names:
             read_csv_kwargs['header'] = None
             read_csv_kwargs['names'] = self.names
         return pd.read_csv(
             self.file,
-            nrows=100,
+            nrows=nrows,
             **read_csv_kwargs,
         )
 
