@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import sqlite3
+from typing import List
 
 from . import TabularFileLoaderBase
 
@@ -59,3 +60,35 @@ def sanitize_identifier(identifier:str):
     """
     identifier = identifier.replace('"', '""')
     return f'"{identifier}"'
+
+
+def chunked_query_to_csv(con:sqlite3.Connection, query:str, path:str, chunksize:int, header=True, columns_to_exclude:List[str]=[], **to_csv_kwargs):
+    """Write query results to a file in chunks so that query results do not need to be loaded into memory all at once.
+
+    Parameters
+    ----------
+    con:
+        sqlite3 Connection object.
+    query
+        SQLite query string.
+    path
+        Path to output file.
+    chunksize
+        Size of chunks to load into memory.
+    header
+        Write out the column names.
+    columns_to_exclude
+        Column names to exclude from output.
+    to_csv_kwargs
+        Additional keyword arguments passed to pandas.to_csv().
+    """
+
+    df_chunks = pd.read_sql_query(query, con, chunksize=chunksize)
+    mode = 'w' # overwrite file if it exists
+    for df_chunk in df_chunks:
+        if columns_to_exclude:
+            for col in columns_to_exclude:
+                df_chunk.drop(col, axis=1, inplace=True)
+        df_chunk.to_csv(path, mode=mode, header=header, **to_csv_kwargs)
+        mode = 'a' # use append mode for subsequent chunks
+        header = False

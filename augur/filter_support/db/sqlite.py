@@ -16,7 +16,7 @@ from augur.dates import (
     try_get_numeric_date_max,
     get_date_errors,
 )
-from augur.io_support.db.sqlite import TabularFileLoaderSQLite, cleanup, ROW_ORDER_COLUMN, sanitize_identifier
+from augur.io_support.db.sqlite import TabularFileLoaderSQLite, cleanup, ROW_ORDER_COLUMN, sanitize_identifier, chunked_query_to_csv
 from augur.utils import read_strains
 from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
 from augur.filter_support.subsample import get_sizes_per_group
@@ -743,29 +743,52 @@ class FilterSQLite(FilterBase):
         df_sizes.to_sql(GROUP_SIZES_TABLE_NAME, self.get_db_context())
 
     def db_output_strains(self):
-        df = pd.read_sql_query(f"""
-                SELECT {self.sanitized_metadata_id_column}
-                FROM {OUTPUT_METADATA_TABLE_NAME}
-                ORDER BY {ROW_ORDER_COLUMN}
-            """, self.get_db_context())
-        df.to_csv(self.args.output_strains, index=None, header=False)
+        query = f"""
+            SELECT {self.sanitized_metadata_id_column}
+            FROM {OUTPUT_METADATA_TABLE_NAME}
+            ORDER BY {ROW_ORDER_COLUMN}
+        """
+        chunked_query_to_csv(
+            con=self.get_db_context(),
+            query=query,
+            path=self.args.output_strains,
+            chunksize=10000,
+            header=False,
+            index=False,
+        )
 
     def db_output_metadata(self):
-        df = pd.read_sql_query(f"""
-                SELECT *
-                FROM {OUTPUT_METADATA_TABLE_NAME}
-                ORDER BY {ROW_ORDER_COLUMN}
-            """, self.get_db_context())
-        df.drop(ROW_ORDER_COLUMN, axis=1, inplace=True)
-        df.to_csv(self.args.output_metadata, sep='\t', index=None)
+        query = f"""
+            SELECT *
+            FROM {OUTPUT_METADATA_TABLE_NAME}
+            ORDER BY {ROW_ORDER_COLUMN}
+        """
+        chunked_query_to_csv(
+            con=self.get_db_context(),
+            query=query,
+            path=self.args.output_metadata,
+            chunksize=10000,
+            header=True,
+            index=False,
+            columns_to_exclude=[ROW_ORDER_COLUMN],
+            sep='\t',
+        )
 
     def db_output_log(self):
-        df = pd.read_sql_query(f"""
-                SELECT {self.sanitized_metadata_id_column}, {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
-                FROM {METADATA_FILTER_REASON_TABLE_NAME}
-                WHERE {FILTER_REASON_COL} IS NOT NULL
-            """, self.get_db_context())
-        df.to_csv(self.args.output_log, sep='\t', index=None)
+        query = f"""
+            SELECT {self.sanitized_metadata_id_column}, {FILTER_REASON_COL}, {FILTER_REASON_KWARGS_COL}
+            FROM {METADATA_FILTER_REASON_TABLE_NAME}
+            WHERE {FILTER_REASON_COL} IS NOT NULL
+        """
+        chunked_query_to_csv(
+            con=self.get_db_context(),
+            query=query,
+            path=self.args.output_log,
+            chunksize=10000,
+            header=True,
+            index=False,
+            sep='\t',
+        )
 
     def db_get_metadata_strains(self) -> Set[str]:
         with self.get_db_context() as con:
