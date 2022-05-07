@@ -79,6 +79,7 @@ def chunked_query_to_csv(con:sqlite3.Connection, query:str, path:str, chunksize:
         Write out the column names.
     columns_to_exclude
         Column names to exclude from output.
+        There is no way to exclude columns in a SQLite query, so it is implemented as an option here.
     to_csv_kwargs
         Additional keyword arguments passed to pandas.to_csv().
     """
