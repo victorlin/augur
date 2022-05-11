@@ -16,6 +16,7 @@ from augur.dates import (
     try_get_numeric_date_max,
     get_date_errors,
 )
+from augur.filter_support.pandas_query_conversion import pandas_to_sqlite3
 from augur.io_support.db.sqlite import TabularFileLoaderSQLite, cleanup, ROW_ORDER_COLUMN, sanitize_identifier, chunked_query_to_csv
 from augur.utils import read_strains
 from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
@@ -298,6 +299,7 @@ class FilterSQLite(FilterBase):
             str: expression for SQL query `WHERE` clause
             dict: named parameters used in the expression, if any
         """
+        query = pandas_to_sqlite3(query)
         # NOT query to exclude all that do not match
         expression = f"""
             {self.sanitized_metadata_id_column} IN (
