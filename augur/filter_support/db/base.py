@@ -32,9 +32,8 @@ class FilterBase(abc.ABC):
         try:
             self.run()
         except FilterException as e:
-            print_err(f'ERROR: {e}')
             self.db_cleanup()
-            sys.exit(1)
+            raise e
 
     def run(self, cleanup=True):
         # Validate arguments before attempting any I/O.
