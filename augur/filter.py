@@ -1,6 +1,7 @@
 """
 Filter and subsample a sequence set.
 """
+import argparse
 from augur.dates import any_to_numeric_type_min, any_to_numeric_type_max;
 from augur.filter_support.db.sqlite import FilterSQLite
 
@@ -58,10 +59,9 @@ def register_arguments(parser):
     parser.set_defaults(probabilistic_sampling=True)
 
 
-def run(args):
+def run(args:argparse.Namespace):
     '''
     filter and subsample a set of sequences into an analysis set
     '''
-    filter = FilterSQLite()
-    filter.set_args(args)
+    filter = FilterSQLite(args)
     filter.try_run()

@@ -24,7 +24,7 @@ FilterOption = Tuple[FilterCallable, Dict[str, Any]]
 
 
 class FilterBase(abc.ABC):
-    def set_args(self, args:argparse.Namespace):
+    def __init__(self, args:argparse.Namespace):
         self.args = args
 
     def try_run(self):

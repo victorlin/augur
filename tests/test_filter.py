@@ -31,8 +31,7 @@ def get_filter_obj_run(args:argparse.Namespace):
     # use an in-memory database for tests since:
     # 1. test data is not large
     # 2. in-memory I/O is generally faster
-    obj = FilterSQLite(in_memory_db=True)
-    obj.set_args(args)
+    obj = FilterSQLite(args, in_memory_db=True)
     obj.run()
     return obj
 

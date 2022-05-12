@@ -1,3 +1,4 @@
+import argparse
 import re
 from typing import List, Set, Tuple
 import numpy as np
@@ -50,7 +51,8 @@ SUBSAMPLE_FILTER_REASON = 'subsampling'
 
 
 class FilterSQLite(FilterBase):
-    def __init__(self, db_file:str='', in_memory_db=False):
+    def __init__(self, args:argparse.Namespace, db_file:str='', in_memory_db=False):
+        super().__init__(args)
         self.using_in_memory_db = in_memory_db
         if self.using_in_memory_db:
             # use a singleton connection to an in-memory database https://www.sqlite.org/inmemorydb.html
