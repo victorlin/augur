@@ -67,7 +67,7 @@ def run(args:argparse.Namespace):
     '''
     if args.engine == 'pandas':
         from augur.filter_support.pandas_engine import run as run_pandas
-        run_pandas(args)
+        return run_pandas(args)
     elif args.engine == 'sqlite':
         filter = FilterSQLite(args)
         filter.try_run()
