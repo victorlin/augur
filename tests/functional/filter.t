@@ -352,7 +352,7 @@ Confirm that filtering omits strains without metadata or sequences.
 The input sequences are missing one strain that is in the metadata.
 The metadata are missing one strain that has a sequence.
 The list of strains to include has one strain with no metadata/sequence and one strain with information that would have been filtered by country.
-There are 3 strains from Colombia. One is force-included, another is dropped with non-nucleotide characters, and the third is dropped by the exclusion query.
+The query initially filters 3 strains from Colombia, one of which is added back by the include.
 
   $ ${AUGUR} filter \
   >  --sequence-index filter/sequence_index.tsv \
@@ -365,10 +365,9 @@ There are 3 strains from Colombia. One is force-included, another is dropped wit
   >  --output-log "$TMP/filtered_log.tsv"
   4 strains were dropped during filtering
   \t1 had no metadata (esc)
-  \t1 of these were dropped because they had non-nucleotide characters (esc)
-  \t1 of these were filtered out by the query: "country != 'Colombia'" (esc)
   \t1 had no sequence data (esc)
-  \t1 strains were force-included because they were in filter/include.txt (esc)
+  \t3 of these were filtered out by the query: "country != 'Colombia'" (esc)
+  \t1 strains were added back because they were in filter/include.txt (esc)
   9 strains passed all filters
 
   $ diff -u <(sort -k 1,1 filter/filtered_log.tsv) <(sort -k 1,1 "$TMP/filtered_log.tsv")
@@ -412,16 +411,6 @@ This should fail with a helpful error message.
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   ERROR: You must specify a number of sequences per group or maximum sequences to subsample.
   [1]
-
-Filter out a sequence with invalid nucleotides.
-
-  $ ${AUGUR} filter \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
-  >  --non-nucleotide \
-  >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
-  $ wc -l "$TMP/filtered_metadata.tsv"
-  \s*11 .* (re)
 
 Error on duplicates in metadata within same chunk.
 
