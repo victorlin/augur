@@ -20,7 +20,7 @@ from augur.filter_support.output import filter_kwargs_to_str
 
 from augur.index import index_sequences, index_vcf
 from augur.io import open_file, read_metadata, read_sequences, write_sequences
-from augur.utils import AugurError, is_vcf as filename_is_vcf, read_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
+from augur.utils import AugurError, is_vcf as filename_is_vcf, read_vcf, write_vcf, read_strains, get_numerical_dates, run_shell_command, shquote, is_date_ambiguous
 
 comment_char = '#'
 
@@ -35,30 +35,6 @@ class FilterException(AugurError):
     """
     pass
 
-
-def write_vcf(input_filename, output_filename, dropped_samps):
-    if _filename_gz(input_filename):
-        input_arg = "--gzvcf"
-    else:
-        input_arg = "--vcf"
-
-    if _filename_gz(output_filename):
-        output_pipe = "| gzip -c"
-    else:
-        output_pipe = ""
-
-    drop_args = ["--remove-indv " + shquote(s) for s in dropped_samps]
-
-    call = ["vcftools"] + drop_args + [input_arg, shquote(input_filename), "--recode --stdout", output_pipe, ">", shquote(output_filename)]
-
-    print("Filtering samples using VCFTools with the call:")
-    print(" ".join(call))
-    run_shell_command(" ".join(call), raise_errors = True)
-    # remove vcftools log file
-    try:
-        os.remove('out.log')
-    except OSError:
-        pass
 
 def read_priority_scores(fname):
     def constant_factory(value):
@@ -1609,10 +1585,6 @@ def run(args):
         return 1
 
     print(f"{total_strains_passed} strains passed all filters")
-
-
-def _filename_gz(filename):
-    return filename.lower().endswith(".gz")
 
 
 def calculate_sequences_per_group(target_max_value, counts_per_group, allow_probabilistic=True):
