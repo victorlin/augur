@@ -1,14 +1,14 @@
 Integration tests for augur filter.
 
   $ pushd "$TESTDIR" > /dev/null
-  $ export AUGUR="../../bin/augur"
+  $ export AUGUR="../../../bin/augur"
 
 Filter with exclude query for two regions that comprise all but one strain.
 This filter should leave a single record from Oceania.
 Force include one South American record by country to get two total records.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --exclude-where "region=South America" "region=North America" "region=Southeast Asia" \
   >  --include-where "country=Ecuador" \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
@@ -19,7 +19,7 @@ Force include one South American record by country to get two total records.
 Filter with subsampling, requesting 1 sequence per group (for a group with 4 distinct values).
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by region \
   >  --sequences-per-group 1 \
   >  --subsample-seed 314159 \
@@ -30,7 +30,7 @@ Filter with subsampling, requesting 1 sequence per group (for a group with 4 dis
 By setting the subsample seed above, we should guarantee that we get the same "random" strains as another run with the same command.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by region \
   >  --sequences-per-group 1 \
   >  --subsample-seed 314159 \
@@ -43,9 +43,9 @@ Filter with subsampling, requesting no more than 8 sequences.
 With 8 groups to subsample from (after filtering), this should produce one sequence per group.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --group-by country year month \
   >  --subsample-max-sequences 8 \
@@ -60,9 +60,9 @@ Filter with subsampling where no more than 5 sequences are requested and no grou
 This generates a dummy category and subsamples from there. With no-probabilistic-sampling we expect exactly 5 sequences.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --subsample-max-sequences 5 \
   >  --subsample-seed 314159 \
@@ -76,9 +76,9 @@ Try to filter with subsampling when there are more available groups than request
 This should fail, as probabilistic sampling is explicitly disabled.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --group-by country year month \
   >  --subsample-max-sequences 5 \
@@ -92,9 +92,9 @@ This should fail, as probabilistic sampling is explicitly disabled.
 Explicitly use probabilistic subsampling to handle the case when there are more available groups than requested sequences.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --group-by country year month \
   >  --subsample-max-sequences 5 \
@@ -106,9 +106,9 @@ Explicitly use probabilistic subsampling to handle the case when there are more 
 Using the default probabilistic subsampling, should work the same as the previous case.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --group-by country year month \
   >  --subsample-max-sequences 5 \
@@ -124,7 +124,7 @@ By setting the subsample seed above, we should get the same results for both run
 Check output of probabilistic sampling.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by region year month \
   >  --subsample-max-sequences 3 \
   >  --probabilistic-sampling \
@@ -141,7 +141,7 @@ Check output of probabilistic sampling.
 Ensure probabilistic sampling is not used when unnecessary.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by region year month \
   >  --subsample-max-sequences 10 \
   >  --probabilistic-sampling \
@@ -157,8 +157,8 @@ Ensure probabilistic sampling is not used when unnecessary.
 Filter using only metadata without sequence input or output and save results as filtered metadata.
 
   $ ${AUGUR} filter \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --min-length 10500 \
   >  --output-metadata "$TMP/filtered_metadata.tsv" > /dev/null
@@ -172,8 +172,8 @@ Output should include the 8 sequences matching the filters and a header line.
 Filter using only metadata and save results as a list of filtered strains.
 
   $ ${AUGUR} filter \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --min-length 10500 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
@@ -188,7 +188,7 @@ Filter using only metadata without a sequence index.
 This should work because the requested filters don't rely on sequence information.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-date 2012 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   $ rm -f "$TMP/filtered_strains.txt"
@@ -197,7 +197,7 @@ Try to filter using only metadata without a sequence index.
 This should fail because the requested filters rely on sequence information.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-length 10000 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.
@@ -207,8 +207,8 @@ Try to filter with sequence outputs and no sequence inputs.
 This should fail.
 
   $ ${AUGUR} filter \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-length 10000 \
   >  --output "$TMP/filtered.fasta" > /dev/null
   ERROR: You need to provide sequences to output sequences.
@@ -217,8 +217,8 @@ This should fail.
 Try to filter without any outputs.
 
   $ ${AUGUR} filter \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-length 10000 > /dev/null
   ERROR: You need to select at least one output.
   [1]
@@ -227,7 +227,7 @@ Filter into two separate sets and then select sequences from the union of those 
 First, select strains from Brazil (there should be 1).
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --query "country == 'Brazil'" \
   >  --output-strains "$TMP/filtered_strains.brazil.txt" > /dev/null
   $ wc -l "$TMP/filtered_strains.brazil.txt"
@@ -236,7 +236,7 @@ First, select strains from Brazil (there should be 1).
 Then, select strains from Colombia (there should be 3).
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --query "country == 'Colombia'" \
   >  --output-strains "$TMP/filtered_strains.colombia.txt" > /dev/null
   $ wc -l "$TMP/filtered_strains.colombia.txt"
@@ -245,9 +245,9 @@ Then, select strains from Colombia (there should be 3).
 Finally, exclude all sequences except those from the two sets of strains (there should be 4).
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --exclude-all \
   >  --include "$TMP/filtered_strains.brazil.txt" "$TMP/filtered_strains.colombia.txt" \
   >  --output "$TMP/filtered.fasta" > /dev/null
@@ -259,8 +259,8 @@ Repeat this filter without a sequence index.
 We should get the same outputs without building a sequence index on the fly, because the exclude-all flag tells us we only want to force-include strains and skip all other filters.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --metadata data/metadata.tsv \
   >  --exclude-all \
   >  --include "$TMP/filtered_strains.brazil.txt" "$TMP/filtered_strains.colombia.txt" \
   >  --output "$TMP/filtered.fasta" \
@@ -278,9 +278,9 @@ Metadata should have the same number of records as the sequences plus a header.
 Alternately, exclude the sequences from Brazil and Colombia (N=4) and records without sequences (N=1) or metadata (N=1).
 
   $ ${AUGUR} filter \
-  >  --sequences filter/sequences.fasta \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequences data/sequences.fasta \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --exclude "$TMP/filtered_strains.brazil.txt" "$TMP/filtered_strains.colombia.txt" \
   >  --output "$TMP/filtered.fasta" > /dev/null
   $ grep "^>" "$TMP/filtered.fasta" | wc -l
@@ -293,7 +293,7 @@ This should produce no results because the intersection of metadata and sequence
   $ echo -e ">something\nATCG" > "$TMP/dummy.fasta"
   $ ${AUGUR} filter \
   >  --sequences "$TMP/dummy.fasta" \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --min-length 4 \
   >  --max-date 2020-01-30 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
@@ -308,7 +308,7 @@ Repeat with sequence and strain outputs. We should get the same results.
 
   $ ${AUGUR} filter \
   >  --sequences "$TMP/dummy.fasta" \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --max-date 2020-01-30 \
   >  --output-strains "$TMP/filtered_strains.txt" \
   >  --output-sequences "$TMP/filtered.fasta" > /dev/null
@@ -327,7 +327,7 @@ Since we expect metadata to be filtered by presence of strains in input sequence
 
   $ ${AUGUR} filter \
   >  --sequences "$TMP/dummy.fasta" \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   Note: You did not provide a sequence index, so Augur will generate one. You can generate your own index ahead of time with `augur index` and pass it with `augur filter --sequence-index`.
   ERROR: All samples have been dropped! Check filter rules and metadata file format.
@@ -339,8 +339,8 @@ Since we expect metadata to be filtered by presence of strains in input sequence
 Filter TB strains from VCF and save as a list of filtered strains.
 
   $ ${AUGUR} filter \
-  >  --sequences filter/tb.vcf.gz \
-  >  --metadata filter/tb_metadata.tsv \
+  >  --sequences data/tb.vcf.gz \
+  >  --metadata data/tb_metadata.tsv \
   >  --min-date 2012 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   Note: You did not provide a sequence index, so Augur will generate one. You can generate your own index ahead of time with `augur index` and pass it with `augur filter --sequence-index`.
@@ -355,12 +355,12 @@ The list of strains to include has one strain with no metadata/sequence and one 
 The query initially filters 3 strains from Colombia, one of which is added back by the include.
 
   $ ${AUGUR} filter \
-  >  --sequence-index filter/sequence_index.tsv \
-  >  --metadata filter/metadata.tsv \
+  >  --sequence-index data/sequence_index.tsv \
+  >  --metadata data/metadata.tsv \
   >  --query "country != 'Colombia'" \
   >  --non-nucleotide \
   >  --exclude-ambiguous-dates-by year \
-  >  --include filter/include.txt \
+  >  --include data/include.txt \
   >  --output-strains "$TMP/filtered_strains.txt" \
   >  --output-log "$TMP/filtered_log.tsv"
   4 strains were dropped during filtering
@@ -370,7 +370,7 @@ The query initially filters 3 strains from Colombia, one of which is added back 
   \t1 strains were force-included because they were in filter/include.txt (esc)
   9 strains passed all filters
 
-  $ diff -u <(sort -k 1,1 filter/filtered_log.tsv) <(sort -k 1,1 "$TMP/filtered_log.tsv")
+  $ diff -u <(sort -k 1,1 data/filtered_log.tsv) <(sort -k 1,1 "$TMP/filtered_log.tsv")
   $ rm -f "$TMP/filtered_strains.txt"
 
 Subsample one strain per year with priorities.
@@ -378,20 +378,20 @@ There are two years (2015 and 2016) represented in the metadata.
 The two highest priority strains are in these two years.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by year \
-  >  --priority filter/priorities.tsv \
+  >  --priority data/priorities.tsv \
   >  --sequences-per-group 1 \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
 
-  $ diff -u <(sort -k 2,2rn -k 1,1 filter/priorities.tsv | head -n 2 | cut -f 1) <(sort -k 1,1 "$TMP/filtered_strains.txt")
+  $ diff -u <(sort -k 2,2rn -k 1,1 data/priorities.tsv | head -n 2 | cut -f 1) <(sort -k 1,1 "$TMP/filtered_strains.txt")
   $ rm -f "$TMP/filtered_strains.txt"
 
 Try to subsample a maximum number of sequences by year and month, given metadata with ambiguous year and month values.
 Strains with ambiguous years or months should be dropped and logged.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by year month \
   >  --subsample-max-sequences 5 \
   >  --output-strains "$TMP/filtered_strains.txt" \
@@ -406,7 +406,7 @@ Try to group data without any grouping arguments.
 This should fail with a helpful error message.
 
   $ ${AUGUR} filter \
-  >  --metadata filter/metadata.tsv \
+  >  --metadata data/metadata.tsv \
   >  --group-by year month \
   >  --output-strains "$TMP/filtered_strains.txt" > /dev/null
   ERROR: You must specify a number of sequences per group or maximum sequences to subsample.
