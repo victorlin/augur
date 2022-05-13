@@ -133,8 +133,8 @@ Check output of probabilistic sampling.
   WARNING: Asked to provide at most 3 sequences, but there are 8 groups.
   Sampling probabilistically at 0.3633 sequences per group, meaning it is possible to have more than the requested maximum of 3 sequences after filtering.
   10 strains were dropped during filtering
-  \t1 were dropped during grouping due to ambiguous month information (esc)
   \t1 were dropped during grouping due to ambiguous year information (esc)
+  \t1 were dropped during grouping due to ambiguous month information (esc)
   \t8 of these were dropped because of subsampling criteria, using seed 314159 (esc)
   2 strains passed all filters
 
@@ -149,8 +149,8 @@ Ensure probabilistic sampling is not used when unnecessary.
   >  --output-metadata "$TMP/filtered_metadata.tsv"
   Sampling at 10 per group.
   2 strains were dropped during filtering
-  \t1 were dropped during grouping due to ambiguous month information (esc)
   \t1 were dropped during grouping due to ambiguous year information (esc)
+  \t1 were dropped during grouping due to ambiguous month information (esc)
   \t0 of these were dropped because of subsampling criteria, using seed 314159 (esc)
   10 strains passed all filters
 
@@ -367,7 +367,7 @@ The query initially filters 3 strains from Colombia, one of which is added back 
   \t1 had no metadata (esc)
   \t1 had no sequence data (esc)
   \t3 of these were filtered out by the query: "country != 'Colombia'" (esc)
-  \t1 strains were force-included because they were in filter/include.txt (esc)
+  \t1 strains were added back because they were in data/include.txt (esc)
   9 strains passed all filters
 
   $ diff -u <(sort -k 1,1 data/filtered_log.tsv) <(sort -k 1,1 "$TMP/filtered_log.tsv")
