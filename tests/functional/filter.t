@@ -367,7 +367,7 @@ The query initially filters 3 strains from Colombia, one of which is added back 
   \t1 had no metadata (esc)
   \t1 had no sequence data (esc)
   \t3 of these were filtered out by the query: "country != 'Colombia'" (esc)
-  \t1 strains were added back because they were in filter/include.txt (esc)
+  \t1 strains were force-included because they were in filter/include.txt (esc)
   9 strains passed all filters
 
   $ diff -u <(sort -k 1,1 filter/filtered_log.tsv) <(sort -k 1,1 "$TMP/filtered_log.tsv")
