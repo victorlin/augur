@@ -342,6 +342,14 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
     return filtered
 
 
+def filter_by_min_date(metadata, min_date, **kwargs):
+    return filter_by_date(metadata, min_date=min_date, **kwargs)
+
+
+def filter_by_max_date(metadata, max_date, **kwargs):
+    return filter_by_date(metadata, max_date=max_date, **kwargs)
+
+
 def filter_by_sequence_index(metadata, sequence_index):
     """Filter metadata by presence of corresponding entries in a given sequence
     index. This filter effectively intersects the strain ids in the metadata and
@@ -617,12 +625,20 @@ def construct_filters(args, sequence_index):
         ))
 
     # Filter by date.
-    if args.min_date or args.max_date:
+    if args.min_date:
         exclude_by.append((
-            filter_by_date,
+            filter_by_min_date,
             {
                 "date_column": "date",
                 "min_date": args.min_date,
+            }
+        ))
+
+    if args.max_date:
+        exclude_by.append((
+            filter_by_max_date,
+            {
+                "date_column": "date",
                 "max_date": args.max_date,
             }
         ))
@@ -1566,7 +1582,8 @@ def run(args):
         "filter_by_exclude_where": "{count} of these were dropped because of '{exclude_where}'",
         "filter_by_query": "{count} of these were filtered out by the query: \"{query}\"",
         "filter_by_ambiguous_date": "{count} of these were dropped because of their ambiguous date in {ambiguity}",
-        "filter_by_date": "{count} of these were dropped because of their date (or lack of date)",
+        "filter_by_min_date": "{count} of these were dropped because they were earlier than {min_date} or missing a date",
+        "filter_by_max_date": "{count} of these were dropped because they were later than {max_date} or missing a date",
         "filter_by_sequence_length": "{count} of these were dropped because they were shorter than minimum length of {min_length}bp",
         "filter_by_non_nucleotide": "{count} of these were dropped because they had non-nucleotide characters",
         "skip_group_by_with_ambiguous_year": "{count} were dropped during grouping due to ambiguous year information",
