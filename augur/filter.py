@@ -50,7 +50,7 @@ def register_arguments(parser):
     When scores are provided, Augur converts scores to floating point values, sorts strains within each subsampling group from highest to lowest priority, and selects the top N strains per group where N is the calculated or requested number of strains per group.
     Higher numbers indicate higher priority.
     Since priorities represent relative values between strains, these values can be arbitrary.""")
-    subsample_group.add_argument('--subsample-seed', type=int, help="random number generator seed to allow reproducible subsampling (with same input data).")
+    subsample_group.add_argument('--subsample-seed', type=int, help="random number generator seed to allow reproducible subsampling (with same input data and engine).")
 
     output_group = parser.add_argument_group("outputs", "possible representations of filtered data (at least one required)")
     output_group.add_argument('--output', '--output-sequences', '-o', help="filtered sequences in FASTA format")
