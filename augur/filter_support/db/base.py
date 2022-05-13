@@ -7,7 +7,7 @@ import argparse
 from augur.index import index_sequences, index_vcf
 from augur.io import open_file, print_err, read_sequences, write_sequences
 from augur.io_support.db import get_metadata_id_column
-from augur.utils import is_vcf, write_vcf
+from augur.utils import AugurError, is_vcf, write_vcf
 from augur.filter_support.exceptions import FilterException
 from augur.filter_support.subsample import calculate_sequences_per_group, TooManyGroupsError, get_valid_group_by_cols
 
@@ -31,7 +31,7 @@ class FilterBase(abc.ABC):
         """Try running filter. If there is an error, remove the database file and exit."""
         try:
             self.run()
-        except FilterException as e:
+        except AugurError as e:
             self.db_cleanup()
             raise e
 

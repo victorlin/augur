@@ -18,7 +18,7 @@ from augur.dates import (
     get_date_errors,
 )
 from augur.io_support.db.sqlite import TabularFileLoaderSQLite, cleanup, ROW_ORDER_COLUMN, sanitize_identifier, chunked_query_to_csv
-from augur.utils import read_strains
+from augur.utils import AugurError, read_strains
 from augur.filter_support.db.base import DUMMY_COL, FilterBase, FilterCallableReturn, FilterOption
 from augur.filter_support.subsample import get_sizes_per_group
 from augur.filter_support.output import filter_kwargs_to_str
@@ -88,7 +88,10 @@ class FilterSQLite(FilterBase):
         Retrieves the filename from `self.args`.
         """
         TabularFileLoaderSQLite(self.args.metadata, self.get_db_context(), METADATA_TABLE_NAME).load()
-        self.db_create_strain_index(METADATA_TABLE_NAME)
+        try:
+            self.db_create_strain_index(METADATA_TABLE_NAME)
+        except sqlite3.IntegrityError:
+            raise AugurError(f"Duplicate found in '{self.args.metadata}'.")
 
     def db_load_sequence_index(self, path:str):
         """Loads a sequence index file into the database.
