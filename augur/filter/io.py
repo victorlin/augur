@@ -22,13 +22,13 @@ def filter_kwargs_to_str(kwargs):
         String representation of the kwargs for reporting.
 
 
-    >>> from augur.dates import numeric_date
+    >>> from augur.dates import any_to_numeric
     >>> from augur.filter.include_exclude_rules import filter_by_sequence_length, filter_by_date
     >>> sequence_index = pd.DataFrame([{"strain": "strain1", "ACGT": 28000}, {"strain": "strain2", "ACGT": 26000}, {"strain": "strain3", "ACGT": 5000}]).set_index("strain")
     >>> exclude_by = [(filter_by_sequence_length, {"sequence_index": sequence_index, "min_length": 27000})]
     >>> filter_kwargs_to_str(exclude_by[0][1])
     '[["min_length", 27000]]'
-    >>> exclude_by = [(filter_by_date, {"max_date": numeric_date("2020-04-01"), "min_date": numeric_date("2020-03-01")})]
+    >>> exclude_by = [(filter_by_date, {"max_date": any_to_numeric("2020-04-01"), "min_date": any_to_numeric("2020-03-01")})]
     >>> filter_kwargs_to_str(exclude_by[0][1])
     '[["max_date", 2020.25], ["min_date", 2020.17]]'
 
