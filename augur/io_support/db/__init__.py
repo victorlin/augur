@@ -36,7 +36,7 @@ def _get_column_names(file:str):
 
 def get_delimiter(file:str, delimiters:List[str]=[',', '\t']):
     """Infer tabular delimiter from first line of a file."""
-    with myopen(file) as f:
+    with myopen(file, mode='r') as f:
         try:
             dialect = csv.Sniffer().sniff(f.readline(), delimiters=delimiters)
         except csv.Error:
@@ -89,7 +89,7 @@ class TabularFileLoaderBase:
 
     def _iter_indexed_rows(self):
         """Yield rows from a tabular file with an additional first column for row number."""
-        with myopen(self.file) as f:
+        with myopen(self.file, mode='r') as f:
             reader = csv.reader(f, delimiter=self.delimiter)
             if self.header:
                 next(reader)
