@@ -88,6 +88,12 @@ def register_arguments(parser):
 
 
 def run(args):
+    '''
+    filter and subsample a set of sequences into an analysis set
+    '''
+    # Validate arguments before attempting any I/O.
+    validate_arguments(args)
+
     if args.engine == 'pandas':
         return run_pandas(args)
     elif args.engine == 'sqlite':
@@ -1131,12 +1137,6 @@ def validate_arguments(args):
 
 
 def run_pandas(args):
-    '''
-    filter and subsample a set of sequences into an analysis set
-    '''
-    # Validate arguments before attempting any I/O.
-    validate_arguments(args)
-
     # Determine whether the sequence index exists or whether should be
     # generated. We need to generate an index if the input sequences are in a
     # VCF, if sequence output has been requested (so we can filter strains by
