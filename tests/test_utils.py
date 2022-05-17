@@ -8,9 +8,11 @@ from freezegun import freeze_time
 from augur import utils
 from test_filter import write_metadata
 
+
 @pytest.fixture
 def mock_run_shell_command(mocker):
     mocker.patch("augur.utils.run_shell_command")
+
 
 class TestUtils:
     def test_ambiguous_date_to_date_range_not_ambiguous(self):
