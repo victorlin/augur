@@ -11,7 +11,6 @@ import operator
 import os
 import pandas as pd
 import re
-import sys
 from tempfile import NamedTemporaryFile
 from typing import Collection
 
@@ -20,7 +19,7 @@ from augur.filter_support.output import filter_kwargs_to_str
 
 from .dates import numeric_date, any_to_numeric_type_min, any_to_numeric_type_max, SUPPORTED_DATE_HELP_TEXT
 from .index import index_sequences, index_vcf
-from .io import open_file, read_metadata, read_sequences, write_sequences
+from .io import open_file, print_err, read_metadata, read_sequences, write_sequences
 from .utils import AugurError, is_vcf as filename_is_vcf, write_vcf, read_strains, get_numerical_dates, is_date_ambiguous
 
 
@@ -108,8 +107,7 @@ def read_priority_scores(fname):
                 for elems in (line.strip().split('\t') if '\t' in line else line.strip().split() for line in pfile.readlines())
             })
     except Exception as e:
-        print(f"ERROR: missing or malformed priority scores file {fname}", file=sys.stderr)
-        raise e
+        raise AugurError(f"ERROR: missing or malformed priority scores file {fname}")
 
 # Define metadata filters.
 
@@ -671,7 +669,7 @@ def construct_filters(args, sequence_index):
         is_vcf = filename_is_vcf(args.sequences)
 
         if is_vcf: #doesn't make sense for VCF, ignore.
-            print("WARNING: Cannot use min_length for VCF files. Ignoring...", file=sys.stderr)
+            print_err("WARNING: Cannot use min_length for VCF files. Ignoring...")
         else:
             exclude_by.append((
                 filter_by_sequence_length,
@@ -912,8 +910,8 @@ def get_groups_for_subsampling(strains, metadata, group_by=None):
     if 'year' in group_by_set or 'month' in group_by_set:
         if 'date' not in metadata:
             # set year/month/day = unknown
-            print(f"WARNING: A 'date' column could not be found to group-by year or month.", file=sys.stderr)
-            print(f"Filtering by group may behave differently than expected!", file=sys.stderr)
+            print_err(f"WARNING: A 'date' column could not be found to group-by year or month.")
+            print_err(f"Filtering by group may behave differently than expected!")
             df_dates = pd.DataFrame({'year': 'unknown', 'month': 'unknown'}, index=metadata.index)
             metadata = pd.concat([metadata, df_dates], axis=1)
         else:
@@ -953,8 +951,8 @@ def get_groups_for_subsampling(strains, metadata, group_by=None):
 
     unknown_groups = group_by_set - set(metadata.columns)
     if unknown_groups:
-        print(f"WARNING: Some of the specified group-by categories couldn't be found: {', '.join(unknown_groups)}", file=sys.stderr)
-        print("Filtering by group may behave differently than expected!", file=sys.stderr)
+        print_err(f"WARNING: Some of the specified group-by categories couldn't be found: {', '.join(unknown_groups)}")
+        print_err("Filtering by group may behave differently than expected!")
         for group in unknown_groups:
             metadata[group] = 'unknown'
 
@@ -1097,41 +1095,25 @@ def create_queues_by_group(groups, max_size, max_attempts=100, random_seed=None)
 
 
 def validate_arguments(args):
-    """Validate arguments and return a boolean representing whether all validation
-    rules succeeded.
+    """Validate arguments.
 
     Parameters
     ----------
     args : argparse.Namespace
         Parsed arguments from argparse
-
-    Returns
-    -------
-    bool :
-        Validation succeeded.
-
     """
     # Don't allow sequence output when no sequence input is provided.
     if args.output and not args.sequences:
-        print(
-            "ERROR: You need to provide sequences to output sequences.",
-            file=sys.stderr)
-        return False
+        raise AugurError("You need to provide sequences to output sequences.")
 
     # Confirm that at least one output was requested.
     if not any((args.output, args.output_metadata, args.output_strains)):
-        print(
-            "ERROR: You need to select at least one output.",
-            file=sys.stderr)
-        return False
+        raise AugurError("You need to select at least one output.")
 
     # Don't allow filtering on sequence-based information, if no sequences or
     # sequence index is provided.
     if not args.sequences and not args.sequence_index and any(getattr(args, arg) for arg in SEQUENCE_ONLY_FILTERS):
-        print(
-            "ERROR: You need to provide a sequence index or sequences to filter on sequence-specific information.",
-            file=sys.stderr)
-        return False
+        raise AugurError("You need to provide a sequence index or sequences to filter on sequence-specific information.")
 
     # Set flags if VCF
     is_vcf = filename_is_vcf(args.sequences)
@@ -1140,20 +1122,12 @@ def validate_arguments(args):
     if is_vcf:
         from shutil import which
         if which("vcftools") is None:
-            print("ERROR: 'vcftools' is not installed! This is required for VCF data. "
-                  "Please see the augur install instructions to install it.",
-                  file=sys.stderr)
-            return False
+            raise AugurError("'vcftools' is not installed! This is required for VCF data. "
+                  "Please see the augur install instructions to install it.")
 
     # If user requested grouping, confirm that other required inputs are provided, too.
     if args.group_by and not any((args.sequences_per_group, args.subsample_max_sequences)):
-        print(
-            "ERROR: You must specify a number of sequences per group or maximum sequences to subsample.",
-            file=sys.stderr
-        )
-        return False
-
-    return True
+        raise AugurError("You must specify a number of sequences per group or maximum sequences to subsample.")
 
 
 def run_pandas(args):
@@ -1161,8 +1135,7 @@ def run_pandas(args):
     filter and subsample a set of sequences into an analysis set
     '''
     # Validate arguments before attempting any I/O.
-    if not validate_arguments(args):
-        return 1
+    validate_arguments(args)
 
     # Determine whether the sequence index exists or whether should be
     # generated. We need to generate an index if the input sequences are in a
@@ -1185,10 +1158,9 @@ def run_pandas(args):
         with NamedTemporaryFile(delete=False) as sequence_index_file:
             sequence_index_path = sequence_index_file.name
 
-        print(
+        print_err(
             "Note: You did not provide a sequence index, so Augur will generate one.",
-            "You can generate your own index ahead of time with `augur index` and pass it with `augur filter --sequence-index`.",
-            file=sys.stderr
+            "You can generate your own index ahead of time with `augur index` and pass it with `augur filter --sequence-index`."
         )
 
         if is_vcf:
@@ -1394,10 +1366,7 @@ def run_pandas(args):
                 # grouping. TODO: We should consider treating this case as
                 # an actual error and exiting here with a nonzero code.
                 group_by = False
-                print(
-                    f"WARNING: {error}",
-                    file=sys.stderr,
-                )
+                print_err(f"WARNING: {error}")
 
         # Always write out strains that are force-included. Additionally, if
         # we are not grouping, write out metadata and strains that passed
@@ -1438,8 +1407,7 @@ def run_pandas(args):
                 args.probabilistic_sampling,
             )
         except TooManyGroupsError as error:
-            print(f"ERROR: {error}", file=sys.stderr)
-            sys.exit(1)
+            raise AugurError(error)
 
         if (probabilistic_used):
             print(f"Sampling probabilistically at {sequences_per_group:0.4f} sequences per group, meaning it is possible to have more than the requested maximum of {args.subsample_max_sequences} sequences after filtering.")
@@ -1564,10 +1532,9 @@ def run_pandas(args):
             # Warn the user if the expected strains from the sequence index are
             # not a superset of the observed strains.
             if sequence_strains is not None and observed_sequence_strains > sequence_strains:
-                print(
+                print_err(
                     "WARNING: The sequence index is out of sync with the provided sequences.",
-                    "Metadata and strain output may not match sequence output.",
-                    file=sys.stderr
+                    "Metadata and strain output may not match sequence output."
                 )
 
             # Update the set of available sequence strains.
@@ -1625,8 +1592,7 @@ def run_pandas(args):
         print("\t%i of these were dropped because of subsampling criteria%s" % (num_excluded_subsamp, seed_txt))
 
     if total_strains_passed == 0:
-        print("ERROR: All samples have been dropped! Check filter rules and metadata file format.", file=sys.stderr)
-        return 1
+        raise AugurError("All samples have been dropped! Check filter rules and metadata file format.")
 
     print(f"{total_strains_passed} strains passed all filters")
 
@@ -1672,7 +1638,7 @@ def calculate_sequences_per_group(target_max_value, counts_per_group, allow_prob
         )
     except TooManyGroupsError as error:
         if allow_probabilistic:
-            print(f"WARNING: {error}", file=sys.stderr)
+            print_err(f"WARNING: {error}")
             sequences_per_group = _calculate_fractional_sequences_per_group(
                 target_max_value,
                 counts_per_group,
