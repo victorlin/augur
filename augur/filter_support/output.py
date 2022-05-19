@@ -22,7 +22,8 @@ def filter_kwargs_to_str(kwargs):
     str :
         String representation of the kwargs for reporting.
 
-    >>> filter_kwargs_to_str({"min_length": 27000})
+
+    >>> filter_kwargs_to_str({"sequence_index": pd.DataFrame(), "min_length": 27000})
     '[["min_length", 27000]]'
     >>> filter_kwargs_to_str({"max_date": 2020.25, "min_date": 2020.17})
     '[["max_date", 2020.25], ["min_date", 2020.17]]'
