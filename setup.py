@@ -57,7 +57,7 @@ setuptools.setup(
         "jsonschema >=3.0.0, ==3.*",
         "networkx >= 2.5, ==2.*",
         "packaging >=19.2",
-        "pandas >=1.0.0, ==1.*",
+        "pandas <1.4.0, ==1.*",
         "phylo-treetime ==0.8.*",
         "xopen >=1.0.1, ==1.*"
     ],

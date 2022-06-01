@@ -63,7 +63,8 @@ def get_pivots(observations, pivot_interval, start_date=None, end_date=None, piv
     datetime_pivots = pd.date_range(
         float_to_datestring(pivot_start),
         float_to_datestring(pivot_end),
-        freq = offset
+        freq = offset,
+        closed="left"
     )
     pivots = np.array([timestamp_to_float(pivot) for pivot in datetime_pivots])
 
