@@ -3,7 +3,6 @@ The top-level augur command which dispatches to subcommands.
 """
 
 import argparse
-import re
 import os
 import sys
 import importlib
@@ -19,7 +18,7 @@ recursion_limit = os.environ.get("AUGUR_RECURSION_LIMIT")
 if recursion_limit:
     sys.setrecursionlimit(int(recursion_limit))
 
-command_strings = [
+COMMAND_MODULE_NAMES = [
     "parse",
     "index",
     "filter",
@@ -44,7 +43,8 @@ command_strings = [
     "measurements",
 ]
 
-COMMANDS = [importlib.import_module('augur.' + c) for c in command_strings]
+# Convert snake_case module names to kebab-case command names for CLI
+COMMANDS = [(c.replace("_", "-"), importlib.import_module(f'augur.{c}')) for c in COMMAND_MODULE_NAMES]
 
 def make_parser():
     parser = argparse.ArgumentParser(
@@ -56,10 +56,10 @@ def make_parser():
     add_default_command(parser)
     add_version_alias(parser)
 
-    for command in COMMANDS:
+    for command_name, command in COMMANDS:
         # Add a subparser for each command.
         subparser = subparsers.add_parser(
-            command_name(command),
+            command_name,
             help        = first_line(command.__doc__),
             description = command.__doc__)
 
@@ -129,17 +129,3 @@ def add_version_alias(parser):
         nargs  = 0,
         help   = argparse.SUPPRESS,
         action = run_version_command)
-
-
-def command_name(command):
-    """
-    Returns a short name for a command module.
-    """
-
-    def remove_prefix(prefix, string):
-        return re.sub('^' + re.escape(prefix), '', string)
-
-    package     = command.__package__
-    module_name = command.__name__
-
-    return remove_prefix(package, module_name).lstrip(".").replace("_", "-")
