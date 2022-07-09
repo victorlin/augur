@@ -13,7 +13,7 @@ from .utils import read_node_data, write_json
 
 
 def register_arguments(parser):
-    from . import add_default_command
+    from .cli.commands import add_default_command
 
     subparsers = parser.add_subparsers()
     add_default_command(parser)
