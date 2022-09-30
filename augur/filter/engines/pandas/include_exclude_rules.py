@@ -8,7 +8,7 @@ from augur.dates import numeric_date, is_date_ambiguous, get_numerical_dates
 from augur.errors import AugurError
 from augur.io import is_vcf as filename_is_vcf
 from augur.utils import read_strains
-from .io import filter_kwargs_to_str
+from augur.filter.io import filter_kwargs_to_str
 
 
 def filter_by_exclude_all(metadata):

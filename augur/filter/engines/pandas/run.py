@@ -13,7 +13,8 @@ from augur.index import index_sequences, index_vcf
 from augur.io import open_file, read_metadata, read_sequences, write_sequences, is_vcf as filename_is_vcf, write_vcf
 from .io import cleanup_outputs, read_priority_scores
 from .include_exclude_rules import apply_filters, construct_filters
-from .subsample import PriorityQueue, TooManyGroupsError, calculate_sequences_per_group, create_queues_by_group, get_groups_for_subsampling
+from ...subsample import TooManyGroupsError, calculate_sequences_per_group
+from .subsample import PriorityQueue, create_queues_by_group, get_groups_for_subsampling
 
 
 def run(args):
