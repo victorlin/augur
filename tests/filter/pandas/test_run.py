@@ -14,9 +14,9 @@ from Bio.SeqRecord import SeqRecord
 from freezegun import freeze_time
 
 import augur.filter
-import augur.filter.run
-import augur.filter.io
-import augur.filter.include_exclude_rules
+import augur.filter.engines.pandas.run
+import augur.filter.engines.pandas.io
+import augur.filter.engines.pandas.include_exclude_rules
 from augur.io import read_metadata
 
 @pytest.fixture
@@ -70,7 +70,7 @@ def mock_priorities_file_valid_with_spaces_and_tabs(mocker):
 class TestFilter:
     def test_read_priority_scores_valid(self, mock_priorities_file_valid):
         # builtins.open is stubbed, but we need a valid file to satisfy the existence check
-        priorities = augur.filter.io.read_priority_scores(
+        priorities = augur.filter.engines.pandas.io.read_priority_scores(
             "tests/builds/tb/data/lee_2015.vcf"
         )
 
@@ -81,11 +81,11 @@ class TestFilter:
     def test_read_priority_scores_malformed(self, mock_priorities_file_malformed):
         with pytest.raises(ValueError):
             # builtins.open is stubbed, but we need a valid file to satisfy the existence check
-            augur.filter.io.read_priority_scores("tests/builds/tb/data/lee_2015.vcf")
+            augur.filter.engines.pandas.io.read_priority_scores("tests/builds/tb/data/lee_2015.vcf")
 
     def test_read_priority_scores_valid_with_spaces_and_tabs(self, mock_priorities_file_valid_with_spaces_and_tabs):
         # builtins.open is stubbed, but we need a valid file to satisfy the existence check
-        priorities = augur.filter.io.read_priority_scores(
+        priorities = augur.filter.engines.pandas.io.read_priority_scores(
             "tests/builds/tb/data/lee_2015.vcf"
         )
 
@@ -93,7 +93,7 @@ class TestFilter:
 
     def test_read_priority_scores_does_not_exist(self):
         with pytest.raises(FileNotFoundError):
-            augur.filter.io.read_priority_scores("/does/not/exist.txt")
+            augur.filter.engines.pandas.io.read_priority_scores("/does/not/exist.txt")
 
     def test_filter_on_query_good(self, tmpdir, sequences):
         """Basic filter_on_query test"""
@@ -102,7 +102,7 @@ class TestFilter:
                                           ("SEQ_2","colorado","bad"),
                                           ("SEQ_3","nevada","good")))
         metadata = read_metadata(meta_fn)
-        filtered = augur.filter.include_exclude_rules.filter_by_query(metadata, 'quality=="good"')
+        filtered = augur.filter.engines.pandas.include_exclude_rules.filter_by_query(metadata, 'quality=="good"')
         assert sorted(filtered) == ["SEQ_1", "SEQ_3"]
 
     def test_filter_run_with_query(self, tmpdir, fasta_fn, argparser):
@@ -114,7 +114,7 @@ class TestFilter:
                                           ("SEQ_3","nevada","good")))
         args = argparser('-s %s --metadata %s -o %s --query "location==\'colorado\'"'
                          % (fasta_fn, meta_fn, out_fn))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_1", "SEQ_2"]
 
@@ -129,7 +129,7 @@ class TestFilter:
         open(include_fn, "w").write("SEQ_3")
         args = argparser('-s %s --metadata %s -o %s --query "quality==\'good\' & location==\'colorado\'" --include %s'
                          % (fasta_fn, meta_fn, out_fn, include_fn))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_1", "SEQ_3"]
 
@@ -142,7 +142,7 @@ class TestFilter:
                                           ("SEQ_3","nevada","good")))
         args = argparser('-s %s --metadata %s -o %s --query "quality==\'good\' & location==\'colorado\'" --include-where "location=nevada"'
                          % (fasta_fn, meta_fn, out_fn))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_1", "SEQ_3"]
 
@@ -156,7 +156,7 @@ class TestFilter:
                                           ("SEQ_3","2020-02-25")))
         args = argparser('-s %s --metadata %s -o %s --min-date %s'
                          % (fasta_fn, meta_fn, out_fn, min_date))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_1", "SEQ_2"]
 
@@ -170,7 +170,7 @@ class TestFilter:
                                           ("SEQ_3","2020-03-02")))
         args = argparser('-s %s --metadata %s -o %s --max-date %s'
                          % (fasta_fn, meta_fn, out_fn, max_date))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_1", "SEQ_2"]
 
@@ -184,7 +184,7 @@ class TestFilter:
                                           ("SEQ_3","2020-XX-XX")))
         args = argparser('-s %s --metadata %s -o %s --min-date %s'
                          % (fasta_fn, meta_fn, out_fn, min_date))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_2", "SEQ_3"]
 
@@ -198,7 +198,7 @@ class TestFilter:
                                           ("SEQ_3","2020-XX-XX")))
         args = argparser('-s %s --metadata %s -o %s --min-date %s'
                          % (fasta_fn, meta_fn, out_fn, min_date))
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         output = SeqIO.to_dict(SeqIO.parse(out_fn, "fasta"))
         assert list(output.keys()) == ["SEQ_1", "SEQ_2", "SEQ_3"]
 
@@ -322,7 +322,7 @@ class TestFilter:
         meta_fn = write_metadata(tmpdir, (("strain","date"),
                                           *metadata_rows))
         args = argparser(f'--metadata {meta_fn} --output-strains {out_fn} {argparse_params}')
-        augur.filter.run.run(args)
+        augur.filter.engines.pandas.run.run(args)
         with open(out_fn) as f:
             output_sorted = sorted(line.rstrip() for line in f)
         assert output_sorted == output_sorted_expected

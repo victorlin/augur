@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import Collection
 
-from .errors import FilterException
+from ...errors import FilterException
 
 
 def get_groups_for_subsampling(strains, metadata, group_by=None):

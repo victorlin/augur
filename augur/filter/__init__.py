@@ -86,5 +86,5 @@ def run(args):
         return 1
 
     if args.engine == 'pandas':
-        from .run import run as run_pandas
+        from .engines.pandas.run import run as run_pandas
         return run_pandas(args)
