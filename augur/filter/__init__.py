@@ -31,7 +31,10 @@ def register_arguments(parser):
         '--query',
         help="""Filter samples by attribute.
         pandas engine: Uses Pandas Dataframe querying, see https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#indexing-query for syntax.
-        (e.g., --query "country == 'Colombia'" or --query "(country == 'USA' & (division == 'Washington'))")"""
+        (e.g., --query "country == 'Colombia'" or --query "(country == 'USA' & (division == 'Washington'))")
+
+        sqlite engine: Uses SQL WHERE clause querying, see https://www.sqlite.org/lang_expr.html for syntax.
+        (e.g., --query "country = 'Colombia'" or --query "(country = 'USA' AND division = 'Washington')")"""
     )
     metadata_filter_group.add_argument('--min-date', type=any_to_numeric_type_min, help=f"minimal cutoff for date, the cutoff date is inclusive; may be specified as: {SUPPORTED_DATE_HELP_TEXT}")
     metadata_filter_group.add_argument('--max-date', type=any_to_numeric_type_max, help=f"maximal cutoff for date, the cutoff date is inclusive; may be specified as: {SUPPORTED_DATE_HELP_TEXT}")
@@ -92,3 +95,6 @@ def run(args):
     if args.engine == 'pandas':
         from .engines.pandas.run import run as run_pandas
         return run_pandas(args)
+    elif args.engine == 'sqlite':
+        from .engines.sqlite.run import run as run_sqlite
+        run_sqlite(args)

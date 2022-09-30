@@ -1,4 +1,7 @@
+import csv
 import pandas as pd
+from typing import List
+from .file import open_file
 
 
 def read_metadata(metadata_file, id_columns=("strain", "name"), chunk_size=None):
@@ -88,3 +91,45 @@ def read_metadata(metadata_file, id_columns=("strain", "name"), chunk_size=None)
         metadata_file,
         **kwargs
     )
+
+
+def get_metadata_id_column(metadata_file:str, id_columns:List[str]):
+    """Returns the first column in `id_columns` that is present in the metadata.
+
+    Raises a `ValueError` when none of `id_columns` are found.
+    """
+    metadata_columns = _get_column_names(metadata_file)
+    for col in id_columns:
+        if col in metadata_columns:
+            return col
+    raise ValueError(f"None of the possible id columns ({id_columns!r}) were found in the metadata's columns {tuple(metadata_columns)!r}")
+
+
+def _get_column_names(file:str):
+    """Get column names using pandas."""
+    delimiter = get_delimiter(file)
+    read_csv_kwargs = {
+        "sep": delimiter,
+        "engine": "c",
+        "skipinitialspace": True,
+        "dtype": 'string',
+    }
+    row = pd.read_csv(
+        file,
+        nrows=1,
+        **read_csv_kwargs,
+    )
+    return list(row.columns)
+
+
+def get_delimiter(file:str, delimiters:List[str]=[',', '\t']):
+    """Infer tabular delimiter from first line of a file."""
+    with open_file(file) as f:
+        try:
+            dialect = csv.Sniffer().sniff(f.readline(), delimiters=delimiters)
+        except csv.Error:
+            # This can happen for single-column files, e.g. VCF sequence indexes
+            # If so, use a tab character as the default.
+            return '\t'
+    return dialect.delimiter
+
