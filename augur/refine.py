@@ -14,8 +14,9 @@ from treetime.seq_utils import profile_maps
 def refine(tree=None, aln=None, ref=None, dates=None, branch_length_inference='auto',
              confidence=False, resolve_polytomies=True, max_iter=2, precision='auto',
              infer_gtr=True, Tc=0.01, reroot=None, use_marginal='always', fixed_pi=None, use_fft=True,
-             clock_rate=None, clock_std=None, clock_filter_iqd=None, verbosity=1, covariance=True, **kwarks):
-    from treetime import TreeTime
+             clock_rate=None, clock_std=None, clock_filter_iqd=None, verbosity=1, covariance=True, aa=False,
+             **kwarks):
+    from treetime import TreeTime, GTR
 
     try: #Tc could be a number or  'opt' or 'skyline'. TreeTime expects a float or int if a number.
         Tc = float(Tc)
@@ -35,9 +36,11 @@ def refine(tree=None, aln=None, ref=None, dates=None, branch_length_inference='a
         if branch_length_inference == 'auto':
             branch_length_inference = 'joint'
 
+    gtr = GTR.standard('jc', alphabet='aa' if aa else 'nuc')
+
     #send ref, if is None, does no harm
     tt = TreeTime(tree=tree, aln=aln, ref=ref, dates=dates, use_fft=use_fft,
-                  verbose=verbosity, gtr='JC69', precision=precision)
+                  verbose=verbosity, gtr=gtr, precision=precision)
 
     # conditionally run clock-filter and remove bad tips
     if clock_filter_iqd:
@@ -131,6 +134,7 @@ def register_parser(parent_subparsers):
                         default='mutations-per-site', help='Units in which sequence divergences is exported.')
     parser.add_argument('--seed', type=int, help='seed for random number generation')
     parser.add_argument('--verbosity', type=int, default=1, help='treetime verbosity, between 0 and 6 (higher values more output)')
+    parser.add_argument('--aa', action='store_true', help="use aminoacid alphabet")
     parser.set_defaults(covariance=True)
     return parser
 
@@ -228,7 +232,7 @@ def run(args):
                     clock_rate=args.clock_rate, clock_std=args.clock_std_dev,
                     clock_filter_iqd=args.clock_filter_iqd,
                     covariance=args.covariance, resolve_polytomies=(not args.keep_polytomies),
-                    verbosity=args.verbosity)
+                    verbosity=args.verbosity, aa=args.aa)
 
         node_data['clock'] = {'rate': tt.date2dist.clock_rate,
                               'intercept': tt.date2dist.intercept,
