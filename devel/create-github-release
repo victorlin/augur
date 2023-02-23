@@ -27,7 +27,7 @@ main() {
 
     gh release create \
         "$version" \
-        --repo "${GITHUB_REPOSITORY:-nextstrain/augur}" \
+        --repo "${GITHUB_REPOSITORY:-victorlin/augur}" \
         --title "$version" \
         --target "$commit" \
         ${pre_release:+--prerelease} \

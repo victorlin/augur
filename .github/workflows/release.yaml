@@ -23,18 +23,18 @@ jobs:
           git config --global user.name "Nextstrain bot"
       - run: python3 -m pip install --upgrade build twine
       - run: devel/release ${{ github.event.inputs.version}}
-      - run: devel/test
+      # - run: devel/test
       - uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist/
-      - run: git push origin master tag ${{ github.event.inputs.version}}
-      - name: 'Publish to PyPI'
-        run: twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-          TWINE_REPOSITORY_URL: https://upload.pypi.org/legacy/
+      - run: git push origin tag ${{ github.event.inputs.version}}
+      # - name: 'Publish to PyPI'
+      #   run: twine upload dist/*
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      #     TWINE_REPOSITORY_URL: https://upload.pypi.org/legacy/
       - name: 'Create GitHub Release'
         run: ./devel/create-github-release "${{github.event.inputs.version}}" dist/*
         env:

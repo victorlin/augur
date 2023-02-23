@@ -2,6 +2,11 @@
 
 ## __NEXT__
 
+### Bug fixes
+
+* This is some dummy text. [#1152][]
+
+[#1152]: https://github.com/nextstrain/augur/pull/1152
 
 ## 21.0.1 (17 February 2023)
 
