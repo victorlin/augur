@@ -68,6 +68,7 @@ setuptools.setup(
     ],
     extras_require = {
         'dev': [
+            "autoflake >=2.2.0",
             "cram >=0.7",
             "deepdiff >=4.3.2",
             "freezegun >=0.3.15",
