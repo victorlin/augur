@@ -57,7 +57,7 @@ setuptools.setup(
         "cvxopt >=1.1.9, ==1.*",
         "importlib_resources >=5.3.0; python_version < '3.11'",
         "isodate ==0.6.*",
-        "jsonschema >=3.0.0, ==3.*",
+        "jsonschema >=3, <5",
         "networkx >= 2.5, ==2.*",
         "numpy ==1.*",
         "packaging >=19.2",
