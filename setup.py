@@ -75,7 +75,7 @@ setuptools.setup(
             "freezegun >=0.3.15",
             "mypy",
             "nextstrain-sphinx-theme >=2022.5",
-            "pandas-stubs >=1.0.0, ==1.*",
+            "pandas-stubs >=1, <3",
             "pylint >=1.7.6",
             "pytest >=5.4.1",
             "pytest-cov >=2.8.1",
@@ -88,7 +88,7 @@ setuptools.setup(
             "sphinx-rtd-theme >=0.4.3",
             "sphinx-autodoc-typehints >=1.21.4",
             "sphinx-tabs",
-            "types-jsonschema >=3.0.0, ==3.*",
+            "types-jsonschema >=3, <5",
             "types-setuptools",
             "wheel >=0.32.3",
             "ipdb >=0.10.1"
