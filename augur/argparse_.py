@@ -2,6 +2,7 @@
 Custom helpers for the argparse standard library.
 """
 from argparse import Action, ArgumentDefaultsHelpFormatter, ArgumentParser, _ArgumentGroup
+from tap import Tap
 from typing import Union
 from .types import ValidationMode
 
@@ -18,6 +19,10 @@ from .types import ValidationMode
 # Copied from the Nextstrain CLI repo
 # https://github.com/nextstrain/cli/blob/017c53805e8317951327d24c04184615cc400b09/nextstrain/cli/argparse.py#L13-L21
 SKIP_AUTO_DEFAULT_IN_HELP = "%(default).0s"
+
+
+class SubparserBase(Tap):
+    formatter_class = ArgumentDefaultsHelpFormatter
 
 
 def add_default_command(parser):
@@ -53,22 +58,19 @@ def add_command_subparsers(subparsers, commands, command_attribute='__command__'
     """
     for command in commands:
         # Allow each command to register its own subparser
-        subparser = command.register_parser(subparsers)
+        command.register_parser(subparsers)
 
-        # Add default attribute for command module
-        if command_attribute:
-            subparser.set_defaults(**{command_attribute: command})
+        # FIXME: apply these to SubparserBase?
+        # # Add default attribute for command module
+        # if command_attribute:
+        #     subparser.set_defaults(**{command_attribute: command})
 
-        # Use the same formatting class for every command for consistency.
-        # Set here to avoid repeating it in every command's register_parser().
-        subparser.formatter_class = ArgumentDefaultsHelpFormatter
+        # if not subparser.description and command.__doc__:
+        #     subparser.description = command.__doc__
 
-        if not subparser.description and command.__doc__:
-            subparser.description = command.__doc__
-
-        # If a command doesn't have its own run() function, then print its help when called.
-        if not getattr(command, "run", None):
-            add_default_command(subparser)
+        # # If a command doesn't have its own run() function, then print its help when called.
+        # if not getattr(command, "run", None):
+        #     add_default_command(subparser)
 
 
 class HideAsFalseAction(Action):

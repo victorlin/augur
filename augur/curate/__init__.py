@@ -1,125 +1,130 @@
 """
 A suite of commands to help with data curation.
 """
-import argparse
+import importlib
 import sys
 from collections import deque
 from textwrap import dedent
-from typing import Iterable, Set
+from typing import Iterable, Set, List, Optional
 
-from augur.argparse_ import ExtendOverwriteDefault, add_command_subparsers
+from augur.argparse_ import ExtendOverwriteDefault, SubparserBase
 from augur.errors import AugurError
 from augur.io.json import dump_ndjson, load_ndjson
 from augur.io.metadata import DEFAULT_DELIMITERS, InvalidDelimiter, read_table_to_dict, read_metadata_with_sequences, write_records_to_tsv
 from augur.io.sequences import write_records_to_fasta
 from augur.types import DataErrorMethod
-from . import format_dates, normalize_strings, passthru, titlecase, apply_geolocation_rules, apply_record_annotations, abbreviate_authors, parse_genbank_location, transform_strain_name, rename
 
 
 SUBCOMMAND_ATTRIBUTE = '_curate_subcommand'
-SUBCOMMANDS = [
-    passthru,
-    normalize_strings,
-    format_dates,
-    titlecase,
-    apply_geolocation_rules,
-    apply_record_annotations,
-    abbreviate_authors,
-    parse_genbank_location,
-    transform_strain_name,
-    rename,
+SUBCOMMAND_STRINGS = [
+    # "passthru",
+    "normalize_strings",
+    "format_dates",
+    # "titlecase",
+    # "apply_geolocation_rules",
+    # "apply_record_annotations",
+    # "abbreviate_authors",
+    # "parse_genbank_location",
+    # "transform_strain_name",
+    # "rename",
 ]
 
 
-def create_shared_parser():
+class CurateParser(SubparserBase):
     """
-    Creates an argparse.ArgumentParser that is intended to be used as a parent
+    Creates a Tap (typed argument parser) that is intended to be used as a parent
     parser¹ for all `augur curate` subcommands. This should include all options
     that are intended to be shared across the subcommands.
 
     Note that any options strings used here cannot be used in individual subcommand
     subparsers unless the subparser specifically sets `conflict_handler='resolve'` ²,
     then the subparser option will override the option defined here.
+    # FIXME: check this
 
     Based on https://stackoverflow.com/questions/23296695/permit-argparse-global-flags-after-subcommand/23296874#23296874
 
     ¹ https://docs.python.org/3/library/argparse.html#parents
     ² https://docs.python.org/3/library/argparse.html#conflict-handler
     """
-    shared_parser = argparse.ArgumentParser(add_help=False)
+    metadata: Optional[str]
+    id_column: Optional[str]
+    metadata_delimiters: List[str]
+    fasta: Optional[str]
+    seq_id_column: Optional[str]
+    seq_field: Optional[str]
+    unmatched_reporting: DataErrorMethod
+    duplicate_reporting: DataErrorMethod
+    output_metadata: Optional[str]
+    output_fasta: Optional[str]
+    output_id_field: Optional[str]
+    output_seq_field: Optional[str]
 
-    shared_inputs = shared_parser.add_argument_group(
-        title="INPUTS",
-        description="""
-            Input options shared by all `augur curate` commands.
-            If no input options are provided, commands will try to read NDJSON records from stdin.
-        """)
-    shared_inputs.add_argument("--metadata",
-        help="Input metadata file. May be plain text (TSV, CSV) or an Excel or OpenOffice spreadsheet workbook file. When an Excel or OpenOffice workbook, only the first visible worksheet will be read and initial empty rows/columns will be ignored. Accepts '-' to read plain text from stdin.")
-    shared_inputs.add_argument("--id-column",
-        help="Name of the metadata column that contains the record identifier for reporting duplicate records. "
-             "Uses the first column of the metadata file if not provided. "
-             "Ignored if also providing a FASTA file input.")
-    shared_inputs.add_argument("--metadata-delimiters", default=DEFAULT_DELIMITERS, nargs="+", action=ExtendOverwriteDefault,
-        help="Delimiters to accept when reading a plain text metadata file. Only one delimiter will be inferred.")
+    def configure(self):
+        self.add_shared_args()
 
-    shared_inputs.add_argument("--fasta",
-        help="Plain or gzipped FASTA file. Headers can only contain the sequence id used to match a metadata record. " +
-             "Note that an index file will be generated for the FASTA file as <filename>.fasta.fxi")
-    shared_inputs.add_argument("--seq-id-column",
-        help="Name of metadata column that contains the sequence id to match sequences in the FASTA file.")
-    shared_inputs.add_argument("--seq-field",
-        help="The name to use for the sequence field when joining sequences from a FASTA file.")
+        commands = [importlib.import_module('augur.curate.' + c) for c in SUBCOMMAND_STRINGS]
+        for command in commands:
+            command.register_parser(self)
 
-    shared_inputs.add_argument("--unmatched-reporting",
-        type=DataErrorMethod.argtype,
-        choices=list(DataErrorMethod),
-        default=DataErrorMethod.ERROR_FIRST,
-        help="How unmatched records from combined metadata/FASTA input should be reported.")
-    shared_inputs.add_argument("--duplicate-reporting",
-        type=DataErrorMethod.argtype,
-        choices=list(DataErrorMethod),
-        default=DataErrorMethod.ERROR_FIRST,
-        help="How should duplicate records be reported.")
+    def add_shared_args(self):
+        # FIXME: Argument groups are not supported.
+        # <https://github.com/swansonk14/typed-argument-parser/issues/17>
+        # self.add_argument_group(
+        #     title="INPUTS",
+        #     description="""
+        #         Input options shared by all `augur curate` commands.
+        #         If no input options are provided, commands will try to read NDJSON records from stdin.
+        #     """)
+        self.add_argument("--metadata",
+            help="Input metadata file. May be plain text (TSV, CSV) or an Excel or OpenOffice spreadsheet workbook file. When an Excel or OpenOffice workbook, only the first visible worksheet will be read and initial empty rows/columns will be ignored. Accepts '-' to read plain text from stdin.")
+        self.add_argument("--id-column",
+            help="Name of the metadata column that contains the record identifier for reporting duplicate records. "
+                 "Uses the first column of the metadata file if not provided. "
+                 "Ignored if also providing a FASTA file input.")
+        self.add_argument("--metadata-delimiters", default=DEFAULT_DELIMITERS, nargs="+", action=ExtendOverwriteDefault,
+            help="Delimiters to accept when reading a plain text metadata file. Only one delimiter will be inferred.")
 
-    shared_outputs = shared_parser.add_argument_group(
-        title="OUTPUTS",
-        description="""
-            Output options shared by all `augur curate` commands.
-            If no output options are provided, commands will output NDJSON records to stdout.
-        """)
-    shared_outputs.add_argument("--output-metadata",
-        help="Output metadata TSV file. Accepts '-' to output TSV to stdout.")
+        self.add_argument("--fasta",
+            help="Plain or gzipped FASTA file. Headers can only contain the sequence id used to match a metadata record. " +
+                 "Note that an index file will be generated for the FASTA file as <filename>.fasta.fxi")
+        self.add_argument("--seq-id-column",
+            help="Name of metadata column that contains the sequence id to match sequences in the FASTA file.")
+        self.add_argument("--seq-field",
+            help="The name to use for the sequence field when joining sequences from a FASTA file.")
 
-    shared_outputs.add_argument("--output-fasta",
-        help="Output FASTA file.")
-    shared_outputs.add_argument("--output-id-field",
-        help="The record field to use as the sequence identifier in the FASTA output.")
-    shared_outputs.add_argument("--output-seq-field",
-        help="The record field that contains the sequence for the FASTA output. "
-             "This field will be deleted from the metadata output.")
+        self.add_argument("--unmatched-reporting",
+            type=DataErrorMethod.argtype,
+            choices=list(DataErrorMethod),
+            default=DataErrorMethod.ERROR_FIRST,
+            help="How unmatched records from combined metadata/FASTA input should be reported.")
+        self.add_argument("--duplicate-reporting",
+            type=DataErrorMethod.argtype,
+            choices=list(DataErrorMethod),
+            default=DataErrorMethod.ERROR_FIRST,
+            help="How should duplicate records be reported.")
 
-    return shared_parser
+        # FIXME: Argument groups are not supported.
+        # <https://github.com/swansonk14/typed-argument-parser/issues/17>
+        # shared_outputs = self.add_argument_group(
+        #     title="OUTPUTS",
+        #     description="""
+        #         Output options shared by all `augur curate` commands.
+        #         If no output options are provided, commands will output NDJSON records to stdout.
+        #     """)
+        self.add_argument("--output-metadata",
+            help="Output metadata TSV file. Accepts '-' to output TSV to stdout.")
+
+        self.add_argument("--output-fasta",
+            help="Output FASTA file.")
+        self.add_argument("--output-id-field",
+            help="The record field to use as the sequence identifier in the FASTA output.")
+        self.add_argument("--output-seq-field",
+            help="The record field that contains the sequence for the FASTA output. "
+                 "This field will be deleted from the metadata output.")
 
 
-def register_parser(parent_subparsers):
-    shared_parser = create_shared_parser()
-    parser = parent_subparsers.add_parser("curate", help=__doc__)
-
-    # Add print_help so we can run it when no subcommands are called
-    parser.set_defaults(print_help = parser.print_help)
-
-    # Add subparsers for subcommands
-    subparsers = parser.add_subparsers(dest="subcommand", required=False)
-    # Add the shared_parser to make it available for subcommands
-    # to include in their own parser
-    subparsers.shared_parser = shared_parser
-    # Using a subcommand attribute so subcommands are not directly
-    # run by top level Augur. Process I/O in `curate`` so individual
-    # subcommands do not have to worry about it.
-    add_command_subparsers(subparsers, SUBCOMMANDS, SUBCOMMAND_ATTRIBUTE)
-
-    return parser
+def register_parser(parent_subparsers: SubparserBase):
+    parent_subparsers.add_subparser("curate", CurateParser, help=__doc__)
 
 
 def validate_records(records: Iterable[dict], subcmd_name: str, is_input: bool) -> Iterable[dict]:
@@ -160,7 +165,7 @@ def validate_records(records: Iterable[dict], subcmd_name: str, is_input: bool) 
         yield record
 
 
-def run(args):
+def run(args: CurateParser):
     # Print help if no subcommands are used
     if not getattr(args, SUBCOMMAND_ATTRIBUTE, None):
         return args.print_help()

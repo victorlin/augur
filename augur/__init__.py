@@ -7,6 +7,7 @@ import os
 import sys
 import importlib
 import traceback
+from tap import Tap
 from textwrap import dedent
 from types import SimpleNamespace
 from treetime import TreeTimeError, TreeTimeUnknownError
@@ -22,44 +23,46 @@ sys.setrecursionlimit(int(os.environ.get("AUGUR_RECURSION_LIMIT") or DEFAULT_AUG
 command_strings = [
     "parse",
     "curate",
-    "merge",
-    "index",
-    "filter",
-    "mask",
-    "align",
-    "tree",
-    "refine",
-    "ancestral",
-    "translate",
-    "reconstruct_sequences",
-    "clades",
-    "traits",
-    "sequence_traits",
-    "lbi",
-    "distance",
-    "titers",
-    "frequencies",
-    "export",
-    "validate",
-    "version",
-    "import_",
-    "measurements",
-    "read_file",
-    "write_file",
+    # "merge",
+    # "index",
+    # "filter",
+    # "mask",
+    # "align",
+    # "tree",
+    # "refine",
+    # "ancestral",
+    # "translate",
+    # "reconstruct_sequences",
+    # "clades",
+    # "traits",
+    # "sequence_traits",
+    # "lbi",
+    # "distance",
+    # "titers",
+    # "frequencies",
+    # "export",
+    # "validate",
+    # "version",
+    # "import_",
+    # "measurements",
+    # "read_file",
+    # "write_file",
 ]
 
 COMMANDS = [importlib.import_module('augur.' + c) for c in command_strings]
 
+
+class RootParser(Tap):
+    def configure(self):
+        add_default_command(self)
+        add_version_alias(self)
+        add_command_subparsers(self, COMMANDS)
+
+
 def make_parser():
-    parser = argparse.ArgumentParser(
+    parser = RootParser(
         prog        = "augur",
         description = "Augur: A bioinformatics toolkit for phylogenetic analysis.")
-
-    add_default_command(parser)
-    add_version_alias(parser)
-
-    subparsers = parser.add_subparsers()
-    add_command_subparsers(subparsers, COMMANDS)
 
     return parser
 

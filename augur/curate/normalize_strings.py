@@ -7,17 +7,24 @@ in cases where strings contain diacritics (see https://unicode.org/faq/normaliza
 import unicodedata
 
 from augur.utils import first_line
+from . import CurateParser
 
 
-def register_parser(parent_subparsers):
-    parser = parent_subparsers.add_parser("normalize-strings",
-        parents=[parent_subparsers.shared_parser],
-        help=first_line(__doc__))
+class NormalizeStringsParser(CurateParser):
+    form: str
 
-    optional = parser.add_argument_group(title="OPTIONAL")
-    optional.add_argument("--form", default="NFC", choices=["NFC", "NFKC", "NFD", "NFKD"],
-        help="Unicode normalization form to use for normalization.")
-    return parser
+    def configure(self):
+        super().add_shared_args()
+
+        # FIXME: Argument groups are not supported.
+        # <https://github.com/swansonk14/typed-argument-parser/issues/17>
+        # self.add_argument_group(title="OPTIONAL")
+        self.add_argument("--form", default="NFC", choices=["NFC", "NFKC", "NFD", "NFKD"],
+            help="Unicode normalization form to use for normalization.")
+
+
+def register_parser(parent_subparsers: CurateParser):
+    parent_subparsers.add_subparser("normalize-strings", NormalizeStringsParser, help=first_line(__doc__))
 
 
 def normalize_strings(record, form='NFC'):
@@ -44,6 +51,6 @@ def normalize_strings(record, form='NFC'):
     }
 
 
-def run(args, records):
+def run(args: NormalizeStringsParser, records):
     for record in records:
         yield normalize_strings(record, args.form)

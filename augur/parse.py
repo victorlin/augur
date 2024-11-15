@@ -4,7 +4,9 @@ Parse delimited fields from FASTA sequence names into a TSV and FASTA file.
 import Bio.SeqRecord
 import pandas as pd
 import sys
-from typing import Dict, Sequence, Tuple
+from tap import Tap
+from typing import Dict, Sequence, Tuple, Optional, List, Literal
+from .argparse_ import SubparserBase
 
 from .io.file import open_file
 from .io.sequences import read_sequences, write_sequences
@@ -157,22 +159,34 @@ def parse_sequence(
     return sequence, metadata
 
 
-def register_parser(parent_subparsers):
-    parser = parent_subparsers.add_parser("parse", help=__doc__)
-    parser.add_argument('--sequences', '-s', required=True, help="sequences in fasta or VCF format")
-    parser.add_argument('--output-sequences', required=True, help="output sequences file")
-    parser.add_argument('--output-metadata', required=True, help="output metadata file")
-    parser.add_argument('--output-id-field', required=False,
-                        help=f"The record field to use as the sequence identifier in the FASTA output. If not provided, this will use the first available of {PARSE_DEFAULT_ID_COLUMNS}. If none of those are available, this will use the first field in the fasta header.")
-    parser.add_argument('--fields', required=True, nargs='+', action='extend', help="fields in fasta header")
-    parser.add_argument('--prettify-fields', nargs='+', action='extend', help="apply string prettifying operations (underscores to spaces, capitalization, etc) to specified metadata fields")
-    parser.add_argument('--separator', default='|', help="separator of fasta header")
-    parser.add_argument('--fix-dates', choices=['dayfirst', 'monthfirst'],
-                                help="attempt to parse non-standard dates and output them in standard YYYY-MM-DD format")
-    return parser
+class ParseArgs(SubparserBase):
+    sequences: str
+    output_sequences: str
+    output_metadata: str
+    output_id_field: Optional[str]
+    fields: List[str]
+    prettify_fields: Optional[List[str]]
+    separator: str
+    fix_dates: Optional[Literal['dayfirst', 'monthfirst']]
+
+    def configure(self):
+        self.add_argument('--sequences', '-s', required=True, help="sequences in fasta or VCF format")
+        self.add_argument('--output-sequences', required=True, help="output sequences file")
+        self.add_argument('--output-metadata', required=True, help="output metadata file")
+        self.add_argument('--output-id-field', required=False,
+                            help=f"The record field to use as the sequence identifier in the FASTA output. If not provided, this will use the first available of {PARSE_DEFAULT_ID_COLUMNS}. If none of those are available, this will use the first field in the fasta header.")
+        self.add_argument('--fields', required=True, nargs='+', action='extend', help="fields in fasta header")
+        self.add_argument('--prettify-fields', nargs='+', action='extend', help="apply string prettifying operations (underscores to spaces, capitalization, etc) to specified metadata fields")
+        self.add_argument('--separator', default='|', help="separator of fasta header")
+        self.add_argument('--fix-dates', choices=['dayfirst', 'monthfirst'],
+                                    help="attempt to parse non-standard dates and output them in standard YYYY-MM-DD format")
 
 
-def run(args):
+def register_parser(parent_subparsers: Tap):
+    parent_subparsers.add_subparser("parse", ParseArgs, help=__doc__)
+
+
+def run(args: ParseArgs):
     '''
     parse a fasta file and turn information in the header into
     a tsv or csv file.
@@ -183,12 +197,8 @@ def run(args):
     # field to index the dictionary and the data frame
     meta_data = {}
 
-    strain_key = None
-    if args.output_id_field:
-        if args.output_id_field not in args.fields:
-            raise AugurError(f"Output id field '{args.output_id_field}' not found in fields {args.fields}.")
-        strain_key = args.output_id_field
-    else:
+    strain_key = args.output_id_field
+    if not strain_key:
         for possible_id in PARSE_DEFAULT_ID_COLUMNS:
             if possible_id in args.fields:
                 strain_key = possible_id

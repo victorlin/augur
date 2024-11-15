@@ -3,15 +3,18 @@ Format date fields to ISO 8601 dates (YYYY-MM-DD).
 
 If the provided ``--expected-date-formats`` represent incomplete dates then
 the incomplete dates are masked with 'XX'. For example, providing
-``%Y`` will allow year only dates to be formatted as ``2023-XX-XX``.
+``%%Y`` will allow year only dates to be formatted as ``2023-XX-XX``.
+# FIXME: figure out why this is necessary with Tap
 """
 import re
 from datetime import datetime
+from typing import List
 
 from augur.argparse_ import SKIP_AUTO_DEFAULT_IN_HELP
 from augur.errors import AugurError
 from augur.io.print import print_err
 from augur.types import DataErrorMethod
+from . import CurateParser
 from .format_dates_directives import YEAR_DIRECTIVES, YEAR_MONTH_DIRECTIVES, YEAR_MONTH_DAY_DIRECTIVES
 
 
@@ -25,33 +28,43 @@ DEFAULT_EXPECTED_DATE_FORMATS = [
 ]
 
 
-def register_parser(parent_subparsers):
-    parser = parent_subparsers.add_parser("format-dates",
-        parents=[parent_subparsers.shared_parser],
-        help=__doc__)
+class FormatDatesParser(CurateParser):
+    date_fields: List[str]
+    expected_date_formats: List[str]
+    failure_reporting: DataErrorMethod
+    mask_failure: bool
 
-    required = parser.add_argument_group(title="REQUIRED")
-    required.add_argument("--date-fields", nargs="+", action="extend",
-        help="List of date field names in the record that need to be standardized.")
+    def configure(self):
+        super().add_shared_args()
 
-    optional = parser.add_argument_group(title="OPTIONAL")
-    optional.add_argument("--expected-date-formats", nargs="+", action="extend",
-        default=DEFAULT_EXPECTED_DATE_FORMATS,
-        help="Expected date formats that are currently in the provided date fields, " +
-             "defined by standard format codes as listed at " +
-             "https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes. " +
-             "If a date string matches multiple formats, it will be parsed as the first matched format in the provided order.")
-    optional.add_argument("--failure-reporting",
-        type=DataErrorMethod.argtype,
-        choices=list(DataErrorMethod),
-        default=DataErrorMethod.ERROR_FIRST,
-        help="How should failed date formatting be reported.")
-    optional.add_argument("--no-mask-failure", dest="mask_failure",
-        action="store_false",
-        help="Do not mask dates with 'XXXX-XX-XX' and return original date string if date formatting failed. " +
-             f"(default: False{SKIP_AUTO_DEFAULT_IN_HELP})")
+        # FIXME: Argument groups are not supported.
+        # <https://github.com/swansonk14/typed-argument-parser/issues/17>
+        # self.add_argument_group(title="REQUIRED")
+        self.add_argument("--date-fields", nargs="+", action="extend",
+            help="List of date field names in the record that need to be standardized.")
 
-    return parser
+        # FIXME: Argument groups are not supported.
+        # <https://github.com/swansonk14/typed-argument-parser/issues/17>
+        # self.add_argument_group(title="OPTIONAL")
+        self.add_argument("--expected-date-formats", nargs="+", action="extend",
+            default=DEFAULT_EXPECTED_DATE_FORMATS,
+            help="Expected date formats that are currently in the provided date fields, " +
+                 "defined by standard format codes as listed at " +
+                 "https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes. " +
+                 "If a date string matches multiple formats, it will be parsed as the first matched format in the provided order.")
+        self.add_argument("--failure-reporting",
+            type=DataErrorMethod.argtype,
+            choices=list(DataErrorMethod),
+            default=DataErrorMethod.ERROR_FIRST,
+            help="How should failed date formatting be reported.")
+        self.add_argument("--no-mask-failure", dest="mask_failure",
+            action="store_false",
+            help="Do not mask dates with 'XXXX-XX-XX' and return original date string if date formatting failed. " +
+                 f"(default: False{SKIP_AUTO_DEFAULT_IN_HELP})")
+
+
+def register_parser(parent_subparsers: CurateParser):
+    parent_subparsers.add_subparser("format-dates", FormatDatesParser, help=__doc__)
 
 
 def directive_is_included(potential_directives, date_format):
@@ -181,7 +194,7 @@ def format_date(date_string, expected_formats):
     return None
 
 
-def run(args, records):
+def run(args: FormatDatesParser, records):
     failures = []
     failure_reporting = args.failure_reporting
     failure_suggestion = (
