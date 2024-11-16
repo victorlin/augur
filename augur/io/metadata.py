@@ -26,7 +26,7 @@ class InvalidDelimiter(Exception):
     pass
 
 
-def read_metadata(metadata_file, delimiters=DEFAULT_DELIMITERS, columns=None, id_columns=DEFAULT_ID_COLUMNS, chunk_size=None, dtype=None):
+def read_metadata(metadata_file, delimiters=DEFAULT_DELIMITERS, columns=None, id_columns=DEFAULT_ID_COLUMNS, dtype=None):
     r"""Read metadata from a given filename and into a pandas `DataFrame` or
     `TextFileReader` object.
 
@@ -70,11 +70,6 @@ def read_metadata(metadata_file, delimiters=DEFAULT_DELIMITERS, columns=None, id
     Traceback (most recent call last):
       ...
     Exception: None of the possible id columns ('Virus name') were found in the metadata's columns ('strain', 'virus', 'accession', 'date', 'region', 'country', 'division', 'city', 'db', 'segment', 'authors', 'url', 'title', 'journal', 'paper_url')
-
-    We also allow iterating through metadata in fixed chunk sizes.
-
-    >>> for chunk in read_metadata("tests/functional/filter/data/metadata.tsv", chunk_size=5):
-    ...     print(chunk.shape)
     ...
     (5, 14)
     (5, 14)
@@ -83,44 +78,39 @@ def read_metadata(metadata_file, delimiters=DEFAULT_DELIMITERS, columns=None, id
     """
     kwargs = {
         "sep": _get_delimiter(metadata_file, delimiters),
-        "engine": "c",
-        "skipinitialspace": True,
-        "na_filter": False,
-        "low_memory": False,
+        "engine": "pyarrow",
+        # "skipinitialspace": True,
+        # "na_filter": False,
+        # "low_memory": False,
     }
 
-    if chunk_size:
-        kwargs["chunksize"] = chunk_size
-
-    # Inspect the first chunk of the metadata, to find any valid index columns.
+    # FIXME: use Metadata class to infer id column and delimiter since pyarrow can no longer read just the first few lines.
     metadata = pd.read_csv(
         metadata_file,
-        iterator=True,
         **kwargs,
         **PANDAS_READ_CSV_OPTIONS,
     )
-    chunk = metadata.read(nrows=1)
-    metadata.close()
 
     id_columns_present = [
         id_column
         for id_column in id_columns
-        if id_column in chunk.columns
+        if id_column in metadata.columns
     ]
 
     # If we couldn't find a valid index column in the metadata, alert the user.
     if not id_columns_present:
-        raise Exception(f"None of the possible id columns ({', '.join(map(repr, id_columns))}) were found in the metadata's columns ({', '.join(map(repr, chunk.columns))})")
+        raise Exception(f"None of the possible id columns ({', '.join(map(repr, id_columns))}) were found in the metadata's columns ({', '.join(map(repr, metadata.columns))})")
     else:
         index_col = id_columns_present[0]
 
     # If we found a valid column to index the DataFrame, specify that column.
     kwargs["index_col"] = index_col
 
+    # FIXME: reconsider the value of reading a subset of columns under pyarrow engine
     if columns is not None:
         # Load a subset of the columns.
         for requested_column in list(columns):
-            if requested_column not in chunk.columns:
+            if requested_column not in metadata.columns:
                 # Ignore missing columns. Don't error since augur filter's
                 # --exclude-where allows invalid columns to be specified (they
                 # are just ignored).
@@ -152,9 +142,14 @@ def read_metadata(metadata_file, delimiters=DEFAULT_DELIMITERS, columns=None, id
     else:
         raise AugurError(f"Unsupported value for dtype: '{dtype}'")
 
-    kwargs["dtype"] = dtype
+    # FIXME: numeric columns aren't stored as string...
+    # this is problematic (see cram/filter-numerical-ids.t)
+    # https://github.com/pandas-dev/pandas/issues/53229#issuecomment-1737875420
+    import pyarrow as pa
+    kwargs["dtype"] = pa.string
+    # kwargs["dtype_backend"] = "pyarrow"
 
-    return pd.read_csv(
+    yield pd.read_csv(
         metadata_file,
         **kwargs,
         **PANDAS_READ_CSV_OPTIONS,
