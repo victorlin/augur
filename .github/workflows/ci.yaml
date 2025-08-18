@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/setup-python@v5
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - run: pip install .[dev]
     - run: mypy
 
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/setup-python@v5
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - run: npx pyright --stats
 
   pytest-cram:
@@ -57,7 +57,7 @@ jobs:
       COVERAGE_FILE: ${{ github.workspace }}/.coverage@python=${{ matrix.python-version }},biopython=${{ matrix.biopython-version || 'latest' }}
       COVERAGE_RCFILE: ${{ github.workspace }}/.coveragerc
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Set cache key
       run: echo "DATE=$(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
@@ -118,7 +118,7 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: ./augur
 
@@ -143,7 +143,7 @@ jobs:
       # Replace the Conda Augur installation with the local version.
       - run: pip install ./augur
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: nextstrain/${{ matrix.pathogen }}
           path: ./pathogen-repo
@@ -254,7 +254,7 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: ./augur
 
@@ -279,7 +279,7 @@ jobs:
       # Replace the Conda Augur installation with the local version.
       - run: pip install ./augur
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: nextstrain/${{ matrix.pathogen }}
           path: ./pathogen-repo
@@ -312,7 +312,7 @@ jobs:
     needs: [pytest-cram]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
       - run: pip install coverage
 
@@ -339,7 +339,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - run: pip install .[dev]
 
@@ -361,7 +361,7 @@ jobs:
     needs: [pytest-cram]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Fetch all branches and tags.
           fetch-depth: 0
