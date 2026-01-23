@@ -18,3 +18,5 @@ dependencies:
   - seqkit
   - conda-forge::sqlite
   - conda-forge::tsv-utils
+  # Tools used in tests
+  - conda-forge::jq
