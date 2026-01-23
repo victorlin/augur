@@ -1,0 +1,20 @@
+# This file is used to provide a development environment for Augur.
+# https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-file-manually
+
+# While Augur is available as a Conda package, it is not listed here.
+# Augur itself and its Python dependencies should be installed via pip.
+
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - conda-forge::python
+  # Augur's non-Python dependencies
+  - mafft
+  - raxml
+  - fasttree
+  - iqtree
+  - vcftools
+  - seqkit
+  - conda-forge::sqlite
+  - conda-forge::tsv-utils

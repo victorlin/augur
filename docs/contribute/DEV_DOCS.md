@@ -15,6 +15,27 @@ This project strictly adheres to the
 
 Please see the [open issues list](https://github.com/nextstrain/augur/issues) for currently available issues.
 
+## Preparing your environment
+
+1. Set up a local development environment with all [external dependencies](../installation/non-python-dependencies.rst). You can do so with [conda](https://docs.conda.io/projects/conda) or [micromamba](https://mamba.readthedocs.io).
+
+    ```bash
+    NAME=augur
+    conda env create -n "$NAME" -f dev_env.yml
+    ```
+
+2. Activate the new environment.
+
+    ```bash
+    conda activate "$NAME"
+    ```
+
+3. Install the `augur` command and Python dependencies.
+
+    ```bash
+    pip install -e '.[dev]'
+    ```
+
 ## Contributing code
 
 We currently target compatibility with Python 3.9 and higher. As Python releases new versions,
@@ -98,7 +119,7 @@ Both tree and JSON comparison scripts rely on [deepdiff](https://deepdiff.readth
 #### Running Tests
 
 You've written tests and now you want to run them to see if they are passing.
-First, you will need to [install the complete Nextstrain environment](https://nextstrain.org/docs/getting-started/local-installation) and augur dev dependencies as described above.
+First, you will need to set up your development environment as described [above](#preparing-your-environment).
 Next, run all augur tests with the following command from the root, top-level of the augur repository:
 
 ```bash
@@ -335,14 +356,7 @@ submodule, autogenerate a new API file as follows.
 ### Building documentation
 
 Building the documentation locally is useful to test changes.
-First, make sure you have the development dependencies of augur installed:
-
-```bash
-pip install -e '.[dev]'
-```
-
-This installs packages listed in the `dev` section of `extras_require` in _setup.py_,
-as well as augur's dependencies as necessary.
+First, make sure you have set up your development environment as described [above](#preparing-your-environment).
 
 Sphinx and make are used when **building** documentation. Here are some examples that you
 may find useful:
