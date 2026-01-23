@@ -57,8 +57,6 @@ jobs:
       with:
         create-args: ${{ matrix.conda-args }}
         environment-file: dev_env.yml
-        condarc: |
-          channel_priority: strict
         cache-environment: true
         cache-environment-key: ${{ env.DATE }}
         environment-name: augur
