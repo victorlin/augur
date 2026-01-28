@@ -85,7 +85,7 @@ jobs:
         environment-name: augur
 
     # Replace the Conda Augur installation with the local version.
-    - run: pip install .[dev]
+    - run: pip install .[dev,piqtree]
     - run: pip list
     - run: conda info
     - run: conda list
@@ -181,7 +181,8 @@ jobs:
           environment-name: augur
 
       # Replace the Conda Augur installation with the local version.
-      - run: pip install ./augur
+      # NOTE: piqtree isn't installed because nextstrain-base is currently locked to python 3.11
+      - run: pip install ./augur[piqtree]
 
       - uses: actions/checkout@v6
         with:
@@ -309,7 +310,8 @@ jobs:
           environment-name: augur
 
       # Replace the Conda Augur installation with the local version.
-      - run: pip install ./augur
+      # NOTE: piqtree isn't installed because nextstrain-base is currently locked to python 3.11
+      - run: pip install ./augur[piqtree]
 
       - uses: actions/checkout@v6
         with:
