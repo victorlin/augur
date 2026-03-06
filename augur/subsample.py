@@ -35,18 +35,18 @@ same option. When there is no second flag, absence of the first flag indicates
 the default behavior.
 """
 
-AugurFilterOption = Union[str, BooleanFlags]
+AugurOption = Union[str, BooleanFlags]
 """
-Type for an augur filter command line option. Either a single option or boolean
+Type for an augur command line option. Either a single option or boolean
 pair of flags.
 """
 
-FilterArgs = Dict[str, Any]
+AugurArgs = Dict[str, Any]
 """
-Augur filter arguments stored as a mapping from option to value.
+Augur command arguments stored as a mapping from option to value.
 """
 
-GLOBAL_CLI_OPTIONS: Dict[str, AugurFilterOption] = {
+GLOBAL_CLI_OPTIONS: Dict[str, AugurOption] = {
     "metadata": "--metadata",
     "metadata_chunk_size": "--metadata-chunk-size",
     "metadata_delimiters": "--metadata-delimiters",
@@ -61,7 +61,7 @@ These are sent to both intermediate and final augur filter calls.
 """
 
 
-FINAL_CLI_OPTIONS: Dict[str, AugurFilterOption] = {
+FINAL_CLI_OPTIONS: Dict[str, AugurOption] = {
     "output_metadata": "--output-metadata",
     "output_sequences": "--output-sequences",
     "output_log": "--output-log",
@@ -74,9 +74,15 @@ These are sent to only the final augur filter call.
 
 # NOTE: If you edit any of these values, please re-run
 # devel/regenerate-subsample-schema and commit the schema changes too.
-SAMPLE_CONFIG: Dict[str, AugurFilterOption|None] = {
+SAMPLE_CONFIG: Dict[str, AugurOption|None] = {
     "target_sample": None, # TODO XXX - config option which doesn't map directly to an augur filter cmd line arg
     "drop_sample": None, # TODO XXX - config option which doesn't map directly to an augur filter cmd line arg
+}
+"""
+Mapping of YAML configuration key name to general sample option.
+"""
+
+FILTER_SAMPLE_CONFIG: Dict[str, AugurOption|None] = {
     "exclude": "--exclude",
     "exclude_all": ("--exclude-all", None),
     "exclude_ambiguous_dates_by": "--exclude-ambiguous-dates-by",
@@ -101,14 +107,9 @@ Mapping of YAML configuration key name to augur filter option.
 These are sent to only the intermediate augur filter calls.
 """
 
-AugurProximityOption = Union[str, BooleanFlags]
-"""
-Type for an augur proximity command line option. Either a single option or boolean
-pair of flags.
-"""
 
 # TODO XXX Can we not get this from augur proximity? Too much repitition...
-SAMPLE_PROXIMITY_CONFIG: Dict[str, AugurProximityOption|None] = {
+PROXIMAL_SAMPLE_CONFIG: Dict[str, AugurOption|None] = {
     "query_sample": None, # TODO XXX
     "drop_sample": None, # TODO XXX
     "context_sample": None, # TODO XXX
@@ -196,8 +197,8 @@ def run(args: argparse.Namespace) -> None:
     # since some samples depend on others. They will be completed when we create the DAG.
 
     defaults = config.get("defaults")
-    samples: List[Sample|ProximalSample] = []
-    global_filter_args: FilterArgs = {}
+    samples: List[Sample] = []
+    global_filter_args: AugurArgs = {}
     for cli_option, filter_option in GLOBAL_CLI_OPTIONS.items():
         if (value := getattr(args, cli_option)) is not None:
             _add_to_args(global_filter_args, filter_option, value)
@@ -220,7 +221,7 @@ def run(args: argparse.Namespace) -> None:
                 _global_filter_args.pop("--sequences") # key must exist
                 _global_filter_args.pop("--sequence_index", None) # key optional
     
-            sample = Sample(name, merged_options, _global_filter_args, drop=drop, target_sample=target_sample)
+            sample = FilterSample(name, merged_options, _global_filter_args, drop=drop, target_sample=target_sample)
             samples.append(sample)
         elif sample_type == 'sampleProximityProperties':
             # TODO XXX -- replace globals / filter globals etc
@@ -235,7 +236,7 @@ def run(args: argparse.Namespace) -> None:
         else:
             raise AugurError(f"Unknown schema match {sample_type!r} for sample {name!r}")
 
-    final_filter_args: FilterArgs = {}
+    final_filter_args: AugurArgs = {}
     for cli_option, filter_option in FINAL_CLI_OPTIONS.items():
         if (value := getattr(args, cli_option)) is not None:
             _add_to_args(final_filter_args, filter_option, value)
@@ -581,117 +582,31 @@ def _merge_options(sample_options: Dict[str, Any], defaults: Optional[Dict[str, 
 
 
 class Sample:
-    def __init__(self, name: str, config: Dict[str, Any], global_filter_args: FilterArgs, /, drop: bool=False, target_sample: str|None=None) -> None:
+    augur_cmd: str
+    args: AugurArgs
+
+    def __init__(self, name: str, drop: bool, nthreads: int) -> None:
         self.name = name
-        self.augur_cmd = 'filter'
         self.outputs = {
             'strains': tempfile.NamedTemporaryFile(prefix=f"sample_{self.name}_", delete=False).name
         }
-        self.nthreads = 1
+        self.nthreads = nthreads
         self.drop = drop # flag indicating this sample shouldn't be used in the final output
-        self.depends_on: dict[str, str] = {'target_sample': target_sample} if target_sample else {}
-        self.incomplete:bool = bool(self.depends_on) # if it depends on other samples it will be incomplete until we run `connect_dependencies` for each
-        self.args = self._construct_args(config, global_filter_args)
-        
-        if DEBUGGING:
-            print("\n\nSample:", self.name, f"\n\t{self.drop=} {self.incomplete=} {self.depends_on=}\n\tArgs: ", self.args)
+        self.depends_on: dict[str, str] = {}
+        self.incomplete:bool = False
 
     def __repr__(self):
         # helps with debugging
-        return f"Sample obj ({self.name})"
-
-    def _construct_args(self, config: Dict[str, Any], global_filter_args: FilterArgs) -> FilterArgs:
-        """
-        Construct filter arguments from YAML config and global arguments.
-
-        Extends global filter arguments:
-
-        >>> global_args = {"--metadata": "test.tsv", "--sequences": "test.fasta"}
-        >>> sample = Sample("test_sample", {}, global_args)
-        >>> sample.args["--metadata"]
-        'test.tsv'
-        >>> sample.args["--sequences"]
-        'test.fasta'
-
-        Maps YAML config to filter arguments:
-
-        >>> config = {"min_date": "2020-01-01", "group_by": ["region", "year"], "sequences_per_group": 5, "non_nucleotide": True, "probabilistic_sampling": False}
-        >>> sample = Sample("test_sample", config, {})
-        >>> sample.args["--min-date"]
-        '2020-01-01'
-        >>> sample.args["--group-by"]
-        ['region', 'year']
-        >>> sample.args["--sequences-per-group"]
-        5
-        >>> "--non-nucleotide" in sample.args
-        True
-        >>> "--no-probabilistic-sampling" in sample.args
-        True
-        """
-        filter_args = {
-            # Checks are redundant across multiple calls with the same input.
-            # Checks will run once on the final augur filter call, unless explicitly skipped.
-            "--skip-checks": None,
-
-            # Use the sample's nthreads property for thread allocation.
-            "--nthreads": self.nthreads,
-
-            # Store outcome as a list of ids to be used by --include in the final augur filter call.
-            "--output-strains": self.outputs['strains']
-        }
-
-        filter_args.update(global_filter_args)
-
-        for config_key, value in config.items():
-            filter_option = SAMPLE_CONFIG[config_key]
-            _add_to_args(filter_args, filter_option, value)
-
-        return filter_args
-
-    def connect_dependencies(self, samples_by_name: Dict[str,Sample|ProximalSample]) -> None:
-        """
-        Given all known samples_by_name (i.e. ones which this sample depends on), connect
-        this sample to its dependencies. Essentially use their _outputs_ as _inputs_ for our
-        sample (i.e. `self`). This may requires modifying upstream sample(s) to output
-        sequences & metadata which we can consume!
-
-        When all upstream dependencies have been wired up, ``self.incomplete``
-        is set to False.
-        """
-        if not self.depends_on:
-            return # A sample doesn't need a dependency (most won't have any!)
-        assert set(self.depends_on.keys()) == set(['target_sample']), "This must be a [Augur filter] Sample"
-        # TODO XXX - what about if the target sample is a proximity?
-        upstream = samples_by_name[self.depends_on['target_sample']]
-        assert type(upstream) is Sample, "Target sample must currently be an [Augur Filter] sample" # TODO XXX
-        assert not upstream.incomplete
-        
-        # modify upstream to output more than just a strains list
-        upstream.outputs['metadata']  = tempfile.NamedTemporaryFile(prefix=f"sample_{upstream.name}_metadata_", delete=False).name
-        upstream.outputs['sequences'] = tempfile.NamedTemporaryFile(prefix=f"sample_{upstream.name}_sequences_", delete=False).name
-        _add_to_args(upstream.args, "--output-metadata", upstream.outputs['metadata'])
-        _add_to_args(upstream.args, "--output-sequences", upstream.outputs['sequences'])
-
-        # and modify downstream (self!) to use these outputs as inputs
-        _add_to_args(self.args, "--metadata", upstream.outputs['metadata'])
-        _add_to_args(self.args, "--sequences", upstream.outputs['sequences'])
-
-        self.incomplete = False
-
-        if DEBUGGING:
-            print(f"\n\nMapping dependencies between upstream sample {upstream.name} and downstream {self.name}")
-            print("\n\tupstream:", upstream.args)
-            print("\n\tdownstream:", self.args)
+        return f"{self.__class__.__name__} obj ({self.name})"
 
     def run(self) -> None:
-        """Run augur filter as a subprocess.
+        """Run an augur command as a subprocess.
 
         Notes:
 
-        - A direct import of augur.filter in Python is not used because all
+        - A direct import of the command in Python is not used because all
           samples would share the same sys.stderr, which causes interleaved
           messages when processes are run in parallel.
-          This is also why _run_final_filter() isn't repurposed for use here.
 
         - shell=True is not used because it requires additional logic to
           carefully escape values such as "--metadata-delimiters , \t".
@@ -723,17 +638,111 @@ class Sample:
                 if DEBUGGING:
                     print(f"Removed temporary file for sample {self.name} file type {ftype}")
 
-class ProximalSample(Sample):
-    def __init__(self, name: str, config: Dict[str, Any], global_filter_args: FilterArgs, /, drop: bool=False, target_sample: str|None=None, nthreads: int=1) -> None:
-        self.name = name
-        self.augur_cmd = 'proximity'
-        self.nthreads = nthreads
-        self.outputs = {
-            'strains': tempfile.NamedTemporaryFile(prefix=f"sample_{self.name}_", delete=False).name
-        }
-        self.drop = drop # flag indicating this sample shouldn't be used in the final output
+
+class FilterSample(Sample):
+    def __init__(self, name: str, config: Dict[str, Any], global_filter_args: AugurArgs, /, drop: bool=False, target_sample: str|None=None) -> None:
+        super().__init__(name, drop=drop, nthreads=1)
+        self.augur_cmd = 'filter'
+        self.depends_on = {'target_sample': target_sample} if target_sample else {}
+        self.incomplete = bool(self.depends_on)
+        self.args = self._construct_args(config, global_filter_args)
         
-        self.depends_on: dict[str, str] = {}
+        if DEBUGGING:
+            print("\n\nFilterSample:", self.name, f"\n\t{self.drop=} {self.incomplete=} {self.depends_on=}\n\tArgs: ", self.args)
+
+    def _construct_args(self, config: Dict[str, Any], global_filter_args: AugurArgs) -> AugurArgs:
+        """
+        Construct filter arguments from YAML config and global arguments.
+
+        Extends global filter arguments:
+
+        >>> global_args = {"--metadata": "test.tsv", "--sequences": "test.fasta"}
+        >>> sample = FilterSample("test_sample", {}, global_args)
+        >>> sample.args["--metadata"]
+        'test.tsv'
+        >>> sample.args["--sequences"]
+        'test.fasta'
+
+        Maps YAML config to filter arguments:
+
+        >>> config = {"min_date": "2020-01-01", "group_by": ["region", "year"], "sequences_per_group": 5, "non_nucleotide": True, "probabilistic_sampling": False}
+        >>> sample = FilterSample("test_sample", config, {})
+        >>> sample.args["--min-date"]
+        '2020-01-01'
+        >>> sample.args["--group-by"]
+        ['region', 'year']
+        >>> sample.args["--sequences-per-group"]
+        5
+        >>> "--non-nucleotide" in sample.args
+        True
+        >>> "--no-probabilistic-sampling" in sample.args
+        True
+        """
+        filter_args = {
+            # Checks are redundant across multiple calls with the same input.
+            # Checks will run once on the final augur filter call, unless explicitly skipped.
+            "--skip-checks": None,
+
+            # Use the sample's nthreads property for thread allocation.
+            "--nthreads": self.nthreads,
+
+            # Store outcome as a list of ids to be used by --include in the final augur filter call.
+            "--output-strains": self.outputs['strains']
+        }
+
+        filter_args.update(global_filter_args)
+
+        for config_key, value in config.items():
+            if config_key in SAMPLE_CONFIG:
+                filter_option = SAMPLE_CONFIG[config_key]
+            else:
+                filter_option = FILTER_SAMPLE_CONFIG[config_key]
+            if filter_option is not None:
+                _add_to_args(filter_args, filter_option, value)
+
+        return filter_args
+
+    def connect_dependencies(self, samples_by_name: Dict[str, Sample]) -> None:
+        """
+        Given all known samples_by_name (i.e. ones which this sample depends on), connect
+        this sample to its dependencies. Essentially use their _outputs_ as _inputs_ for our
+        sample (i.e. `self`). This may requires modifying upstream sample(s) to output
+        sequences & metadata which we can consume!
+
+        When all upstream dependencies have been wired up, ``self.incomplete``
+        is set to False.
+        """
+        if not self.depends_on:
+            return # A sample doesn't need a dependency (most won't have any!)
+        assert set(self.depends_on.keys()) == set(['target_sample']), "This must be a [Augur filter] Sample"
+        # TODO XXX - what about if the target sample is a proximity?
+        upstream = samples_by_name[self.depends_on['target_sample']]
+        assert type(upstream) is FilterSample, "Target sample must currently be an [Augur Filter] sample" # TODO XXX
+        assert not upstream.incomplete
+        
+        # modify upstream to output more than just a strains list
+        upstream.outputs['metadata']  = tempfile.NamedTemporaryFile(prefix=f"sample_{upstream.name}_metadata_", delete=False).name
+        upstream.outputs['sequences'] = tempfile.NamedTemporaryFile(prefix=f"sample_{upstream.name}_sequences_", delete=False).name
+        _add_to_args(upstream.args, "--output-metadata", upstream.outputs['metadata'])
+        _add_to_args(upstream.args, "--output-sequences", upstream.outputs['sequences'])
+
+        # and modify downstream (self!) to use these outputs as inputs
+        _add_to_args(self.args, "--metadata", upstream.outputs['metadata'])
+        _add_to_args(self.args, "--sequences", upstream.outputs['sequences'])
+
+        self.incomplete = False
+
+        if DEBUGGING:
+            print(f"\n\nMapping dependencies between upstream sample {upstream.name} and downstream {self.name}")
+            print("\n\tupstream:", upstream.args)
+            print("\n\tdownstream:", self.args)
+
+
+class ProximalSample(Sample):
+    def __init__(self, name: str, config: Dict[str, Any], global_filter_args: AugurArgs, /, drop: bool=False, target_sample: str|None=None, nthreads: int=1) -> None:
+        super().__init__(name, drop=drop, nthreads=nthreads)
+        self.augur_cmd = 'proximity'
+        
         self.depends_on['query_sample'] = config.pop('query_sample')
         if context_sample:=config.pop('context_sample', False):
             self.depends_on['context_sample'] = context_sample
@@ -744,7 +753,7 @@ class ProximalSample(Sample):
         if DEBUGGING:
             print("\n\nProximity sample:", self.name, f"\n\t{self.drop=} {self.incomplete=} {self.depends_on=}\n\tArgs: ", self.args)
 
-    def _construct_args(self, config: Dict[str, Any], global_filter_args: FilterArgs) -> FilterArgs:
+    def _construct_args(self, config: Dict[str, Any], global_filter_args: AugurArgs) -> AugurArgs:
         filter_args = {
             # Currently only hamming is available. If / when we expand this then configs should override this value
             "--method": "hamming",
@@ -761,16 +770,17 @@ class ProximalSample(Sample):
         filter_args.update(global_filter_args)
 
         for config_key, value in config.items():
-            filter_option = SAMPLE_PROXIMITY_CONFIG[config_key]
-            _add_to_args(filter_args, filter_option, value)
+            filter_option = PROXIMAL_SAMPLE_CONFIG[config_key]
+            if filter_option is not None:
+                _add_to_args(filter_args, filter_option, value)
 
         return filter_args
 
-    def connect_dependencies(self, samples_by_name: Dict[str,Sample|ProximalSample]) -> None:
+    def connect_dependencies(self, samples_by_name: Dict[str, Sample]) -> None:
         query_sample = samples_by_name[self.depends_on['query_sample']]
         assert not query_sample.incomplete
 
-        if type(query_sample) is not Sample:
+        if type(query_sample) is not FilterSample:
             raise AugurError(dedent(f"""\
                 The proximity sample {self.name!r} declares a query sample of {self.depends_on['query_sample']!r}
                 which must itself be a non-proximity sample. I.e. you can't proximity sample directly from another
@@ -787,7 +797,7 @@ class ProximalSample(Sample):
         if 'context_sample' in self.depends_on:
             context_sample = samples_by_name[self.depends_on['context_sample']]
             assert not context_sample.incomplete
-            if type(context_sample) is not Sample:
+            if type(context_sample) is not FilterSample:
                 raise AugurError(dedent(f"""\
                 The proximity sample {self.name!r} declares a context sample of {self.depends_on['context_sample']!r}
                 which must itself be a non-proximity sample. I.e. you can't proximity sample directly from another
@@ -1058,7 +1068,7 @@ def _print_dag(samples: List[Sample], dependents: Dict[str, List[str]]) -> None:
     print("\n".join(lines))
 
 
-def _add_to_args(args: FilterArgs, filter_option: AugurFilterOption, value: Any) -> None:
+def _add_to_args(args: AugurArgs, filter_option: AugurOption, value: Any) -> None:
     """
     Add a filter option and its value to the arguments dictionary.
 
@@ -1133,7 +1143,7 @@ def _add_to_args(args: FilterArgs, filter_option: AugurFilterOption, value: Any)
         args[filter_option] = value
 
 
-def _args_dict_to_list(args: FilterArgs) -> List[str]:
+def _args_dict_to_list(args: AugurArgs) -> List[str]:
     """
     Convert an arguments dictionary to a list suitable for argparse and subprocesses.
 
@@ -1183,7 +1193,7 @@ def _args_dict_to_list(args: FilterArgs) -> List[str]:
     return args_list
 
 
-def _run_final_filter(filter_args: FilterArgs, name: str) -> None:
+def _run_final_filter(filter_args: AugurArgs, name: str) -> None:
     """Run augur filter as part of the augur subsample process.
 
     Note: intermediate augur filter calls go through a separate subprocess to
