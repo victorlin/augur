@@ -12,7 +12,7 @@ from .io.sequences import read_sequences, write_sequences
 from .dates import get_numerical_date_from_value
 from .errors import AugurError
 
-PARSE_DEFAULT_ID_COLUMNS = ("strain", "name")
+PARSE_DEFAULT_ID_COLUMNS = ("id", "strain", "name")
 
 forbidden_characters = str.maketrans(
     {' ': None,
@@ -218,8 +218,9 @@ def run(args):
             )
 
     df = pd.DataFrame(meta_data.values())
-    df.to_csv(
-        args.output_metadata,
-        index=False,
-        sep='\t' if args.output_metadata.endswith('tsv') else ','
-    )
+    with open_file(args.output_metadata, "w", newline="") as f:
+        df.to_csv(
+            f,
+            index=False,
+            sep='\t' if args.output_metadata.endswith('tsv') else ','
+        )

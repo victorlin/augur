@@ -1,5 +1,5 @@
 """
-Merge two or more datasets into one.
+Merge datasets into one.
 
 Datasets can consist of metadata and/or sequence files. If both are provided,
 the order and file contents are used independently.
@@ -18,8 +18,9 @@ Columns are combined by name, either extending the combined table with a new
 column or overwriting values in an existing column.  For columns appearing in
 more than one table, non-empty values on the right hand side overwrite values
 on the left hand side.  The first table's id column name is used as the output
-id column name.  Non-id columns in other input tables that would conflict with
-this output id column name are not allowed and if present will cause an error.
+id column name, unless overridden with --output-metadata-id-column.  Non-id
+columns in other input tables that would conflict with this output id column
+name are not allowed and if present will cause an error.
 
 One generated column per input table may be optionally appended to the end of
 the output table to identify the source of each row's data.  Column names are
@@ -58,6 +59,7 @@ import re
 import subprocess
 from functools import reduce
 from itertools import starmap
+from packaging.version import Version
 from shlex import quote as shquote
 from shutil import which
 from tempfile import mkstemp
@@ -109,6 +111,7 @@ def register_parser(parent_subparsers):
 
     output_group = parser.add_argument_group("outputs", "options related to output")
     output_group.add_argument('--output-metadata', metavar="FILE", help="Merged metadata as TSV. Compressed files are supported." + SKIP_AUTO_DEFAULT_IN_HELP)
+    output_group.add_argument('--output-metadata-id-column', metavar="COLUMN", help="Name to use for the id column in the merged metadata output. (default: the first input's id column)" + SKIP_AUTO_DEFAULT_IN_HELP)
     output_group.add_argument('--source-columns', metavar="TEMPLATE", help=f"Template with which to generate names for the columns (described above) identifying the source of each row's data. Must contain a literal placeholder, {{NAME}}, which stands in for the metadata table names assigned in --metadata. (default: disabled)" + SKIP_AUTO_DEFAULT_IN_HELP)
     output_group.add_argument('--no-source-columns', dest="source_columns", action="store_const", const=None, help=f"Suppress generated columns (described above) identifying the source of each row's data. This is the default behaviour, but it may be made explicit or used to override a previous --source-columns." + SKIP_AUTO_DEFAULT_IN_HELP)
 
@@ -158,9 +161,6 @@ def run(args):
 
 def merge_metadata(args):
     # Parse --metadata arguments
-    if not len(args.metadata) >= 2:
-        raise AugurError(f"At least two metadata inputs are required for merging.")
-
     if unnamed := [repr(x) for x in args.metadata if "=" not in x or x.startswith("=")]:
         raise AugurError(dedent(f"""\
             All metadata inputs must be assigned a name, e.g. with NAME=FILE.
@@ -240,9 +240,11 @@ def merge_metadata(args):
     # Clean up database file by default
     delete_db = True
 
-    # Track columns as we see them, in order.  The first metadata's id column
-    # is always the first output column of the merge, so insert it now.
-    output_id_column = metadata[0].id_column
+    # Track columns as we see them, in order.  The output id column (either
+    # the first metadata's id column, or an explicit override) is always the
+    # first output column of the merge, so insert it now.
+    output_id_column = args.output_metadata_id_column or metadata[0].id_column
+    output_id_column_source = "the given --output-metadata-id-column" if args.output_metadata_id_column else "the first input's id column"
     output_columns = { output_id_column: [] }
 
     if conflicting_columns := [f"{c!r} in metadata table {m.name!r} (id column: {m.id_column!r})"
@@ -252,7 +254,7 @@ def merge_metadata(args):
                                     and c != m.id_column]:
         raise AugurError(dedent(f"""\
             Non-id column names in metadata inputs may not conflict with the
-            output id column name ({output_id_column!r}, the first input's id column).
+            output id column name ({output_id_column!r}, {output_id_column_source}).
 
             The following input {_n("column", "columns", len(conflicting_columns))} would conflict:
 
@@ -304,8 +306,25 @@ def merge_metadata(args):
             sqlite3(db_path,
                 f'.mode csv',
                 f'.separator {sqlite_quote_dot(m.delimiter)} {sqlite_quote_dot(newline)}',
-                f'.import {sqlite_quote_dot(f"|{augur()} read-file {shquote(m.path)}")} {sqlite_quote_dot(m.table_name)}',
+                f'.import {sqlite_quote_dot(f"|{augur()} read-file {shquote(m.path)}")} {sqlite_quote_dot(m.table_name)}')
 
+            proc = sqlite3(db_path, f"""
+                select {sqlite_quote_id(m.id_column)}
+                from {sqlite_quote_id(m.table_name)}
+                group by {sqlite_quote_id(m.id_column)}
+                having count(*) > 1;
+            """, stdout=subprocess.PIPE)
+
+            if duplicates := proc.stdout.splitlines():
+                raise AugurError(dedent(f"""\
+                    Sequence ids must be unique.
+
+                    The following {_n("id was", "ids were", len(duplicates))} duplicated in metadata table {m.name!r}:
+
+                      {indented_list(map(repr, sorted(duplicates)), '                    ' + '  ')}
+                    """)) from None
+
+            sqlite3(db_path,
                 f'create unique index {sqlite_quote_id(f"{m.table_name}_id")} on {sqlite_quote_id(m.table_name)}({sqlite_quote_id(m.id_column)});',
 
                 # <https://sqlite.org/pragma.html#pragma_optimize>
@@ -365,15 +384,32 @@ def merge_metadata(args):
         # Assume TSV like nearly all other extant --output-metadata options.
         print_info(f"Merging metadata and writing to {args.output_metadata!r}…")
         print_debug(query)
+
+        if sqlite3_version() >= Version("3.53.0"):
+            # Prefer explicit options, only available in SQLite ≥3.53.0.
+            mode = [
+                f'.mode list --quote csv --colsep "\\t" --rowsep "\\n"',
+            ]
+        else:
+            # TODO: Remove when dropping support for SQLite <3.53.0.
+            mode = [
+                f'.mode csv',
+                f'.separator "\\t" "\\n"',
+            ]
+
+        # TODO: Use .once after SQLite bug is fixed: <https://sqlite.org/forum/forumpost/ea9c546fdf>
         sqlite3(db_path,
-            f'.mode csv',
-            f'.separator "\\t" "\\n"',
+            *mode,
             f'.headers on',
-            f'.once {sqlite_quote_dot(f"|{augur()} write-file {shquote(args.output_metadata)}")}',
-            query)
+            f'.output {sqlite_quote_dot(f"|{augur()} write-file {shquote(args.output_metadata)}")}',
+            query,
+            f'.output')
 
     except SQLiteError as err:
+        # Unknown SQLite error
         delete_db = False
+        if err.proc.stderr:
+            print_err(f"[SQLite] {err.proc.stderr}", end="")
         raise AugurError(str(err)) from err
 
     finally:
@@ -384,9 +420,6 @@ def merge_metadata(args):
 
 
 def merge_sequences(args):
-    if not len(args.sequences) >= 2:
-        raise AugurError(f"At least two sequence inputs are required for merging.")
-
     if not args.skip_input_sequences_validation:
         for s in args.sequences:
             print_info(f"Validating {s!r}…")
@@ -396,6 +429,8 @@ def merge_sequences(args):
 
     # Reversed because seqkit rmdup keeps the first entry but this command
     # should keep the last entry.
+    # TODO: use augur read-file once its slowness has been sorted out.
+    # <https://github.com/nextstrain/augur/issues/1838>
     command = f"""
         {seqkit()} --threads {args.nthreads} rmdup {" ".join(shquote(s) for s in reversed(args.sequences))} |
         {augur()} write-file {shquote(args.output_sequences)}
@@ -404,9 +439,9 @@ def merge_sequences(args):
     try:
         run_shell_command(command, raise_errors=True)
     except Exception:
-        # Ideally, read-file, seqkit, and write-file errors would all be handled
-        # separately. That is not possible because everything is done in one
-        # child process with one return code.
+        # Ideally, seqkit and write-file errors would all be handled separately.
+        # That is not possible because everything is done in one child process
+        # with one return code.
         if os.path.isfile(args.output_sequences):
             # Remove the partial output file.
             os.remove(args.output_sequences)
@@ -433,22 +468,36 @@ def sqlite3(*args, **kwargs):
     argv = [sqlite3, "-init", os.devnull, "-batch", *args]
 
     print_debug(f"running {argv!r}")
-    proc = subprocess.run(argv, encoding="utf-8", text=True, **kwargs)
+    proc = subprocess.run(argv, encoding="utf-8", text=True, stderr=subprocess.PIPE, **kwargs)
 
     try:
         proc.check_returncode()
     except subprocess.CalledProcessError as err:
-        raise SQLiteError(f"sqlite3 invocation failed") from err
+        raise SQLiteError(proc, f"sqlite3 invocation failed") from err
 
     return proc
 
 
+def sqlite3_version() -> Version:
+    """
+    Return the version of the installed SQLite 3 CLI program.
+    """
+    proc = sqlite3("-version", stdout=subprocess.PIPE)
+    return Version(proc.stdout.split()[0])
+
+
 class SQLiteError(Exception):
-    pass
+    """
+    Exception raised when `sqlite3` invocation fails.
+    `proc` stores the failed process. Useful for retrieving info such as output.
+    """
+    def __init__(self, proc: subprocess.CompletedProcess, *args):
+        super().__init__(*args)
+        self.proc = proc
 
 
 def sqlite3_table_columns(db_path, table: str) -> Iterable[str]:
-    return sqlite3(db_path, f"select name from pragma_table_info({sqlite_quote_string(table)})", capture_output=True).stdout.splitlines();
+    return sqlite3(db_path, f"select name from pragma_table_info({sqlite_quote_string(table)})", stdout=subprocess.PIPE).stdout.splitlines();
 
 
 def sqlite_quote_id(*xs):

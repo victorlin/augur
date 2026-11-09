@@ -3,6 +3,212 @@
 ## __NEXT__
 
 
+## 34.3.0 (26 October 2026)
+
+### Features
+
+* ancestral, translate: Added `--use-nextclade-gff-style` to read GFF annotations the way Nextclade does. CDS features are used, with CDSs spanning multiple rows (e.g. due to ribosomal slippage or splicing) joined into a single feature; genes without any CDS are used as CDSs themselves; and features are named using Nextclade's attribute priority (e.g. `Name` for CDSs) instead of `gene`/`gene_name`/`locus_tag`. Multi-segment CDSs are not supported for VCF input to `augur translate`. [#2066][] @rneher
+* align, ancestral, translate, tree, refine, sequence-traits: Added `--nextclade-dataset` to source the reference sequence and/or genome annotation from a Nextclade dataset directory (via the `files` section of its `pathogen.json`). It fills `--reference-sequence` (align), `--annotation` (ancestral), `--reference-sequence` (translate) and, for VCF input, `--vcf-reference`, and can't be combined with the arguments it fills. A genome annotation sourced from a dataset is read with `--use-nextclade-gff-style`. [#2066][] @rneher
+* ancestral: `--genes` is now optional when an `--annotation` is provided; all CDSs in the annotation are then reconstructed, skipping those without a (non-empty) translations file. [#2066][] @rneher
+* ancestral: The `--translations`, `--output-translations` and `--aa-root-sequence` templates now also accept Nextclade's `{cds}` placeholder in place of `%GENE`, so the same template can be used for `nextclade run --output-translations` and `augur ancestral`. [#2066][] @rneher
+
+### Bug fixes
+
+* ancestral: Fixed a crash when reconstructing amino acid sequences with `--keep-ambiguous`. [#2061][] @rneher
+* ancestral: Tips without a sequence in a translations file (common for Nextclade translations) are now reported with a clear warning and treated as fully ambiguous, instead of a TreeTime warning suggesting a possible error. [#2066][] @rneher
+* ancestral: Requesting a gene that isn't in the annotation, or whose translations file doesn't exist, now results in an error message (listing the available genes, or checked before any reconstruction) instead of an unhandled error. [#2066][] @rneher
+
+[#2061]: https://github.com/nextstrain/augur/pull/2061
+[#2066]: https://github.com/nextstrain/augur/pull/2066
+
+## 34.2.1 (13 October 2026)
+
+### Bug fixes
+
+* merge: Fix TSV output format with SQLite 3.54.0. [#2064][] @victorlin
+
+[#2064]: https://github.com/nextstrain/augur/issues/2064
+
+## 34.2.0 (6 October 2026)
+
+### Features
+
+* curate format-dates: Support date ranges in the formats `YYYY-MM/YYYY-MM`. [#2056][] @joverlee521
+* curate format-dates: Validate formatted dates are compatible with downstream Augur uses. [#2057][] @joverlee521
+
+[#2056]: https://github.com/nextstrain/augur/pull/2056
+[#2057]: https://github.com/nextstrain/augur/pull/2057
+
+## 34.1.4 (9 September 2026)
+
+### Bug fixes
+
+* frequencies: Fix `AttributeError` when using numpy >= 2.4.0 with `--method diffusion`. [#2048] @joverlee521
+
+### Development
+
+* Switched to `ruamel.yaml` for processing YAML files. [#2046][] @victorlin
+
+[#2046]: https://github.com/nextstrain/augur/pull/2046
+[#2048]: https://github.com/nextstrain/augur/pull/2048
+
+## 34.1.3 (13 August 2026)
+
+### Development
+
+* subsample: Refactored helper functions to only validate config during run time. [#2039] @victorlin
+* Added a subsample config schema for workflows that use unaligned sequences. [#2038] @victorlin
+
+[#2038]: https://github.com/nextstrain/augur/pull/2038
+[#2039]: https://github.com/nextstrain/augur/pull/2039
+
+## 34.1.2 (5 August 2026)
+
+### Development
+
+* Refactored JSON schema validation functions for external use. [#2034] @victorlin
+
+[#2034]: https://github.com/nextstrain/augur/pull/2034
+
+## 34.1.1 (23 July 2026)
+
+### Bug fixes
+
+* filter: Fix unhandled `ValueError` with `--group-by-weights` when no sequences pass earlier filters. [#2032] @victorlin
+
+[#2032]: https://github.com/nextstrain/augur/issues/2032
+
+## 34.1.0 (20 July 2026)
+
+### Features
+
+* distance: Add `--output-edge-list` argument to save pairwise distances between sequences to an edge list TSV file for better compatibility with MicrobeTrace. [#2025][] @huddlej
+* Augur now automatically creates missing parent directories before writing output files. [#2014][] @victorlin
+
+### Bug fixes
+
+* filter: Improved the speed and memory usage of subsampling with `--group-by` and `--subsample-max-sequences` by caching each record's group during the first pass instead of reading the metadata a second time. [#2018][] @trvrb
+* filter: Improved the speed of computing groups for `--group-by` subsampling by replacing a row-wise pandas apply with a vectorized operation. [#2018][] @trvrb
+* filter: Improved the speed of writing `--output-metadata` by streaming rows instead of building a dictionary per row. [#2018][] @trvrb
+* Improved the error message for unrecognized arguments. [#2028][] @victorlin
+
+[#2014]: https://github.com/nextstrain/augur/issues/2014
+[#2018]: https://github.com/nextstrain/augur/pull/2018
+[#2025]: https://github.com/nextstrain/augur/pull/2025
+[#2028]: https://github.com/nextstrain/augur/issues/2028
+
+## 34.0.0 (7 July 2026)
+
+### Major Changes
+
+* A metadata column named `id` is now preferred as the identifier column when present. This applies to all commands that work with metadata id columns (`parse`, `merge`, `filter`, `subsample`, `refine`, `traits`, `frequencies`, `export v2`). Typical Augur usage should start with ensuring your metadata file has an `id` column instead of passing `--metadata-id-columns` to each command. Note this is a behavior change: metadata that already contains an `id` column but relied on `strain`/`name` being inferred will now use `id`; pass `--metadata-id-columns strain name` to restore the previous behavior. [#1780][] @victorlin
+
+### Features
+
+* merge: Add `--output-metadata-id-column` to explicitly name the id column in the merged metadata output, overriding the default of using the first input's id column. [#1780][] @victorlin
+* merge: Support a single `--metadata` or `--sequences` input, instead of requiring at least two. This allows `augur merge` to be used as a general entry point for standardization even when no actual merge is needed. [#1974][] @victorlin
+
+### Bug fixes
+
+* Bump minimum xopen version to 2.1.0. This removes the indirect dependency on `zstandard` as there is built-in zstd support in Python 3.10 and an equivalent backport for older versions. [#2009][] @victorlin
+
+[#1780]: https://github.com/nextstrain/augur/issues/1780
+[#1974]: https://github.com/nextstrain/augur/issues/1974
+[#2009]: https://github.com/nextstrain/augur/pull/2009
+
+## 33.4.1 (2 June 2026)
+
+### Bug fixes
+
+* filter: Fix handling of date ranges with `--group-by` and `--exclude-ambiguous-dates-by`. [#2007][] @victorlin
+
+[#2007]: https://github.com/nextstrain/augur/issues/2007
+
+## 33.4.0 (2 June 2026)
+
+### Features
+
+* curate format-dates: Support date ranges in the formats `YYYY/YYYY`. [#2005][] @victorlin
+
+[#2005]: https://github.com/nextstrain/augur/issues/2005
+
+## 33.3.0 (19 May 2026)
+
+### Features
+
+* curate format-dates: Support date ranges in the formats `YYYY-MM-DD/YYYY-MM-DD` and `[YYYY TO YYYY]`. [#2000][] @victorlin
+
+### Bug fixes
+
+* [export] Add `sharing.screenshot` to the auspice-config schema which was unintentionally omitted in the previous release. [#1999][] @jameshadfield
+
+[#1999]: https://github.com/nextstrain/augur/pull/1999
+[#2000]: https://github.com/nextstrain/augur/issues/2000
+
+## 33.2.0 (13 May 2026)
+
+### Features
+
+* Support treetime 0.12.* [#1986][]
+* Enable auspice config JSONs to define `sharing`, which controls which assets Auspice offers for download. See [Auspice docs](https://docs.nextstrain.org/projects/auspice/en/stable/advanced-functionality/view-settings.html) for more. [#1993][] @jameshadfield
+
+### Bug fixes
+
+* Improved formatting of command line help text. [#313][], [#1630][] @victorlin
+
+[#313]: https://github.com/nextstrain/augur/issues/313
+[#1630]: https://github.com/nextstrain/augur/issues/1630
+[#1986]: https://github.com/nextstrain/augur/pull/1986
+[#1993]: https://github.com/nextstrain/augur/pull/1993
+
+## 33.1.0 (22 April 2026)
+
+### Features
+
+* proximity: Introduce a new `augur proximity` tool to find the k closest strains against a query set using hamming distance. [#1962][] @jameshadfield
+
+* subsample: Allow subsampling schemes (YAML configuration) to perform hierarchical sampling where one sample depends on another, as well as proximal sampling where we use another sample as the query set. [#1962][] @jameshadfield
+
+* Allow analyses of AA (protein) datasets. This includes changes to the following augur components: [#1958][] @jameshadfield
+  * index: AA sequences can be indexed by using `--seq-type aa`. The column names of the resulting index will differ from those for nuc sequences.
+  * filter: AA sequences now work with sequence based filters when using `--seq-type aa`.
+  * filter: The `--non-nucleotide` argument is deprecated and has been replaced with `--exclude-invalid`.
+  * subsample: AA sequences now work when using `--seq-type aa`.
+  * subsample: The `non_nucleotide` sample keyword is deprecated and has been replaced with `exclude_invalid`.
+  * refine: Addition of an `--seq-type aa` argument which will result in TreeTime using the JTT92 substitution model.
+  * ancestral: Reconstruction to genes can now happen without a nucleotide sequence. We also allow AA root sequences to be provided (for AA-only or AA+nuc analyses).
+  * export v2: Node-data JSONs with gene-only annotations are now valid and will be exported.
+  * Schema changes to annotations and export_v2 to make the `nuc` key optional for (genome) annotations.
+
+* ancestral: Add `--report-inconsistent-translation` argument to report where amino acid reconstruction differed from the translation of the reconstructed nuc sequence. [#1975][] @jameshadfield
+
+### Bug fixes
+
+* ancestral: Fix potential bugs where 'N' could be used as the ambiguous character for AA sequences (this bug wasn't exposed if the provided translations came from Nextclade which was the usual path). Also includes fixes for nucleotide reconstructions involving the ambiguous 'X' character. [#1975][] @jameshadfield
+* merge: Added a workaround for a bug in SQLite version 3.53.0. [#1984][] @victorlin
+
+[#1958]: https://github.com/nextstrain/augur/pull/1958
+[#1962]: https://github.com/nextstrain/augur/pull/1962
+[#1975]: https://github.com/nextstrain/augur/pull/1975
+[#1984]: https://github.com/nextstrain/augur/pull/1984
+
+## 33.0.1 (11 March 2026)
+
+### Bug fixes
+
+* filter, frequencies, refine, subsample: A date value of `XXXX-XX-XX` is now treated the same as no value (empty string). [#1894][] @victorlin
+* filter, merge: Fixed formatting of the error message shown when there are duplicate sequence ids. [#1954][] @victorlin
+* filter: Adjusted the error message shown when there are missing weights to mention the option of updating values in metadata. [#1956][] @victorlin
+* frequencies: Added a proper error message for missing or invalid dates. [#1960][] @victorlin
+* merge: Added a workaround for a bug in SQLite version 3.52.0. [#1969][] @victorlin
+* merge: Improved error messages from SQLite. [#1969][] @victorlin
+
+[#1894]: https://github.com/nextstrain/augur/issues/1894
+[#1954]: https://github.com/nextstrain/augur/pull/1954
+[#1956]: https://github.com/nextstrain/augur/pull/1956
+[#1960]: https://github.com/nextstrain/augur/issues/1960
+[#1969]: https://github.com/nextstrain/augur/pull/1969
+
 ## 33.0.0 (26 January 2026)
 
 ### Major Changes
@@ -20,7 +226,7 @@
 
 * export v2: Improved the error message that is displayed when a deprecated coloring key is used. [#1882][] (@corneliusroemer)
 * export v2: `--no-minify-json` now properly overrides any truthy value in `AUGUR_MINIFY_JSON`. [#1943][] (@victorlin)
-* export v2: Skip unhashable node attr values with warning message to avoid previously unhandled `TypeError`. [#1948][] (@joverlee521) 
+* export v2: Skip unhashable node attr values with warning message to avoid previously unhandled `TypeError`. [#1948][] (@joverlee521)
 
 [#1304]: https://github.com/nextstrain/augur/issues/1304
 [#1768]: https://github.com/nextstrain/augur/issues/1768

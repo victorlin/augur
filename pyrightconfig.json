@@ -1,10 +1,12 @@
 {
   // Check against lowest compatible Python version
-  // Sync this with python-version in .github/workflows/ci.yaml:jobs.pyright
   "pythonVersion": "3.10",
 
   "include": ["augur/"],
 
+  "ignore": [
+    "augur/rst/sphinx.py",
+  ],
 
   "typeCheckingMode": "basic",
 
@@ -19,7 +21,6 @@
   "reportArgumentType": false,
   "reportAttributeAccessIssue": false,
   "reportCallIssue": false,
-  "reportGeneralTypeIssues": false,
   "reportIncompatibleMethodOverride": false,
   "reportMissingImports": false,
   "reportMissingModuleSource": false,

@@ -56,7 +56,7 @@ def run(args):
         if is_vcf:
             index_vcf(args.sequences, sequence_index_path)
         else:
-            index_sequences(args.sequences, sequence_index_path)
+            index_sequences(args.sequences, sequence_index_path, args.seq_type)
 
     # Load the sequence index, if a path exists.
     sequence_index = None
@@ -78,6 +78,12 @@ def run(args):
             os.unlink(sequence_index_path)
 
         sequence_index_ids = set(sequence_index.index.values)
+
+        # Ensure the index seq-type matches the one we're running augur filter with
+        if args.seq_type=='nuc' and 'invalid_nucleotides' not in sequence_index.columns:
+            raise AugurError("Sequence index was missing 'invalid_nucleotides' column, please ensure it was generated for nucleotide sequences")
+        elif args.seq_type=='aa' and 'invalid_residues' not in sequence_index.columns:
+            raise AugurError("Sequence index was missing 'invalid_residues' column, please ensure it was generated for AA sequences")
 
     # Check ids for duplicates and compare against sequence index.
     if args.skip_checks:
@@ -136,12 +142,15 @@ def run(args):
     # and use a second pass to add records to the queue.
     group_by = args.group_by
     sequences_per_group = args.sequences_per_group
-    records_per_group = None
+    strains_by_group = None
 
     if group_by and args.subsample_max_sequences:
-        # In this case, we need two passes through the metadata with the first
-        # pass used to count the number of records per group.
-        records_per_group = defaultdict(int)
+        # In this case, we need to count the number of records per group before
+        # we know how many sequences to keep per group. We cache each group's
+        # strains during the first pass (group keys are shared across chunks) so
+        # we can populate the priority queues without reading the metadata a
+        # second time.
+        strains_by_group = defaultdict(list)
     elif not group_by and args.subsample_max_sequences:
         group_by = ("_dummy",)
         sequences_per_group = args.subsample_max_sequences
@@ -264,12 +273,20 @@ def run(args):
                 group_by,
             )
 
-            if args.subsample_max_sequences and records_per_group is not None:
-                # Count the number of records per group. We will use this
-                # information to calculate the number of sequences per group
-                # for the given maximum number of requested sequences.
-                for group in group_by_strain.values():
-                    records_per_group[group] += 1
+            if args.subsample_max_sequences and strains_by_group is not None:
+                # Cache each record's group assignment (in the same order it
+                # would be added to a priority queue) so we can avoid a second
+                # pass through the metadata.
+                for strain in sorted(group_by_strain.keys()):
+                    group = group_by_strain[strain]
+                    strains_by_group[group].append(strain)
+
+                    # Assign each strain's priority now, in the order of a single
+                    # pass through the metadata. When priorities are random
+                    # (no --priority file), they are generated on first access,
+                    # so this preserves the values regardless of the order in
+                    # which groups are later drained into the priority queues.
+                    priorities[strain]
             else:
                 # Track the highest priority records, when we already
                 # know the number of sequences allowed per group.
@@ -295,10 +312,11 @@ def run(args):
     # requested maximum number of sequences and the number of sequences per
     # group. Then, we need to make a second pass through the metadata to find
     # the requested number of records.
-    if args.subsample_max_sequences and records_per_group is not None:
+    if args.subsample_max_sequences and strains_by_group is not None:
         if queues_by_group is None:
             # We know all of the possible groups now from the first pass through
             # the metadata, so we can create queues for all groups at once.
+            records_per_group = {group: len(strains) for group, strains in strains_by_group.items()}
             if args.group_by_weights:
                 print_err(f"Sampling with weights defined by {args.group_by_weights}.")
                 group_sizes = get_weighted_group_sizes(
@@ -335,37 +353,13 @@ def run(args):
                     group_sizes = {group: sequences_per_group for group in records_per_group.keys()}
             queues_by_group = create_queues_by_group(group_sizes)
 
-        print_debug(f"Reading metadata from {args.metadata!r}…")
-        # Make a second pass through the metadata, only considering records that
-        # have passed filters.
-        metadata_reader = read_metadata(
-            args.metadata,
-            delimiters=args.metadata_delimiters,
-            columns=useful_metadata_columns,
-            id_columns=args.metadata_id_columns,
-            chunk_size=args.metadata_chunk_size,
-            dtype="string",
-        )
-        for metadata in metadata_reader:
-            # Recalculate groups for subsampling as we loop through the
-            # metadata a second time. TODO: We could store these in memory
-            # during the first pass, but we want to minimize overall memory
-            # usage at the moment.
-            seq_keep = set(metadata.index.values) & valid_strains
-
-            # Prevent force-included strains from being considered in this
-            # second pass, as in the first pass.
-            seq_keep = seq_keep - all_sequences_to_include
-
-            group_by_strain = get_groups_for_subsampling(
-                seq_keep,
-                metadata,
-                group_by,
-            )
-
-            for strain in sorted(group_by_strain.keys()):
-                group = group_by_strain[strain]
-                queues_by_group[group].add(
+        # Populate the priority queues using the strains cached per group during
+        # the first pass, in the same order they were encountered, so we avoid
+        # reading the metadata a second time.
+        for group, strains in strains_by_group.items():
+            queue = queues_by_group[group]
+            for strain in strains:
+                queue.add(
                     strain,
                     priorities[strain],
                 )
@@ -408,7 +402,7 @@ def run(args):
 
     if strains_file is not None:
         print_debug(f"Writing strains to {strains_file!r}…")
-        with open(strains_file, "w") as f:
+        with open_file(strains_file, "w") as f:
             for strain in valid_strains:
                 f.write(f"{strain}\n")
 
@@ -425,8 +419,7 @@ def run(args):
 
     if args.output_metadata:
         print_debug(f"Reading metadata from {args.metadata!r} and writing to {args.output_metadata!r}…")
-        write_output_metadata(args.metadata, args.metadata_delimiters,
-                              args.metadata_id_columns, args.output_metadata,
+        write_output_metadata(metadata_object, args.output_metadata,
                               valid_strains)
 
     # Calculate the number of strains that don't exist in either metadata or
@@ -454,9 +447,9 @@ def run(args):
         include_exclude_rules.filter_by_ambiguous_date.__name__: "{count} {were} dropped because of their ambiguous date in {ambiguity}",
         include_exclude_rules.filter_by_min_date.__name__: "{count} {were} dropped because {they} {were} earlier than {min_date} or missing a date",
         include_exclude_rules.filter_by_max_date.__name__: "{count} {were} dropped because {they} {were} later than {max_date} or missing a date",
-        include_exclude_rules.filter_by_min_length.__name__: "{count} {were} dropped because {they} {were} shorter than the minimum length of {min_length}bp when only counting standard nucleotide characters A, C, G, or T (case-insensitive)",
-        include_exclude_rules.filter_by_max_length.__name__: "{count} {were} dropped because {they} {were} longer than the maximum length of {max_length}bp when only counting standard nucleotide characters A, C, G, or T (case-insensitive)",
-        include_exclude_rules.filter_by_non_nucleotide.__name__: "{count} {were} dropped because {they} had non-nucleotide characters",
+        include_exclude_rules.filter_by_min_length.__name__: "{count} {were} dropped because {they} {were} shorter than the minimum length of {min_length} when only counting valid characters",
+        include_exclude_rules.filter_by_max_length.__name__: "{count} {were} dropped because {they} {were} longer than the maximum length of {max_length} when only counting valid characters",
+        include_exclude_rules.filter_by_invalid_characters.__name__: "{count} {were} dropped because {they} had invalid characters",
         include_exclude_rules.skip_group_by_with_ambiguous_year.__name__: "{count} {were} dropped during grouping due to ambiguous year information",
         include_exclude_rules.skip_group_by_with_ambiguous_month.__name__: "{count} {were} dropped during grouping due to ambiguous month information",
         include_exclude_rules.skip_group_by_with_ambiguous_day.__name__: "{count} {were} dropped during grouping due to ambiguous day information",

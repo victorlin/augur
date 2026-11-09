@@ -5,10 +5,13 @@ import numpy as np
 import sys
 from Bio import Phylo
 from textwrap import dedent
-from .argparse_ import ExtendOverwriteDefault
+from .argparse_ import ExtendOverwriteDefault, SKIP_AUTO_DEFAULT_IN_HELP
 from .dates import get_numerical_dates
 from .dates.errors import InvalidYearBounds
+from .io.file import open_file
 from .io.metadata import DEFAULT_DELIMITERS, DEFAULT_ID_COLUMNS, METADATA_DATE_COLUMN, InvalidDelimiter, Metadata, read_metadata
+from .io.nextclade_dataset import add_nextclade_dataset_argument, apply_nextclade_dataset
+from .io.sequences import is_vcf as is_filename_vcf
 from .io.strains import read_strains
 from .utils import read_tree, write_augur_json, InvalidTreeError
 from .errors import AugurError
@@ -18,7 +21,8 @@ from treetime.seq_utils import profile_maps
 def refine(tree=None, aln=None, ref=None, dates=None, branch_length_inference='auto',
              confidence=False, resolve_polytomies=True, stochastic_resolve=False, max_iter=2, precision='auto',
              infer_gtr=True, Tc=0.01, reroot=None, use_marginal='always', fixed_pi=None, use_fft=True,
-             clock_rate=None, clock_std=None, clock_filter_iqd=None, keep_ids=None, verbosity=1, covariance=True, rng_seed=None, **kwarks):
+             clock_rate=None, clock_std=None, clock_filter_iqd=None, keep_ids=None, verbosity=1, covariance=True,
+             rng_seed=None, gtr='JC69', **kwarks):
     from treetime import TreeTime
 
     if keep_ids is None:
@@ -44,7 +48,7 @@ def refine(tree=None, aln=None, ref=None, dates=None, branch_length_inference='a
 
     #send ref, if is None, does no harm
     tt = TreeTime(tree=tree, aln=aln, ref=ref, dates=dates, use_fft=use_fft,
-                  verbose=verbosity, gtr='JC69', precision=precision, rng_seed=rng_seed)
+                  verbose=verbosity, gtr=gtr, precision=precision, rng_seed=rng_seed)
 
     # conditionally run clock-filter and remove bad tips
     if clock_filter_iqd:
@@ -166,14 +170,15 @@ def root_outside_of_treetime(T, root, is_timetree, remove_outgroup):
 def register_parser(parent_subparsers):
     parser = parent_subparsers.add_parser("refine", help=__doc__)
     parser.add_argument('--alignment', '-a', help="alignment in fasta or VCF format")
+    parser.add_argument('--seq-type', default='nuc', choices=['nuc', 'aa'], help="Sequence type: 'nuc' or 'aa'")
     parser.add_argument('--tree', '-t', required=True, help="prebuilt Newick")
     parser.add_argument('--metadata', type=str, metavar="FILE", help="sequence metadata")
     parser.add_argument('--metadata-delimiters', default=DEFAULT_DELIMITERS, nargs="+", action=ExtendOverwriteDefault,
                         help="delimiters to accept when reading a metadata file. Only one delimiter will be inferred.")
     parser.add_argument('--metadata-id-columns', default=DEFAULT_ID_COLUMNS, nargs="+", action=ExtendOverwriteDefault,
                         help="names of possible metadata columns containing identifier information, ordered by priority. Only one ID column will be inferred.")
-    parser.add_argument('--output-tree', type=str, help='file name to write tree to')
-    parser.add_argument('--output-node-data', type=str, help='file name to write branch lengths as node data')
+    parser.add_argument('--output-tree', type=str, help='file name to write tree to.  If not provided a file will be created using the alignment or tree input path with a "_tt.nwk" suffix.'+SKIP_AUTO_DEFAULT_IN_HELP)
+    parser.add_argument('--output-node-data', type=str, help='file name to write branch lengths as node data. If not provided a file will be created using the alignment or tree input path with a ".node_data.json" suffix.'+SKIP_AUTO_DEFAULT_IN_HELP)
     parser.add_argument('--use-fft', action="store_true", help="produce timetree using FFT for convolutions")
     parser.add_argument('--max-iter', default=2, type=int, help="maximal number of iterations TreeTime uses for timetree inference")
     parser.add_argument('--timetree', action="store_true", help="produce timetree using treetime, requires tree where branch length is in units of average number of nucleotide or protein substitutions per site (and branch lengths do not exceed 4)")
@@ -209,6 +214,7 @@ def register_parser(parent_subparsers):
                                 'interquartile ranges from the root-to-tip vs time regression')
     parser.add_argument('--keep-ids', metavar="FILE", help="file containing ids to keep in tree regardless of clock filtering (one per line)")
     parser.add_argument('--vcf-reference', type=str, help='fasta file of the sequence the VCF was mapped to')
+    add_nextclade_dataset_argument(parser)
     parser.add_argument('--year-bounds', type=int, nargs='+', action=ExtendOverwriteDefault, help='specify min or max & min prediction bounds for samples with XX in year')
     parser.add_argument('--divergence-units', type=str, choices=['mutations', 'mutations-per-site'],
                         default='mutations-per-site', help='Units in which sequence divergences is exported.')
@@ -219,10 +225,12 @@ def register_parser(parent_subparsers):
 
 
 def run(args):
+    apply_nextclade_dataset(args, reference="vcf_reference" if is_filename_vcf(args.alignment) else None)
 
     # check alignment type, set flags, read in if VCF
     is_vcf = False
     ref = None
+    gtr = 'JTT92' if args.seq_type == 'aa' else 'JC69'
 
     # node data is the dict that will be exported as json
     node_data = {'alignment': args.alignment}
@@ -247,11 +255,14 @@ def run(args):
 
         # fake alignment to appease treetime when only using it for naming nodes...
         from Bio import SeqRecord, Seq, Align
+        dummy_seq = 'ACDE' if args.seq_type == 'aa' else 'ACGT'
         seqs = []
         for n in T.get_terminals():
-            seqs.append(SeqRecord.SeqRecord(seq=Seq.Seq('ACGT'), id=n.name, name=n.name, description=''))
+            seqs.append(SeqRecord.SeqRecord(seq=Seq.Seq(dummy_seq), id=n.name, name=n.name, description=''))
         aln = Align.MultipleSeqAlignment(seqs)
     elif any([args.alignment.lower().endswith(x) for x in ['.vcf', '.vcf.gz']]):
+        if args.seq_type == 'aa':
+            raise AugurError("VCF alignments are not supported with AA sequences. Please provide a FASTA alignment.")
         if not args.vcf_reference:
             print("ERROR: a reference Fasta is required with VCF-format alignments", file=sys.stderr)
             return 1
@@ -337,7 +348,8 @@ def run(args):
                     clock_rate=args.clock_rate, clock_std=args.clock_std_dev,
                     clock_filter_iqd=args.clock_filter_iqd, keep_ids=keep_ids, max_iter=args.max_iter,
                     covariance=args.covariance, resolve_polytomies=(not args.keep_polytomies),
-                    stochastic_resolve=args.stochastic_resolve, verbosity=args.verbosity, rng_seed=args.seed)
+                    stochastic_resolve=args.stochastic_resolve, verbosity=args.verbosity, rng_seed=args.seed,
+                    gtr=gtr)
 
         node_data['clock'] = {'rate': tt.date2dist.clock_rate,
                               'intercept': tt.date2dist.intercept,
@@ -371,18 +383,18 @@ def run(args):
     else:
         from treetime import TreeAnc
         # instantiate treetime for the sole reason to name internal nodes
-        tt = TreeAnc(tree=T, aln=aln, ref=ref, gtr='JC69', verbose=args.verbosity, rng_seed=args.seed)
+        tt = TreeAnc(tree=T, aln=aln, ref=ref, gtr=gtr, verbose=args.verbosity, rng_seed=args.seed)
 
     node_data['nodes'] = collect_node_data(T, attributes)
     if args.divergence_units=='mutations-per-site': #default
         pass
     elif args.divergence_units=='mutations':
-        # find column of the compressed alignment that maps to masked positions of all N
+        # find column of the compressed alignment that maps to fully ambiguous positions
         compressed_alignment = np.array([x for x in tt.data.compressed_alignment.values()]).T
         ambiguous_positions = []
         for ci, col in enumerate(compressed_alignment):
             if np.unique(col).size==1 and col[0]==tt.gtr.ambiguous:
-                # the column with all Ns has only one unique value, and the first value is N
+                # the column is fully ambiguous (all N for nuc, all X for aa)
                 ambiguous_positions.extend(tt.data.compressed_to_full_sequence_map[ci])
 
                 # Since TreeTime represents all columns of all Ns with a single
@@ -397,17 +409,18 @@ def run(args):
             # sample mutations from the root profile, otherwise use most likely state.
             # Reconstruct tip states to avoid mutations to N or W etc be counted
             tt.infer_ancestral_sequences(marginal=True, reconstruct_tip_states=True, sample_from_profile='root')
-        nuc_map = profile_maps['nuc']
+        seq_map = profile_maps[args.seq_type]
+        ambiguous_char = 'X' if args.seq_type == 'aa' else 'N'
 
-        def are_sequence_states_different(nuc1, nuc2):
+        def are_sequence_states_different(state1, state2):
             '''
             determine whether two ancestral states should count as mutation for divergence estimates
-            while correctly accounting for ambiguous nucleotides
+            while correctly accounting for ambiguous characters
             '''
-            if nuc1 in ['-', 'N'] or nuc2 in ['-', 'N']:
+            if state1 in ['-', ambiguous_char] or state2 in ['-', ambiguous_char]:
                 return False
-            elif nuc1 in nuc_map and nuc2 in nuc_map:
-                return np.sum(nuc_map[nuc1]*nuc_map[nuc2])==0
+            elif state1 in seq_map and state2 in seq_map:
+                return np.sum(seq_map[state1]*seq_map[state2])==0
             else:
                 return False
 
@@ -427,7 +440,8 @@ def run(args):
         return 1
 
     # Export refined tree and node data
-    tree_success = Phylo.write(T, tree_fname, 'newick', format_branch_length='%1.8f', branch_length_only=True)
+    with open_file(tree_fname, "w") as f:
+        tree_success = Phylo.write(T, f, 'newick', format_branch_length='%1.8f', branch_length_only=True)
     print("updated tree written to",tree_fname, file=sys.stdout)
 
     if args.output_node_data:

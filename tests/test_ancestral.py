@@ -1,7 +1,27 @@
-from augur.ancestral import run_ancestral
+from augur.ancestral import run_ancestral, _make_seq_corrector
 from io import StringIO
 from Bio import Phylo
 import pytest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Align import MultipleSeqAlignment
+
+
+correctors = {
+    'nuc': _make_seq_corrector("nuc"),
+    'aa':  _make_seq_corrector("aa"),
+}
+
+def corrected_alignment(alphabet:str, data: list[tuple[str,str]]):
+    """
+    Helper function to return a MultipleSeqAlignment of corrected sequence
+    strings, where invalid states are replaced by the appropriate ambiguous
+    character. This approach is used when reading data in `augur ancestral`
+    """
+    return MultipleSeqAlignment(
+        [SeqRecord(Seq(correctors[alphabet](d[1])), d[0]) for d in data]
+    )
+    
 
 def gather_mutations_at_pos(pos, nuc_result):
     """pos is 1-based"""
@@ -35,16 +55,14 @@ class TestRootNodeMutationAssignment:
     def default_augur_args(self):
         return {
             'fill_overhangs': True, # augur default
-            'marginal': 'joint', # augur default
+            'marginal': False, # augur default -- `bool(args.inference=='marginal')`
             'alphabet': 'nuc', # augur default
+            'rng_seed': 0,
         }
 
 
     @pytest.fixture()
     def fasta_aln(self):
-        from Bio.Seq import Seq
-        from Bio.SeqRecord import SeqRecord
-        from Bio.Align import MultipleSeqAlignment
         aln = MultipleSeqAlignment(
             [
                 SeqRecord(Seq("AANATA"), id="sample_A"),
@@ -91,3 +109,142 @@ class TestRootNodeMutationAssignment:
         nuc_result = run_ancestral(T=tree, aln=vcf_aln, reference_sequence=ref, is_vcf=is_vcf, full_sequences=not is_vcf, infer_ambiguous=True, **default_augur_args)
         assert(nuc_result['root_seq'] == ref)
         assert(gather_mutations_at_pos(3, nuc_result)==[])
+
+
+class TestAmbiguousAAReconstruction:
+    # NOTE: these tests may be better expressed in `cram`, following `tests/functional/ancestral/cram/infer-ambiguous-nucleotides.t`,
+    # once `augur ancestral` can perform AA inference without needing nuc sequences.
+    # See <https://github.com/nextstrain/augur/pull/1975#discussion_r3002628926> for more discussion
+    
+    # See <https://www.bioinformatics.org/sms/iupac.html> for ambiguous bases.
+
+    @pytest.fixture
+    def tree(self):
+        t = "(sample_C:0.02,(sample_B:0.02,sample_A:0.02)node_AB:0.06)node_root:0.02;"
+        T = Phylo.read(StringIO(t), 'newick')
+        return T
+
+    @pytest.fixture
+    def generic_args(self):
+        """Generic args to run_ancestral"""
+        # Note: `augur ancestral` doesn't report full_sequences, but we want to test that here
+        args = {"reference_sequence": None, "is_vcf": False, "full_sequences": True,
+            "fill_overhangs": True, "marginal": False, "alphabet": 'aa', "rng_seed": 0}
+        return args
+
+    def test_unknown_aa_is_x(self, tree, generic_args):
+        """
+        Ensure we treat "X" as the ambiguous AA residue, not N (N = Asn = Asparagine)
+        """
+        aln = corrected_alignment('aa', [
+            ("sample_A", "IIXII"),
+            ("sample_B", "IIIII"),
+            ("sample_C", "IIIII"),
+        ])
+        result = run_ancestral(T=tree, aln=aln, **generic_args, infer_ambiguous=False)
+        sample_a = result['mutations']['nodes']['sample_A']
+        assert sample_a['sequence'][2] == 'X'
+        pos3_muts = gather_mutations_at_pos(3, result)
+        assert len(pos3_muts)==1
+        assert pos3_muts[0] == "I3X"
+    
+    def test_unknown_aa_is_reconstructed(self, tree, generic_args):
+        """
+        Ensure "X" (the ambiguous AA residue) is reconstructed
+        """
+        aln = corrected_alignment('aa', [
+            ("sample_A", "IIXII"),
+            ("sample_B", "IIIII"),
+            ("sample_C", "IIIII"),
+        ])
+        result = run_ancestral(T=tree, aln=aln, **generic_args, infer_ambiguous=True)
+        sample_a = result['mutations']['nodes']['sample_A']
+        assert sample_a['sequence'][2] == 'I'
+        pos3_muts = gather_mutations_at_pos(3, result)
+        assert len(pos3_muts)==0
+    
+    def test_invalid_residues_are_replaced_with_X(self, tree, generic_args):
+        """
+        Ensure "J" (invalid) is replaced with "X" (the ambiguous AA residue).
+        """
+        aln = corrected_alignment('aa', [
+            ("sample_A", "IIJII"),
+            ("sample_B", "IIIII"),
+            ("sample_C", "IIIII"),
+        ])
+        result = run_ancestral(T=tree, aln=aln, **generic_args, infer_ambiguous=False)
+        sample_a = result['mutations']['nodes']['sample_A']
+        
+        # The invalid J in position 3 (idx 2) has been corrected to X
+        assert sample_a['sequence'][2] == 'X'
+        pos3_muts = gather_mutations_at_pos(3, result)
+        assert len(pos3_muts)==1
+        assert pos3_muts[0] == "I3X"
+
+    def test_ambiguous_residues_are_passed_through(self, tree, generic_args):
+        """
+        Ensure "Z" (Glx = Glutamic acid (E) or Glutamine (Q)) is passed though
+        """
+        aln = corrected_alignment('aa', [
+            ("sample_A", "IIZII"),
+            ("sample_B", "IIIII"),
+            ("sample_C", "IIIII"),
+        ])
+        result = run_ancestral(T=tree, aln=aln, **generic_args, infer_ambiguous=False)
+        sample_a = result['mutations']['nodes']['sample_A']
+        
+        # The valid Z in position 3 (idx 2)
+        assert sample_a['sequence'][2] == 'Z'
+        pos3_muts = gather_mutations_at_pos(3, result)
+        assert len(pos3_muts)==1
+        assert pos3_muts[0].endswith("Z")
+
+    def test_invalid_residues_are_inferred(self, tree, generic_args):
+        """
+        Ensure "J" (invalid) is inferred (to I, as that's what every other residue is at this pos)
+        """
+        aln = corrected_alignment('aa', [
+            ("sample_A", "IIJII"),
+            ("sample_B", "IIIII"),
+            ("sample_C", "IIIII"),
+        ])
+        result = run_ancestral(T=tree, aln=aln, **generic_args, infer_ambiguous=True)
+        sample_a = result['mutations']['nodes']['sample_A']
+        
+        assert sample_a['sequence'][2] == 'I'
+        pos3_muts = gather_mutations_at_pos(3, result)
+        assert len(pos3_muts)==0
+        
+    def test_ambiguous_residues_are_inferred(self, tree, generic_args):
+        """
+        Ensure "Z" (Glx = Glutamic acid (E) or Glutamine (Q)) is inferred as E or Q
+        """
+        aln = corrected_alignment('aa', [
+            ("sample_A", "IIZII"),
+            ("sample_B", "IIIII"),
+            ("sample_C", "IIIII"),
+        ])
+        result = run_ancestral(T=tree, aln=aln, **generic_args, infer_ambiguous=True)
+        sample_a = result['mutations']['nodes']['sample_A']
+        
+        assert sample_a['sequence'][2] in ['E', 'Q']
+        pos3_muts = gather_mutations_at_pos(3, result)
+        assert len(pos3_muts)==1
+        assert pos3_muts[0] in ['I3E', 'I3Q']
+
+
+class TestTranslationsHelpers:
+    def test_gene_fname(self):
+        from augur.ancestral import _gene_fname, _has_gene_pattern
+        assert _gene_fname("aa_%GENE.fasta", "S") == "aa_S.fasta"
+        assert _gene_fname("translations/{cds}.translation.fasta", "ORF1a") == "translations/ORF1a.translation.fasta"
+        assert _has_gene_pattern("{cds}.fasta") and _has_gene_pattern("%GENE.fasta")
+        assert not _has_gene_pattern("aa.fasta")
+
+    def test_add_missing_tips(self, capsys):
+        from augur.ancestral import _add_missing_tips
+        tree = Phylo.read(StringIO("((A:1,B:1):1,(C:1,D:1):1);"), "newick")
+        aln = MultipleSeqAlignment([SeqRecord(Seq("MKV"), id="A"), SeqRecord(Seq("MKI"), id="C"), SeqRecord(Seq("MKL"), id="E")])
+        result = _add_missing_tips(aln, tree, "gene1", "gene1.fasta")
+        assert {record.id: str(record.seq) for record in result} == {"A": "MKV", "C": "MKI", "E": "MKL", "B": "XXX", "D": "XXX"}
+        assert "2 of 4 tips have no sequence in 'gene1.fasta' and are treated as fully ambiguous for 'gene1': B, D" in capsys.readouterr().err

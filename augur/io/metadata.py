@@ -1,6 +1,6 @@
 import csv
 import os
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Iterator, Sequence, overload
 import pandas as pd
 import pyfastx
 import python_calamine as calamine
@@ -17,7 +17,7 @@ from .file import PANDAS_READ_CSV_OPTIONS, open_file
 
 DEFAULT_DELIMITERS = (',', '\t')
 
-DEFAULT_ID_COLUMNS = ("strain", "name")
+DEFAULT_ID_COLUMNS = ("id", "strain", "name")
 
 METADATA_DATE_COLUMN = 'date'
 
@@ -26,40 +26,60 @@ class InvalidDelimiter(Exception):
     pass
 
 
+# Overloads for different return types based on chunk_size
+@overload
 def read_metadata(
-        metadata_file,
-        delimiters=DEFAULT_DELIMITERS,
-        columns=None,
-        id_columns=DEFAULT_ID_COLUMNS,
-        keep_id_as_column=False,
-        chunk_size=None,
-        dtype=None,
+        metadata_file: str,
+        delimiters: Sequence[str] = ...,
+        columns: list[str] | None = ...,
+        id_columns: Sequence[str] = ...,
+        keep_id_as_column: bool = ...,
+        chunk_size: None = None,
+        dtype: dict[str, Any] | str | None = ...,
+    ) -> pd.DataFrame: ...
+
+@overload
+def read_metadata(
+        metadata_file: str,
+        delimiters: Sequence[str] = ...,
+        columns: list[str] | None = ...,
+        id_columns: Sequence[str] = ...,
+        keep_id_as_column: bool = ...,
+        chunk_size: int = ...,
+        dtype: dict[str, Any] | str | None = ...,
+    ) -> Iterator[pd.DataFrame]: ...
+
+def read_metadata(
+        metadata_file: str,
+        delimiters: Sequence[str] = DEFAULT_DELIMITERS,
+        columns: list[str] | None = None,
+        id_columns: Sequence[str] = DEFAULT_ID_COLUMNS,
+        keep_id_as_column: bool = False,
+        chunk_size: int | None = None,
+        dtype: dict[str, Any] | str | None = None,
     ):
     r"""Read metadata from a given filename and into a pandas `DataFrame` or
-    `TextFileReader` object.
+    iterator of DataFrames when `chunk_size` is specified.
 
     Parameters
     ----------
-    metadata_file : str
+    metadata_file
         Path to a metadata file to load.
-    delimiters : list of str
+    delimiters
         List of possible delimiters to check for between columns in the metadata.
         Only one delimiter will be inferred.
-    columns : list of str
+    columns
         List of columns to read. If unspecified, read all columns.
-    id_columns : list of str
+    id_columns
         List of possible id column names to check for, ordered by priority.
         Only one id column will be inferred.
-    keep_id_as_column : bool
+    keep_id_as_column
         If true, keep the resolved id column as a column in addition to setting it as the DataFrame index.
-    chunk_size : int
+    chunk_size
         Size of chunks to stream from disk with an iterator instead of loading the entire input file into memory.
-    dtype : dict or str
+    dtype
         Data types to apply to columns in metadata. If unspecified, pandas data type inference will be used.
         See documentation for an argument of the same name to `pandas.read_csv()`.
-    Returns
-    -------
-    pandas.DataFrame or `pandas.io.parsers.TextFileReader`
 
     Raises
     ------
@@ -97,6 +117,7 @@ def read_metadata(
         "skipinitialspace": True,
         "na_filter": False,
         "low_memory": False,
+        **PANDAS_READ_CSV_OPTIONS,
     }
 
     if chunk_size:
@@ -107,7 +128,6 @@ def read_metadata(
         metadata_file,
         iterator=True,
         **kwargs,
-        **PANDAS_READ_CSV_OPTIONS,
     )
     chunk = metadata.read(nrows=1)
     metadata.close()
@@ -168,13 +188,11 @@ def read_metadata(
         return read_csv_with_index_col(
             metadata_file,
             **kwargs,
-            **PANDAS_READ_CSV_OPTIONS,
         )
     else:
         return pd.read_csv(
             metadata_file,
             **kwargs,
-            **PANDAS_READ_CSV_OPTIONS,
         )
 
 
@@ -679,27 +697,28 @@ class Metadata:
         raise AugurError(f"{self.path}: None of the possible id columns ({', '.join(map(repr, columns))}) were found in the metadata's columns ({', '.join(map(repr, self.columns))}).")
 
     def rows(self, strict: bool = True):
-        """Yield rows in a dictionary format. Empty lines are ignored.
+        """Yield rows as lists of values, in column order. Empty lines are ignored.
 
         Parameters
         ----------
         strict
             If True, raise an error when a row contains more or less than the number of expected columns.
         """
+        num_columns = len(self.columns)
         with self.open() as f:
-            reader = csv.DictReader(f, delimiter=self.delimiter, fieldnames=self.columns, restkey=None, restval=None)
+            reader = csv.reader(f, delimiter=self.delimiter)
 
             # Skip the header row.
             next(reader)
 
-            # NOTE: Empty lines are ignored by csv.DictReader.
-            # <https://github.com/python/cpython/blob/647b6cc7f16c03535cede7e1748a58ab884135b2/Lib/csv.py#L181-L185>
             for row in reader:
+                # Ignore empty lines.
+                if not row:
+                    continue
                 if strict:
-                    if None in row.keys():
+                    if len(row) > num_columns:
                         raise AugurError(f"{self.path}: Line {reader.line_num} contains at least one extra column. The inferred delimiter is {self.delimiter!r}.")
-                    if None in row.values():
-                        # This is distinct from a blank value (empty string).
+                    if len(row) < num_columns:
                         raise AugurError(f"{self.path}: Line {reader.line_num} is missing at least one column. The inferred delimiter is {self.delimiter!r}.")
                 yield row
 

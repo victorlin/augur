@@ -2,11 +2,13 @@
 infer frequencies of mutations or clades
 """
 import json, os, sys
+from textwrap import dedent
 import numpy as np
 from Bio import Phylo, AlignIO
 from Bio.Align import MultipleSeqAlignment
 
 from .argparse_ import ExtendOverwriteDefault
+from .dates import validate_dates
 from .errors import AugurError
 from .frequency_estimators import get_pivots, alignment_frequencies, tree_frequencies
 from .frequency_estimators import AlignmentKdeFrequencies, TreeKdeFrequencies, TreeKdeFrequenciesError
@@ -38,9 +40,9 @@ def register_parser(parent_subparsers):
     parser.add_argument("--pivot-interval-units", type=str, default="months", choices=['months', 'weeks'],
                         help="space pivots by months (default) or by weeks")
     parser.add_argument('--min-date', type=numeric_date_type,
-                        help=f"date to begin frequencies calculations; may be specified as: {SUPPORTED_DATE_HELP_TEXT}")
+                        help=f"date to begin frequencies calculations; may be specified as:\n\n{SUPPORTED_DATE_HELP_TEXT}")
     parser.add_argument('--max-date', type=numeric_date_type,
-                        help=f"date to end frequencies calculations; may be specified as: {SUPPORTED_DATE_HELP_TEXT}")
+                        help=f"date to end frequencies calculations; may be specified as:\n\n{SUPPORTED_DATE_HELP_TEXT}")
 
     # Tree-specific arguments
     parser.add_argument('--tree', '-t', type=str,
@@ -70,9 +72,10 @@ def register_parser(parent_subparsers):
     parser.add_argument('--minimal-clade-size', type=int, default=0,
                         help="minimal number of tips a clade must have for its diffusion frequencies to be reported")
     parser.add_argument('--minimal-clade-size-to-estimate', type=int, default=10,
-                        help="""minimal number of tips a clade must have for its diffusion frequencies to be estimated
-                                by the diffusion likelihood; all smaller clades will inherit frequencies from their
-                                parents""")
+                        help=dedent("""\
+                            minimal number of tips a clade must have for its diffusion frequencies to be estimated
+                            by the diffusion likelihood; all smaller clades will inherit frequencies from their
+                            parents"""))
     parser.add_argument("--stiffness", type=float, default=10.0, help="parameter penalizing curvature of the frequency trajectory")
     parser.add_argument("--inertia", type=float, default=0.0, help="determines how frequencies continue "
                         "in absense of data (inertia=0 -> go flat, inertia=1.0 -> continue current trend)")
@@ -131,6 +134,12 @@ def run(args):
 
     if args.tree:
         tree = Phylo.read(args.tree, 'newick')
+
+        validate_dates(
+            [tip.name for tip in tree.get_terminals()],
+            dates, metadata[METADATA_DATE_COLUMN],
+        )
+
         tps = []
         for tip in tree.get_terminals():
             tip.attr = {"num_date": np.mean(dates[tip.name])}
@@ -229,6 +238,12 @@ def run(args):
 
             aln = MultipleSeqAlignment([seq for seq in AlignIO.read(fname, 'fasta')
                                         if not seq.name.startswith('NODE_')])
+
+            validate_dates(
+                [seq.name for seq in aln],
+                dates, metadata[METADATA_DATE_COLUMN],
+            )
+
             tps = np.array([np.mean(dates[seq.name]) for seq in aln])
 
             if frequencies is None:

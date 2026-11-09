@@ -11,6 +11,7 @@ VCFtools is used behind the scenes to handle VCF files, but this should be
 considered an implementation detail that may change in the future.  The CLI
 program vcftools must be available on PATH.
 """
+from textwrap import dedent
 from augur.argparse_ import ExtendOverwriteDefault, SKIP_AUTO_DEFAULT_IN_HELP
 from augur.dates import numeric_date_type
 from augur.filter.arguments import descriptions
@@ -34,6 +35,7 @@ def register_arguments(parser):
     input_group.add_argument('--metadata-id-columns', default=DEFAULT_ID_COLUMNS, nargs="+", action=ExtendOverwriteDefault, help="names of possible metadata columns containing identifier information, ordered by priority. Only one ID column will be inferred.")
     input_group.add_argument('--metadata-delimiters', default=DEFAULT_DELIMITERS, nargs="+", action=ExtendOverwriteDefault, help="delimiters to accept when reading a metadata file. Only one delimiter will be inferred.")
     input_group.add_argument('--skip-checks', action='store_true', help="use this option to skip checking for duplicates in sequences and whether ids in metadata have a sequence entry. Can improve performance on large files. Note that this should only be used if you are sure there are no duplicate sequences or mismatched ids since they can lead to errors in downstream Augur commands.")
+    input_group.add_argument('--seq-type', default='nuc', choices=['nuc', 'aa'], help="Sequence type: 'nuc' or 'aa'")
 
     metadata_filter_group = parser.add_argument_group("metadata filters", "filters to apply to metadata")
 
@@ -51,7 +53,7 @@ def register_arguments(parser):
     sequence_filter_group = parser.add_argument_group("sequence filters", "filters to apply to sequence data")
     sequence_filter_group.add_argument('--min-length', type=int, help=descriptions['min_length'])
     sequence_filter_group.add_argument('--max-length', type=int, help=descriptions['max_length'])
-    sequence_filter_group.add_argument('--non-nucleotide', action='store_true', help=descriptions['non_nucleotide'])
+    sequence_filter_group.add_argument('--exclude-invalid', action='store_true', help=descriptions['exclude_invalid'])
 
     subsample_group = parser.add_argument_group("subsampling", "options to subsample filtered data")
     subsample_group.add_argument('--group-by', nargs='+', action=ExtendOverwriteDefault, default=[], help=descriptions['group_by'])
@@ -62,10 +64,11 @@ def register_arguments(parser):
     probabilistic_sampling_group.add_argument('--probabilistic-sampling', action='store_true', help=descriptions['probabilistic_sampling'])
     probabilistic_sampling_group.add_argument('--no-probabilistic-sampling', action='store_false', dest='probabilistic_sampling')
     subsample_group.add_argument('--group-by-weights', type=str, metavar="FILE", help=descriptions['group_by_weights'])
-    subsample_group.add_argument('--priority', type=str, help="""tab-delimited file with list of priority scores for strains (e.g., "<strain>\\t<priority>") and no header.
-    When scores are provided, Augur converts scores to floating point values, sorts strains within each subsampling group from highest to lowest priority, and selects the top N strains per group where N is the calculated or requested number of strains per group.
-    Higher numbers indicate higher priority.
-    Since priorities represent relative values between strains, these values can be arbitrary.""")
+    subsample_group.add_argument('--priority', type=str, help=dedent("""\
+        tab-delimited file with list of priority scores for strains (e.g., "<strain>\\t<priority>") and no header.
+        When scores are provided, Augur converts scores to floating point values, sorts strains within each subsampling group from highest to lowest priority, and selects the top N strains per group where N is the calculated or requested number of strains per group.
+        Higher numbers indicate higher priority.
+        Since priorities represent relative values between strains, these values can be arbitrary."""))
     subsample_group.add_argument('--subsample-seed', type=int, help="random number generator seed to allow reproducible subsampling (with same input data).")
 
     output_group = parser.add_argument_group("outputs", "options related to outputs, at least one of the possible representations of filtered data (--output-sequences, --output-metadata, --output-strains) is required")
@@ -87,6 +90,7 @@ def register_arguments(parser):
     deprecated_group = parser.add_argument_group("deprecated", "options to be removed in a future major version")
     deprecated_group.add_argument('--output', metavar="FILE", help="alias to --output-sequences" + SKIP_AUTO_DEFAULT_IN_HELP)
     deprecated_group.add_argument('-o', metavar="FILE", help="alias to --output-sequences" + SKIP_AUTO_DEFAULT_IN_HELP)
+    deprecated_group.add_argument('--non-nucleotide', action='store_true', help=descriptions['non_nucleotide_cli'])
 
     parser.set_defaults(probabilistic_sampling=True)
 
@@ -107,6 +111,9 @@ def run(args):
     if args.output:
         print_err("WARNING: --output is deprecated. Use --output-sequences instead.")
         args.output_sequences = args.output
+    if args.non_nucleotide:
+        print_err("WARNING: --non-nucleotide is deprecated. Use --exclude-invalid instead.")
+        args.exclude_invalid = True
 
     from .validate_arguments import validate_arguments
     # Validate arguments before attempting any I/O.

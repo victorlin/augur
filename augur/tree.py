@@ -14,14 +14,16 @@ import Bio
 from Bio.Seq import MutableSeq
 from Bio import Phylo
 import numpy as np
+from inspect import cleandoc
 from shlex import quote as shquote
 from treetime.vcf_utils import read_vcf
 from pathlib import Path
 from textwrap import dedent
 
 from .errors import AugurError
-from .io.file import open_file
-from .io.sequences import read_sequences
+from .io.file import create_parent_directories, open_file
+from .io.nextclade_dataset import add_nextclade_dataset_argument, apply_nextclade_dataset
+from .io.sequences import read_sequences, is_vcf as is_filename_vcf
 from .io.shell_command_runner import run_shell_command
 from .utils import nthreads_value, load_mask_sites, read_tree
 
@@ -119,6 +121,7 @@ def build_raxml(aln_file, out_file, clean_up=True, nthreads=1, tree_builder_args
     '''
     build tree using RAxML
     '''
+    create_parent_directories(out_file)
 
     raxml = find_executable([
         # Users who symlink/install as "raxml" can pick a specific version,
@@ -186,6 +189,7 @@ def build_fasttree(aln_file, out_file, clean_up=True, nthreads=1, tree_builder_a
     '''
     build tree using fasttree
     '''
+    create_parent_directories(out_file)
     log_file = out_file + ".log"
 
     fasttree = find_executable([
@@ -235,6 +239,8 @@ def build_iqtree(aln_file, out_file, substitution_model="GTR", clean_up=True, nt
         aln_file    file name of input aligment
         out_file    file name to write tree to
     '''
+    create_parent_directories(out_file)
+
     iqtree = find_executable([
         "iqtree3",
         "iqtree2",
@@ -399,7 +405,8 @@ def write_out_informative_fasta(compress_seq, alignment, stripFile=None):
     fasta_file = os.path.join(os.path.dirname(alignment), 'informative_sites.fasta')
 
     #now output this as fasta to read into raxml or iqtree
-    SeqIO.write(toFasta, fasta_file, 'fasta')
+    with open_file(fasta_file, "w") as f:
+        SeqIO.write(toFasta, f, 'fasta')
 
     #If want a position map, print:
     if printPositionMap:
@@ -463,27 +470,44 @@ def register_parser(parent_subparsers):
     parser.add_argument('--method', default='iqtree', choices=["fasttree", "raxml", "iqtree"], help="tree builder to use")
     parser.add_argument('--output', '-o', type=str, help='file name to write tree to')
     parser.add_argument('--substitution-model', default=DEFAULT_SUBSTITUTION_MODEL,
-                                help='substitution model to use. Specify \'auto\' to run ModelTest. Currently, only available for IQ-TREE.')
+        help="substitution model to use. Specify ``'auto'`` to run ModelTest. Currently, only available for IQ-TREE.")
     parser.add_argument('--nthreads', type=nthreads_value, default=1,
-                                help="maximum number of threads to use; specifying the value 'auto' will cause the number of available CPU cores on your system, if determinable, to be used")
+        help="maximum number of threads to use; specifying the value ``'auto'`` will cause the number of available CPU cores on your system, if determinable, to be used")
     parser.add_argument('--vcf-reference', type=str, help='fasta file of the sequence the VCF was mapped to')
+    add_nextclade_dataset_argument(parser)
     parser.add_argument('--exclude-sites', type=str, help='file name of one-based sites to exclude for raw tree building (BED format in .bed files, second column in tab-delimited files, or one position per line)')
-    parser.add_argument('--tree-builder-args', type=str, help=f"""arguments to pass to the tree builder either augmenting or overriding the default arguments (except for input alignment path, number of threads, and substitution model).
-    Use the assignment operator (e.g., --tree-builder-args="--polytomy" for IQ-TREE) to avoid unexpected errors.
-    FastTree defaults: "{DEFAULT_ARGS['fasttree']}".
-    RAxML defaults: "{DEFAULT_ARGS['raxml']}".
-    IQ-TREE defaults: "{DEFAULT_ARGS['iqtree']}".
+    parser.add_argument('--tree-builder-args', type=str,
+        help=dedent(f"""\
+            arguments to pass to the tree builder either augmenting or
+            overriding the default arguments (except for input alignment path,
+            number of threads, and substitution model).
 
-Note that IQ-TREE will rewrite certain characters in FASTA deflines. In order to prevent this from breaking downstream analysis steps, `augur tree` preemptively rewrites conflicting deflines, and then restores them later. Unfortunately, this breaks the use of certain IQ-TREE options (e.g., `-g`) which rely on matching names between the FASTA and other input files.
-    """)
-    parser.add_argument('--override-default-args', action="store_true", help="override default tree builder arguments with the values provided by the user in `--tree-builder-args` instead of augmenting the existing defaults.")
+            Use the assignment operator (e.g.,
+            ``--tree-builder-args="--polytomy"`` for IQ-TREE) to avoid
+            unexpected errors.
 
-    parser.epilog = """For example, to build a tree with IQ-TREE, use the following format:
-    augur tree --method iqtree --alignment <alignment> --substitution-model <model> --output <tree> --tree-builder-args="<extra arguments>"
-    """
+            - FastTree defaults: ``{DEFAULT_ARGS['fasttree']}``
+            - RAxML defaults: ``{DEFAULT_ARGS['raxml']}``
+            - IQ-TREE defaults: ``{DEFAULT_ARGS['iqtree']}``
+
+            Note that IQ-TREE will rewrite certain characters in FASTA deflines.
+            In order to prevent this from breaking downstream analysis steps,
+            ``augur tree`` preemptively rewrites conflicting deflines, and then
+            restores them later. Unfortunately, this breaks the use of certain
+            IQ-TREE options (e.g., ``-g``) which rely on matching names between
+            the FASTA and other input files.
+            """))
+    parser.add_argument('--override-default-args', action="store_true", help="override default tree builder arguments with the values provided by the user in ``--tree-builder-args`` instead of augmenting the existing defaults.")
+
+    parser.epilog = cleandoc("""
+        For example, to build a tree with IQ-TREE, use the following format:
+        augur tree --method iqtree --alignment <alignment> --substitution-model <model> --output <tree> --tree-builder-args="<extra arguments>"
+        """)
     return parser
 
 def run(args):
+    apply_nextclade_dataset(args, reference="vcf_reference" if is_filename_vcf(args.alignment) else None)
+
     # check alignment type, set flags, read in if VCF
     is_vcf = False
     ref = None
@@ -546,7 +570,8 @@ def run(args):
     print("\nBuilding original tree took {} seconds".format(str(end-start)))
 
     if T:
-        tree_success = Phylo.write(T, tree_fname, 'newick', format_branch_length='%1.8f')
+        with open_file(tree_fname, "w") as f:
+            tree_success = Phylo.write(T, f, 'newick', format_branch_length='%1.8f')
     else:
         return 1
 

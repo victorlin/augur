@@ -9,6 +9,7 @@ from typing import Collection, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from augur.dates import get_year_week, get_year_month_day
 from augur.errors import AugurError
+from augur.io.file import open_file
 from augur.io.metadata import METADATA_DATE_COLUMN
 from augur.io.print import print_err, _n
 from . import constants
@@ -170,8 +171,10 @@ def get_groups_for_subsampling(strains, metadata, group_by=None):
         for group in unknown_groups:
             metadata[group] = 'unknown'
 
-    # Finally, determine groups.
-    group_by_strain = dict(zip(metadata.index, metadata[group_by].apply(tuple, axis=1)))
+    # Finally, determine groups. Use itertuples() rather than a row-wise
+    # apply(tuple, axis=1), which is significantly faster on large inputs while
+    # producing the same group tuples.
+    group_by_strain = dict(zip(metadata.index, metadata[group_by].itertuples(index=False, name=None)))
     return group_by_strain
 
 
@@ -318,6 +321,12 @@ def get_weighted_group_sizes(
     ) -> Dict[Group, int]:
     """Return target group sizes based on weights defined in ``weights_file``.
     """
+    if not records_per_group:
+        if output_sizes_file:
+            with open_file(output_sizes_file, "w", newline="") as f:
+                f.write("")
+        return {}
+
     groups = records_per_group.keys()
 
     weights = read_weights_file(weights_file)
@@ -349,15 +358,20 @@ def get_weighted_group_sizes(
     weights[OUTPUT_SIZE_COLUMN] = weights[[INPUT_SIZE_COLUMN, TARGET_SIZE_COLUMN]].min(axis=1)
 
     # Warn on any under-sampled groups
-    for _, row in weights.iterrows():
-        if row[INPUT_SIZE_COLUMN] < row[TARGET_SIZE_COLUMN]:
-            sequences = _n('sequence', 'sequences', int(row[TARGET_SIZE_COLUMN]))
-            are = _n('is', 'are', int(row[INPUT_SIZE_COLUMN]))
-            group = list(f'{col}={value!r}' for col, value in row[group_by].items())
-            print_err(f"WARNING: Targeted {row[TARGET_SIZE_COLUMN]} {sequences} for group {group} but only {row[INPUT_SIZE_COLUMN]} {are} available.")
+    for group_values, input_size, target_size in zip(
+        weights[group_by].itertuples(index=False),
+        weights[INPUT_SIZE_COLUMN],
+        weights[TARGET_SIZE_COLUMN],
+    ):
+        if input_size < target_size:
+            sequences = _n('sequence', 'sequences', int(target_size))
+            are = _n('is', 'are', int(input_size))
+            group = list(f'{col}={value!r}' for col, value in zip(group_by, group_values))
+            print_err(f"WARNING: Targeted {target_size} {sequences} for group {group} but only {input_size} {are} available.")
 
     if output_sizes_file:
-        weights.to_csv(output_sizes_file, index=False, sep='\t')
+        with open_file(output_sizes_file, "w", newline="") as f:
+            weights.to_csv(f, index=False, sep='\t')
 
     return dict(zip(weights[group_by].apply(tuple, axis=1), weights[TARGET_SIZE_COLUMN]))
 
@@ -486,9 +500,10 @@ def _handle_incomplete_weights(
         raise AugurError(dedent(f"""\
             The input metadata contains these values under the following columns that are not covered by {weights_file!r}:
             - {columns_with_values}
-            To fix this, either:
-            (1) specify weights explicitly - add entries to {weights_file!r} for the values above, or
-            (2) specify a default weight - add an entry to {weights_file!r} with the value {COLUMN_VALUE_FOR_DEFAULT_WEIGHT!r} for all columns"""))
+            Some ways to fix this:
+            (1) use existing weights - update the metadata file to use values in {weights_file!r}, or
+            (2) specify new weights - add entries to {weights_file!r} for the values above, or
+            (3) specify a default weight - add an entry to {weights_file!r} with the value {COLUMN_VALUE_FOR_DEFAULT_WEIGHT!r} for all columns"""))
     else:
         print_err(dedent(f"""\
             WARNING: The input metadata contains these values under the following columns that are not directly covered by {weights_file!r}:

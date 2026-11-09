@@ -4,10 +4,12 @@ from textwrap import dedent
 import isodate
 import pandas as pd
 import re
+from collections.abc import Iterable, Mapping
 from functools import cache
 from treetime.utils import numeric_date as tt_numeric_date, datetime_from_numeric
 from typing import Any, Dict, Optional, Tuple, Union
 from augur.errors import AugurError
+from augur.io.print import indented_list, _n
 from .errors import InvalidDate
 
 from .ambiguous_date import AmbiguousDate
@@ -88,34 +90,59 @@ def numeric_date_type(date):
 
 def is_date_ambiguous(date, ambiguous_by):
     """
-    Returns whether a given date string in the format of YYYY-MM-DD is ambiguous by a given part of the date (e.g., day, month, year, or any parts).
+    Returns whether a given date string is ambiguous by a given part of the date
+    (e.g., day, month, year, or any parts).
 
     Parameters
     ----------
     date : str
-        Date string in the format of YYYY-MM-DD
+        Date string
     ambiguous_by : str
         Field of the date string to test for ambiguity ("day", "month", "year", "any")
     """
-    date_components = date.split('-', 2)
-
-    if len(date_components) == 3:
-        year, month, day = date_components
-    elif len(date_components) == 2:
-        year, month = date_components
-        day = "XX"
-    else:
-        year = date_components[0] if date_components[0] else 'X'
-        month = "XX"
-        day = "XX"
+    try:
+        year, month, day = get_year_month_day(date)
+    except InvalidDate:
+        return True
 
     # Determine ambiguity hierarchically such that, for example, an ambiguous
     # month implicates an ambiguous day even when day information is available.
-    return any((
-        "X" in year,
-        "X" in month and ambiguous_by in ("any", "month", "day"),
-        "X" in day and ambiguous_by in ("any", "day")
-    ))
+    if year is None:
+        return True
+    if month is None and ambiguous_by in ("any", "month", "day"):
+        return True
+    if day is None and ambiguous_by in ("any", "day"):
+        return True
+    return False
+
+
+def validate_dates(
+    ids_to_check: Iterable[str],
+    num_dates: Mapping[str, float],
+    str_dates: Mapping[str, str],
+) -> None:
+    """Check that all given sequence ids have valid dates.
+
+    Raises an AugurError listing sequences with missing or invalid dates.
+
+    Parameters
+    ----------
+    ids_to_check
+        Sequence ids to check.
+    num_dates
+        Mapping of sequence id to numerical date value from a pandas DataFrame.
+    str_dates
+        Mapping of sequence id to original date string.
+    """
+    if missing := [f"{s!r} has date {str_dates[s]!r}"
+                   for s in ids_to_check
+                   if pd.isna(num_dates[s])]:
+        raise AugurError(dedent(f"""\
+            The following {_n("sequence id is", "sequence ids are", len(missing))} missing valid dates:
+
+              {indented_list(sorted(missing), '            ' + '  ')}
+            """))
+
 
 RE_NUMERIC_DATE = re.compile(r'^-*\d+\.\d+$')
 """
@@ -161,6 +188,12 @@ Matches an Augur-style ambiguous date with 'XX' used to mask unknown parts of th
 Note that this can support any date format, not just YYYY-MM-DD.
 """
 
+RE_AUGUR_MISSING_DATE = re.compile(r'^XXXX-XX-XX$')
+"""
+Matches an Augur-style ambiguous date with all parts masked.
+This only supports YYYY-MM-DD format.
+"""
+
 RE_DATE_RANGE = re.compile(r'^\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2}$')
 """
 Matches a date range in YYYY-MM-DD/YYYY-MM-DD format.
@@ -171,23 +204,26 @@ Note that this is a subset of the ISO 8601 time interval format.
 def get_numerical_date_from_value(value, fmt, min_max_year=None) -> Union[float, Tuple[float, float], None]:
     value = str(value)
 
-    # 1. Check if value is an exact date in the specified format (fmt).
+    # Check if value is a missing date.
+    if RE_AUGUR_MISSING_DATE.match(value):
+        return None
 
+    # Check if value is an exact date in the specified format (fmt).
     try:
         return date_to_numeric(datetime.datetime.strptime(value, fmt))
     except:
         pass
     
-    # 2. Check if value is an ambiguous date in the specified format (fmt).
-
+    # Check if value is an ambiguous date in the specified format (fmt).
     if RE_AUGUR_AMBIGUOUS_DATE.match(value):
         start, end = AmbiguousDate(value, fmt=fmt).range(min_max_year=min_max_year)
         return (date_to_numeric(start), date_to_numeric(end))
 
-    # 3. Check formats that are always supported.
-
+    # Check if value is a numeric date.
     if RE_NUMERIC_DATE.match(value):
         return float(value)
+
+    # Check if value is an ISO 8601-like date.
 
     if RE_YEAR_ONLY.match(value):
         start, end = AmbiguousDate(f"{value}-XX-XX", fmt="%Y-%m-%d").range(min_max_year=min_max_year)
@@ -206,6 +242,8 @@ def get_numerical_date_from_value(value, fmt, min_max_year=None) -> Union[float,
             # closest in-bound value.
             raise InvalidDate(value, str(error)) from error
 
+    # Check if value is a date range.
+
     if RE_DATE_RANGE.match(value):
         start, end = value.split("/")
         
@@ -217,7 +255,7 @@ def get_numerical_date_from_value(value, fmt, min_max_year=None) -> Union[float,
 
         return (date_to_numeric(start), date_to_numeric(end))
 
-    # 4. Return none (silent error) if the date does not match any of the checked formats.
+    # Return none (silent error) if the date does not match any of the checked formats.
 
     return None
 

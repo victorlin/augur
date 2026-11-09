@@ -103,19 +103,23 @@
                 },
                 "min_length": {
                     "type": "integer",
-                    "description": "Minimal length of the sequences, only counting standard nucleotide\ncharacters A, C, G, or T (case-insensitive)."
+                    "description": "Minimal length of the sequences, only counting valid characters\n(excluding gaps, ambiguous, and invalid characters)."
                 },
                 "max_length": {
                     "type": "integer",
-                    "description": "Maximum length of the sequences, only counting standard nucleotide\ncharacters A, C, G, or T (case-insensitive)."
+                    "description": "Maximum length of the sequences, only counting valid characters\n(excluding gaps, ambiguous, and invalid characters)."
+                },
+                "exclude_invalid": {
+                    "type": "boolean",
+                    "description": "Exclude sequences that contain invalid characters."
                 },
                 "non_nucleotide": {
                     "type": "boolean",
-                    "description": "Exclude sequences that contain illegal characters."
+                    "description": "Deprecated, please use 'exclude_invalid' instead. Exclude sequences that contain invalid characters."
                 },
                 "query": {
                     "type": "string",
-                    "description": "Filter sequences by attribute. Uses `Pandas DataFrame query syntax`__.\n(e.g., \"country == 'Colombia'\" or \"(country == 'USA' & (division ==\n'Washington'))\")\n\n__ https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#indexing-query"
+                    "description": "Filter sequences by attribute. Uses `Pandas DataFrame query syntax`__.\n(e.g., \"country == 'Colombia'\" or \"(country == 'USA' & (division ==\n'Washington'))\")\n\n__ https://pandas.pydata.org/pandas-docs/version/2.3/user_guide/indexing.html#indexing-query"
                 },
                 "query_columns": {
                     "oneOf": [
@@ -133,7 +137,7 @@
                 }
             }
         },
-        "sampleProperties": {
+        "filterSampleProperties": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
@@ -227,19 +231,23 @@
                 },
                 "min_length": {
                     "type": "integer",
-                    "description": "Minimal length of the sequences, only counting standard nucleotide\ncharacters A, C, G, or T (case-insensitive)."
+                    "description": "Minimal length of the sequences, only counting valid characters\n(excluding gaps, ambiguous, and invalid characters)."
                 },
                 "max_length": {
                     "type": "integer",
-                    "description": "Maximum length of the sequences, only counting standard nucleotide\ncharacters A, C, G, or T (case-insensitive)."
+                    "description": "Maximum length of the sequences, only counting valid characters\n(excluding gaps, ambiguous, and invalid characters)."
+                },
+                "exclude_invalid": {
+                    "type": "boolean",
+                    "description": "Exclude sequences that contain invalid characters."
                 },
                 "non_nucleotide": {
                     "type": "boolean",
-                    "description": "Exclude sequences that contain illegal characters."
+                    "description": "Deprecated, please use 'exclude_invalid' instead. Exclude sequences that contain invalid characters."
                 },
                 "query": {
                     "type": "string",
-                    "description": "Filter sequences by attribute. Uses `Pandas DataFrame query syntax`__.\n(e.g., \"country == 'Colombia'\" or \"(country == 'USA' & (division ==\n'Washington'))\")\n\n__ https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#indexing-query"
+                    "description": "Filter sequences by attribute. Uses `Pandas DataFrame query syntax`__.\n(e.g., \"country == 'Colombia'\" or \"(country == 'USA' & (division ==\n'Washington'))\")\n\n__ https://pandas.pydata.org/pandas-docs/version/2.3/user_guide/indexing.html#indexing-query"
                 },
                 "query_columns": {
                     "oneOf": [
@@ -254,6 +262,14 @@
                         }
                     ],
                     "description": "Use alongside query to specify columns and data types in the format\n'column:type', where type is one of\n(bool,float,int,str). Automatic type inference will be\nattempted on all unspecified columns used in the query. Example:\nregion:str coverage:float."
+                },
+                "context_sample": {
+                    "type": "string",
+                    "description": "Use the outputs from another sample as the inputs for this sample. Value must be a sample name."
+                },
+                "drop_sample": {
+                    "type": "boolean",
+                    "description": "Drop this sample from the final output"
                 },
                 "group_by": {
                     "oneOf": [
@@ -287,6 +303,46 @@
                     "description": "Select no more than this number of sequences (i.e. total sample\nsize). Can be used without grouping columns."
                 }
             }
+        },
+        "proximalSampleProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "method": {
+                    "type": "string",
+                    "enum": [
+                        "hamming"
+                    ],
+                    "description": "Proximity approach used"
+                },
+                "focal_sample": {
+                    "type": "string",
+                    "description": "FASTA file with aligned focal sequences to find neighbors for"
+                },
+                "context_sample": {
+                    "type": "string",
+                    "description": "FASTA file with aligned contextual sequences"
+                },
+                "drop_sample": {
+                    "type": "boolean",
+                    "description": "Drop this sample from final outputs"
+                },
+                "k": {
+                    "type": "integer",
+                    "description": "number of nearest neighbors to find per focal strain"
+                },
+                "max_distance": {
+                    "type": "integer",
+                    "description": "maximum distance threshold for considering a sequence to match"
+                },
+                "ignore_missing_data": {
+                    "type": "string",
+                    "description": "All non-ATGC bases are converted to 'N', and then:\n- 'none' treats 'N' as a normal base for comparison purposes;\n- 'all' ignores positions where either sequence is N;\n- 'flanking' ignores runs of Ns at the start/end of each sequence."
+                }
+            },
+            "required": [
+                "focal_sample"
+            ]
         }
     },
     "properties": {
@@ -298,7 +354,14 @@
             "minProperties": 1,
             "patternProperties": {
                 "^.+$": {
-                    "$ref": "#/$defs/sampleProperties"
+                    "oneOf": [
+                        {
+                            "$ref": "#/$defs/filterSampleProperties"
+                        },
+                        {
+                            "$ref": "#/$defs/proximalSampleProperties"
+                        }
+                    ]
                 }
             }
         }

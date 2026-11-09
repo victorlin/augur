@@ -120,6 +120,10 @@ html_css_files = [
     'css/custom.css',
 ]
 
+# Default action is "qDe", we are customizing to turn off the dash transformations.
+# See <https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-smart-quotes>
+smartquotes_action = "qe"
+
 # -- Resolve build warnings --------------------------------------------------
 
 nitpick_ignore = [
@@ -137,6 +141,23 @@ nitpick_ignore = [
      # This class can't be referenced.
      # <https://github.com/python/cpython/issues/101503>
      ("py:class", "argparse._SubParsersAction"),
+
+     # sphinx-autodoc-typehints resolves pd.DataFrame to the internal path
+     # pandas.core.frame.DataFrame, which is not in pandas' intersphinx
+     # inventory (only pandas.DataFrame is).
+     # <https://github.com/tox-dev/sphinx-autodoc-typehints/issues/47#issuecomment-401403609>
+     ("py:class", "pandas.core.frame.DataFrame"),
+
+     # numpy scalar types used in NDArray[] annotations (e.g. proximity.py)
+     # are not in numpy's intersphinx inventory.
+     ("py:class", "numpy.int8"),
+     ("py:class", "numpy.int32"),
+     ("py:class", "numpy.bool_"),
+     # numpy.typing.NDArray is expanded to GenericAlias which is not in the
+     # intersphinx inventory. Ignore to suppress warning for now, but we should
+     # look into how to avoid the alias expansion for
+     # <https://github.com/nextstrain/augur/issues/2017>
+     ("py:class", "numpy._typing._array_like.GenericAlias"),
 ]
 
 # -- Cross-project references ------------------------------------------------
@@ -149,6 +170,7 @@ intersphinx_mapping = {
     # <https://github.com/nextstrain/augur/issues/1903>
     'python': ('https://docs.python.org/3.13', None),
     'numpy': ('https://numpy.org/doc/stable', None),
+    'packaging': ('https://packaging.pypa.io/en/stable/', None),
     'pandas': ('https://pandas.pydata.org/docs', None),
     'treetime': ('https://treetime.readthedocs.io/en/stable/', None),
 }

@@ -31,6 +31,7 @@ Submodules
    augur.ancestral
    augur.argparse_
    augur.clades
+   augur.config
    augur.debug
    augur.distance
    augur.errors
@@ -44,6 +45,7 @@ Submodules
    augur.mask
    augur.merge
    augur.parse
+   augur.proximity
    augur.read_file
    augur.reconstruct_sequences
    augur.refine

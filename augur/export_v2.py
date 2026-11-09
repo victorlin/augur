@@ -11,6 +11,7 @@ import numbers
 import math
 import re
 from Bio import Phylo
+from inspect import cleandoc
 from typing import Dict, Union, TypedDict, Any, Tuple
 from urllib.parse import urlparse
 
@@ -75,7 +76,7 @@ def orderKeys(data):
     od = CustomOrderedDict(data)
     od.set_order("version", "meta", "tree")
     if "meta" in od:
-        od["meta"].set_order("title", "updated", "build_url", "build_avatar", "data_provenance", "maintainers")
+        od["meta"].set_order("title", "updated", "build_url", "build_avatar", "data_provenance", "sharing", "maintainers")
         for coloring in od['meta'].get('colorings', []):
             coloring.set_order("key", "title", "type", "scale", "legend")
     def order_nodes(node):
@@ -478,7 +479,7 @@ def set_geo_resolutions(data_json, config, command_line_traits, lat_long_mapping
 
 
 def set_annotations(data_json, node_data):
-    if "annotations" in node_data:
+    if len(node_data.get("annotations", {}).keys()):
         data_json['meta']["genome_annotations"] = node_data["annotations"]
 
 def set_filters(data_json, config):
@@ -535,27 +536,31 @@ def set_panels(data_json, config, cmd_line_panels):
     data_json['meta']["panels"] = panels
 
 
-def set_data_provenance(data_json, config):
-    """Set the data provenance from the given config file to the given data JSON.
+def transfer_directly_from_config(data_json, config, key):
+    """
+    Transfer configuration directly from the (validated) auspice-config data
+    into the data_json.meta object
 
     Parameters
     ----------
     data_json : dict
         auspice JSON to be updated
     config : dict
-        config JSON with an expected ``data_provenance`` key
+        config JSON with an expected
+    key : str
+        key to lookup data (in config) and set data (in data_json.meta)
 
     Examples
     --------
     >>> config = {"data_provenance": [{"name": "GISAID"}, {"name": "INSDC"}]}
     >>> data_json = {"meta": {}}
-    >>> set_data_provenance(data_json, config)
+    >>> transfer_directly_from_config(data_json, config, "data_provenance")
     >>> data_json["meta"]["data_provenance"][0]["name"]
     'GISAID'
 
     """
-    if "data_provenance" in config:
-        data_json["meta"]["data_provenance"] = config["data_provenance"]
+    if key in config:
+        data_json["meta"][key] = config[key]
 
 
 def counter_to_disambiguation_suffix(count):
@@ -942,20 +947,21 @@ def register_parser(parent_subparsers):
                                  help="names of possible metadata columns containing identifier information, ordered by priority. Only one ID column will be inferred.")
     optional_inputs.add_argument('--colors', metavar="FILE", help="Custom color definitions, one per line in the format `TRAIT_TYPE\\tTRAIT_VALUE\\tHEX_CODE`")
     optional_inputs.add_argument('--lat-longs', metavar="TSV",
-        help=f"""Latitudes and longitudes for geography traits. See this file for the format:
-                 <https://github.com/nextstrain/augur/blob/{__version__}/augur/data/lat_longs.tsv>.
-                 This file provides the default set of latitudes and longitudes. An additional file
-                 specified by this option will extend the default set. Duplicates based on the first
-                 two columns will be resolved by taking the coordinates from the user-provided
-                 file.""")
+        help=cleandoc(f"""
+            Latitudes and longitudes for geography traits. See this file for the format:
+            <https://github.com/nextstrain/augur/blob/{__version__}/augur/data/lat_longs.tsv>.
+            This file provides the default set of latitudes and longitudes. An additional file
+            specified by this option will extend the default set. Duplicates based on the first
+            two columns will be resolved by taking the coordinates from the user-provided
+            file."""))
 
     minify_group = parser.add_argument_group(
             title="OPTIONAL MINIFY SETTINGS",
-            description=f"""
+            description=cleandoc(f"""
                 By default, output JSON files (both main and sidecar) are automatically minimized if
                 the size of the un-minified main JSON file exceeds {MINIFY_THRESHOLD_MB} MB. Use
                 these options to override that behavior.
-                """
+                """)
         ).add_mutually_exclusive_group()
     minify_group.add_argument(
         '--minify-json',
@@ -970,12 +976,12 @@ def register_parser(parent_subparsers):
 
     root_sequence = parser.add_argument_group(
             title="OPTIONAL ROOT-SEQUENCE SETTINGS",
-            description=f"""
+            description=cleandoc(f"""
                 The root-sequences describe the sequences (nuc + aa) for the parent of the tree's root-node. They may represent a
                 reference sequence or the inferred sequence at the root node, depending on how they were generated.
                 The data is taken directly from the `reference` key within the provided node-data JSONs.
                 These arguments are mutually exclusive.
-                """
+                """)
         ).add_mutually_exclusive_group()
     root_sequence.add_argument('--include-root-sequence', action="store_true", help="Export as an additional JSON. The filename will follow the pattern of <OUTPUT>_root-sequence.json for a main auspice JSON of <OUTPUT>.json")
     root_sequence.add_argument('--include-root-sequence-inline', action="store_true", help="Export the root sequence within the dataset JSON. This should only be used for small genomes for file size reasons.")
@@ -1243,7 +1249,8 @@ def run(args):
 
     set_geo_resolutions(data_json, config, args.geo_resolutions, read_lat_longs(args.lat_longs), node_attrs)
     set_panels(data_json, config, args.panels)
-    set_data_provenance(data_json, config)
+    transfer_directly_from_config(data_json, config, 'data_provenance')
+    transfer_directly_from_config(data_json, config, 'sharing')
 
     # pass through any extensions block in the auspice config JSON without any changes / checking
     if config.get("extensions"):

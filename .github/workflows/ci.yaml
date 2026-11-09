@@ -18,16 +18,15 @@ jobs:
   mypy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-python@v6
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v7
     - run: pip install .[dev]
     - run: mypy
 
   pyright:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-python@v6
+    - uses: actions/checkout@v7
     - run: npx pyright --stats
 
   pytest-cram:
@@ -49,13 +48,16 @@ jobs:
           - { conda-args: 'python=3.14', pip-args: 'biopython numpy'               }
           # Latest Biopython with Numpy v1
           - { conda-args: 'python=3.12', pip-args: 'biopython numpy==1.*'          }
+          # Earlier SQLite versions
+          - { conda-args: 'sqlite=3.39.0', pip-args: '' }
+          - { conda-args: 'sqlite=3.53.0', pip-args: '' }
 
     defaults:
       run:
         shell: bash -l {0}
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Set cache key
       run: echo "DATE=$(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
@@ -65,12 +67,9 @@ jobs:
     # installed by pip, which may have slightly different versions compared to
     # Conda counterparts.
     - name: Install dependencies from Conda
-      uses: mamba-org/setup-micromamba@v2
+      uses: mamba-org/setup-micromamba@v3
       with:
-        # cvxopt is a pip dependency that isn't prebuilt for Python 3.14 on PyPI
-        # (yet).¹ It is already prebuilt on conda, so install it here.
-        # ¹ <https://github.com/cvxopt/cvxopt/issues/265>
-        create-args: ${{ matrix.conda-args }} ${{ contains(matrix.conda-args, 'python=3.14') && 'cvxopt' || '' }}
+        create-args: ${{ matrix.conda-args }}
         environment-file: dev_env.yml
         cache-environment: true
         cache-environment-key: ${{ env.DATE }}
@@ -79,8 +78,7 @@ jobs:
     # Install the local version of Augur and Python dependencies.
     - run: pip install .[dev] ${{ matrix.pip-args }}
     - run: pip list
-    - run: conda info
-    - run: conda list
+    - run: micromamba list
 
     # Run with coverage on the earliest supported Python version
     # Ideally, coverage is run on all jobs and combined later.¹ It was reduced
@@ -118,10 +116,10 @@ jobs:
           echo "Running cram tests without coverage"
           export AUGUR="${{ github.workspace }}/bin/augur"
         fi
-        cram tests/
+        scripts/run-cram-parallel.py
     - name: Upload coverage
       if: env.COVERAGE_FILE
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: coverage
         include-hidden-files: true
@@ -143,10 +141,13 @@ jobs:
           - measles
           - mpox
           - mumps
+          - nipah
+          - norovirus
           - oropouche
           - rabies
+          - rubella
           - seasonal-cov
-          - wnv
+          - WNV
           - yellow-fever
           - zika
 
@@ -155,7 +156,7 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: ./augur
 
@@ -164,7 +165,7 @@ jobs:
 
       # Set up a Conda environment that replicates Nextstrain's Conda runtime.
       - name: Install nextstrain-base from Conda
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           create-args: nextstrain-base
           condarc: |
@@ -180,7 +181,7 @@ jobs:
       # Replace the Conda Augur installation with the local version.
       - run: pip install ./augur
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: nextstrain/${{ matrix.pathogen }}
           path: ./pathogen-repo
@@ -209,7 +210,7 @@ jobs:
         run: nextstrain build --ambient ./pathogen-repo/nextclade --configfile build-configs/ci/config.yaml
 
       - if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: output-${{ matrix.pathogen }}
           if-no-files-found: ignore
@@ -283,7 +284,7 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: ./augur
 
@@ -292,7 +293,7 @@ jobs:
 
       # Set up a Conda environment that replicates Nextstrain's Conda runtime.
       - name: Install nextstrain-base from Conda
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           create-args: nextstrain-base
           condarc: |
@@ -308,7 +309,7 @@ jobs:
       # Replace the Conda Augur installation with the local version.
       - run: pip install ./augur
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: nextstrain/${{ matrix.pathogen }}
           path: ./pathogen-repo
@@ -326,7 +327,7 @@ jobs:
       - run: nextstrain build --ambient ./pathogen-repo ${{ matrix.build-args }}
 
       - if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: output-${{ matrix.pathogen }}
           path: |
@@ -341,34 +342,28 @@ jobs:
     needs: [pytest-cram]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
       - run: pip install coverage
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: coverage
 
       - run: coverage combine .coverage@*
       - run: coverage xml
 
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  build-docs:
-    uses: nextstrain/.github/.github/workflows/docs-ci.yaml@master
-    with:
-      docs-directory: docs/
-      pip-install-target: .[dev]
-
   check-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           # This should match the python version in .readthedocs.yml
           python-version: '3.11'
@@ -390,9 +385,9 @@ jobs:
   check-subsample-config-schema:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
 
       - run: pip install .[dev]
 
@@ -413,11 +408,11 @@ jobs:
     needs: [pytest-cram]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Fetch all branches and tags.
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.10'
       - name: Set Nextstrain bot as git user
@@ -426,7 +421,7 @@ jobs:
           git config --global user.name "Nextstrain bot"
       - run: python3 -m pip install --upgrade build twine
       - run: devel/release ${{ github.event.inputs.version }}
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/

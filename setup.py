@@ -55,6 +55,7 @@ setuptools.setup(
         # TODO: Remove biopython >= 1.80 pin if it is added to bcbio-gff: https://github.com/chapmanb/bcbb/issues/142
         "biopython >=1.80, ==1.*",
         "cvxopt >=1.1.9, ==1.*",
+        "docutils",
         "importlib_resources >=5.3.0; python_version < '3.11'",
         "isodate >=0.6,<0.8",
         # Sync this with 'types-jsonschema' dev dependency
@@ -64,17 +65,18 @@ setuptools.setup(
         "packaging >=19.2",
         # Sync this with 'pandas-stubs' dev dependency
         "pandas >=1.4.0, <3",
-        "phylo-treetime >=0.11.2, <0.12",
+        "phylo-treetime >=0.11.2, <0.13",
         "pyfastx >=1.0.0, <3.0",
         "python_calamine >=0.2.0",
-        "pyyaml",
+        "ruamel.yaml ==0.*",
         "referencing >=0.29.1, <1.0",
         "scipy ==1.*",
-        "xopen[zstd] >=2.0.0, <3"
+        "xopen >=2.1.0, <3"
     ],
     extras_require = {
         'dev': [
             "cram >=0.7",
+            "backports.zstd; python_version < '3.14'",
             "deepdiff >=4.3.2, <8.0.0",
             "flake8 >=7.0.0, <8",
             "freezegun >=0.3.15",
@@ -86,16 +88,15 @@ setuptools.setup(
             "pytest-cov >=2.8.1",
             "pytest-mock >= 2.0.0",
             "recommonmark >=0.5.0",
-            # TODO: Remove upper limit once upstream issue is fixed: https://github.com/executablebooks/sphinx-tabs/issues/206
-            "Sphinx >=2.0.1, <9.0.0",
+            "Sphinx >=2.0.1",
             "sphinx-autobuild >=2021.3.14",
-            "sphinx-argparse >=0.2.5, !=0.5.0",
+            # TODO: Remove upper pin if bug is fixed: https://github.com/sphinx-doc/sphinx-argparse/issues/97
+            "sphinx-argparse >=0.2.5, !=0.5.0, <0.6.0",
             "sphinx-markdown-tables >= 0.0.9",
             "sphinx-rtd-theme >=0.4.3",
             "sphinx-autodoc-typehints >=1.21.4",
-            "sphinx-tabs",
+            "sphinx-tabs >=3.5.0",
             "types-jsonschema >=4.18.0, ==4.*",
-            "types-PyYAML",
             "types-setuptools",
             "wheel >=0.32.3",
             "ipdb >=0.10.1"
